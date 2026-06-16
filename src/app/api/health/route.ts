@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCompetition, getTeams, getMatches, getActiveSource } from '@/data/store';
+import { getCompetition, getTeams, getMatches, getPlayers, getActiveSource } from '@/data/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +12,7 @@ export function GET() {
       competition: getCompetition().name,
       teams: getTeams().length,
       matches: getMatches().length,
+      players: getPlayers().length,
       dataSource: getActiveSource(),
       uptime: process.uptime(),
     },

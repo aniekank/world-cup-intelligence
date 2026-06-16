@@ -59,7 +59,8 @@ export function teamView(id: string): (TeamView & { summary: string }) | null {
 
 export function squadViews(teamId: string) {
   return getSquad(teamId)
-    .map((p) => getPlayerView(p.id)!)
+    .map((p) => getPlayerView(p.id))
+    .filter((v): v is NonNullable<typeof v> => Boolean(v))
     .sort((a, b) => b.rating.overall - a.rating.overall);
 }
 
@@ -244,14 +245,17 @@ export function search(query: string) {
     .filter((p) => nameMatches(norm(p.name), nq, qTokens))
     .sort((a, b) => b.stats.goals - a.stats.goals)
     .slice(0, 8);
+  // Resolve both teams up front and DROP any fixture with an unresolved side
+  // (TBD knockout slots, or a hollow live feed where a match references a team
+  // that didn't load). Dereferencing those was crashing /api/search with a 500.
   const matchHits = getMatches()
-    .filter((m) => {
-      const h = getTeam(m.homeTeamId)!;
-      const a = getTeam(m.awayTeamId)!;
-      return h.name.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+    .map((m) => ({ m, home: getTeam(m.homeTeamId), away: getTeam(m.awayTeamId) }))
+    .filter((x): x is { m: Match; home: Team; away: Team } => {
+      if (!x.home || !x.away) return false;
+      return x.home.name.toLowerCase().includes(q) || x.away.name.toLowerCase().includes(q);
     })
     .slice(0, 6)
-    .map((m: Match) => ({ ...m, home: getTeam(m.homeTeamId)!, away: getTeam(m.awayTeamId)! }));
+    .map(({ m, home, away }) => ({ ...m, home, away }));
   return { teams, players: playerHits, matches: matchHits };
 }
 
