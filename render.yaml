@@ -1,0 +1,23 @@
+# Render deployment for the World Cup Intelligence Platform.
+# This app is a stateful single-process server (in-memory cache + a background
+# live-data load on boot), so it runs as one persistent web service, not as
+# serverless functions. Connect this repo in the Render dashboard; it will read
+# this file. Set API_FOOTBALL_KEY as a secret in the dashboard (never in the repo).
+services:
+  - type: web
+    name: world-cup-intelligence
+    runtime: node
+    plan: starter            # keeps one instance warm; "free" sleeps and cold-starts the data load
+    region: oregon           # change to your preferred region
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start  # next start; binds to Render's $PORT automatically
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: DATA_SOURCE
+        value: apifootball
+      - key: API_FOOTBALL_KEY
+        sync: false          # set this in the Render dashboard, not in the repo

@@ -1,0 +1,321 @@
+// Production database schema for the World Cup Intelligence Platform.
+//
+// The running app uses a deterministic in-memory seed store (see src/data) so it
+// works with zero infrastructure. This schema is the production target: set
+// DATA_SOURCE=postgres and point DATABASE_URL at a Postgres instance, then the
+// repository layer (src/data/store.ts) resolves to Prisma-backed queries.
+//
+// Designed for 1M+ MAU: heavy read paths are denormalized into materialized
+// aggregate tables (PlayerStats, Standing, TeamForecast, PowerRanking) that are
+// recomputed by the analytics workers and cached at the edge.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Competition {
+  id              String   @id @default(cuid())
+  name            String
+  season          String
+  hostCountries   String[]
+  startDate       DateTime
+  endDate         DateTime
+  numTeams        Int
+  numGroups       Int
+  currentMatchday Int      @default(1)
+  logoEmoji       String   @default("🏆")
+
+  groups Group[]
+  teams  Team[]
+  matches Match[]
+
+  @@unique([name, season])
+}
+
+model Group {
+  id            String      @id // "A".."L"
+  competition   Competition @relation(fields: [competitionId], references: [id])
+  competitionId String
+  name          String
+  teams         Team[]
+  standings     Standing[]
+
+  @@index([competitionId])
+}
+
+model Team {
+  id                       String       @id @default(cuid())
+  name                     String
+  code                     String       @unique
+  flag                     String
+  confederation            String
+  competition              Competition  @relation(fields: [competitionId], references: [id])
+  competitionId            String
+  group                    Group?       @relation(fields: [groupId], references: [id])
+  groupId                  String?
+  fifaRanking              Int
+  elo                      Float
+  preTournamentTitleOdds   Float
+  manager                  String
+  attackRating             Float
+  defenseRating            Float
+  primaryColor             String
+  players                  Player[]
+  homeMatches              Match[]      @relation("HomeTeam")
+  awayMatches              Match[]      @relation("AwayTeam")
+  standing                 Standing?
+  forecast                 TeamForecast?
+  powerRanking             PowerRanking?
+
+  @@index([competitionId])
+  @@index([groupId])
+}
+
+model Player {
+  id               String      @id @default(cuid())
+  name             String
+  team             Team        @relation(fields: [teamId], references: [id])
+  teamId           String
+  shirtNumber      Int
+  position         String
+  detailedPosition String
+  age              Int
+  heightCm         Int
+  foot             String
+  club             String
+  marketValueEur   Float
+  ratingOverall    Float
+  ratingPace       Float
+  ratingShooting   Float
+  ratingPassing    Float
+  ratingDribbling  Float
+  ratingDefending  Float
+  ratingPhysical   Float
+
+  stats   PlayerStats?
+  events  MatchEvent[]
+  shots   Shot[]
+
+  @@index([teamId])
+  @@index([position])
+}
+
+/// Materialized per-tournament aggregate. Recomputed by analytics workers.
+model PlayerStats {
+  player              Player  @relation(fields: [playerId], references: [id])
+  playerId            String  @id
+  minutes             Int     @default(0)
+  appearances         Int     @default(0)
+  goals               Int     @default(0)
+  assists             Int     @default(0)
+  xG                  Float   @default(0)
+  xA                  Float   @default(0)
+  shots               Int     @default(0)
+  shotsOnTarget       Int     @default(0)
+  bigChancesCreated   Int     @default(0)
+  bigChancesMissed    Int     @default(0)
+  passes              Int     @default(0)
+  passesCompleted     Int     @default(0)
+  progressivePasses   Int     @default(0)
+  progressiveCarries  Int     @default(0)
+  keyPasses           Int     @default(0)
+  tackles             Int     @default(0)
+  interceptions       Int     @default(0)
+  ballRecoveries      Int     @default(0)
+  duelsWon            Int     @default(0)
+  duelsTotal          Int     @default(0)
+  pressuresApplied    Int     @default(0)
+  pressRegains        Int     @default(0)
+  touches             Int     @default(0)
+  touchesInBox        Int     @default(0)
+  yellowCards         Int     @default(0)
+  redCards            Int     @default(0)
+  foulsCommitted      Int     @default(0)
+  foulsWon            Int     @default(0)
+  saves               Int     @default(0)
+  goalsConceded       Int     @default(0)
+  cleanSheets         Int     @default(0)
+  formIndex           Float   @default(50)
+
+  @@index([goals])
+  @@index([xG])
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  competition   Competition @relation(fields: [competitionId], references: [id])
+  competitionId String
+  stage         String
+  groupId       String?
+  matchday      Int
+  kickoff       DateTime
+  venue         String
+  city          String
+  status        String      @default("SCHEDULED")
+  minute        Int         @default(0)
+  homeTeam      Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  homeTeamId    String
+  awayTeam      Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  awayTeamId    String
+  homeScore     Int         @default(0)
+  awayScore     Int         @default(0)
+  homeScoreHT   Int         @default(0)
+  awayScoreHT   Int         @default(0)
+  penaltiesHome Int?
+  penaltiesAway Int?
+  bracketSlot   String?
+
+  teamStats MatchTeamStat[]
+  events    MatchEvent[]
+  shots     Shot[]
+
+  @@index([competitionId, stage])
+  @@index([status])
+  @@index([kickoff])
+}
+
+model MatchTeamStat {
+  id            String @id @default(cuid())
+  match         Match  @relation(fields: [matchId], references: [id])
+  matchId       String
+  teamId        String
+  possession    Float
+  shots         Int
+  shotsOnTarget Int
+  xG            Float
+  corners       Int
+  fouls         Int
+  offsides      Int
+  passes        Int
+  passAccuracy  Float
+  fieldTilt     Float
+  ppda          Float
+  bigChances    Int
+  saves         Int
+  yellowCards   Int
+  redCards      Int
+
+  @@unique([matchId, teamId])
+}
+
+model MatchEvent {
+  id              String  @id @default(cuid())
+  match           Match   @relation(fields: [matchId], references: [id])
+  matchId         String
+  minute          Int
+  addedTime       Int     @default(0)
+  type            String
+  teamId          String
+  player          Player? @relation(fields: [playerId], references: [id])
+  playerId        String?
+  relatedPlayerId String?
+  detail          String
+  xG              Float?
+
+  @@index([matchId])
+}
+
+model Shot {
+  id          String  @id @default(cuid())
+  match       Match   @relation(fields: [matchId], references: [id])
+  matchId     String
+  minute      Int
+  teamId      String
+  player      Player  @relation(fields: [playerId], references: [id])
+  playerId    String
+  x           Float
+  y           Float
+  xG          Float
+  bodyPart    String
+  situation   String
+  outcome     String
+  isBigChance Boolean @default(false)
+
+  @@index([matchId])
+  @@index([playerId])
+}
+
+/// Computed group table line — materialized for fast standings reads.
+model Standing {
+  group                   Group  @relation(fields: [groupId], references: [id])
+  groupId                 String
+  team                    Team   @relation(fields: [teamId], references: [id])
+  teamId                  String @id
+  rank                    Int
+  played                  Int
+  won                     Int
+  drawn                   Int
+  lost                    Int
+  goalsFor                Int
+  goalsAgainst            Int
+  goalDifference          Int
+  points                  Int
+  disciplinaryPoints      Int
+  xGFor                   Float
+  xGAgainst               Float
+  qualificationProbability Float
+  status                  String?
+
+  @@index([groupId, rank])
+}
+
+/// Monte Carlo tournament forecast per team.
+model TeamForecast {
+  team                  Team   @relation(fields: [teamId], references: [id])
+  teamId                String @id
+  reachR32              Float
+  reachR16              Float
+  reachQF               Float
+  reachSF               Float
+  reachFinal            Float
+  winTitle              Float
+  groupWin              Float
+  expectedFinish        Float
+  titleProbabilityDelta Float
+  powerRating           Float
+  powerRank             Int
+}
+
+model PowerRanking {
+  team          Team   @relation(fields: [teamId], references: [id])
+  teamId        String @id
+  rank          Int
+  previousRank  Int
+  powerRating   Float
+  offenseRating Float
+  defenseRating Float
+  elo           Float
+  momentum      Float
+  trend         String
+}
+
+model UserProfile {
+  id               String   @id @default(cuid())
+  handle           String   @unique
+  displayName      String
+  role             String   @default("fan")
+  favoriteTeamIds  String[]
+  favoritePlayerIds String[]
+  watchlistMatchIds String[]
+  createdAt        DateTime @default(now())
+  notifications    Notification[]
+}
+
+model Notification {
+  id        String      @id @default(cuid())
+  user      UserProfile @relation(fields: [userId], references: [id])
+  userId    String
+  type      String
+  title     String
+  body      String
+  entityId  String?
+  read      Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  @@index([userId, read])
+}
