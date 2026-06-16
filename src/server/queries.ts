@@ -217,19 +217,19 @@ function norm(s: string): string {
 }
 
 /**
- * Surname-focused, accent-insensitive name match. Handles abbreviated feed
- * names ("T. Weah") and partial queries ("Tim Weah"): matches when the query's
- * surname token prefix-matches the player's surname (≥3 chars to avoid matching
- * single-letter initials), or the whole normalized query is a substring.
+ * Accent-insensitive name match. Every meaningful query token (≥3 chars) must
+ * prefix-match SOME token of the player's name, so multi-part official names
+ * like "Lionel Andrés Messi Cuccittini" still match "messi", "lionel messi", or
+ * "messi cuccittini" — not just the surname. The whole query is also matched as
+ * a contiguous substring for the common single-word case.
  */
 function nameMatches(normName: string, normQ: string, qTokens: string[]): boolean {
   // Substring only for queries ≥4 chars, so short ones ("son") don't match mid-name ("Johansson")
   if (normQ.length >= 4 && normName.includes(normQ)) return true;
   const nameTokens = normName.split(/[\s.]+/).filter(Boolean);
-  if (!nameTokens.length || !qTokens.length) return false;
-  const surnameN = nameTokens[nameTokens.length - 1]!;
-  const surnameQ = qTokens[qTokens.length - 1]!;
-  return surnameQ.length >= 3 && (surnameN.startsWith(surnameQ) || surnameQ.startsWith(surnameN));
+  const sig = qTokens.filter((t) => t.length >= 3); // ignore single-letter initials
+  if (!sig.length || !nameTokens.length) return false;
+  return sig.every((qt) => nameTokens.some((nt) => nt.startsWith(qt) || (qt.length >= 4 && nt.includes(qt))));
 }
 
 export function search(query: string) {

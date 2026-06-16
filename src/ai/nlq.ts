@@ -66,8 +66,11 @@ function detectPlayers(q: string): PlayerView[] {
   const lower = stripAccents(q);
   const matches: PlayerView[] = [];
   for (const p of getPlayers()) {
-    const surname = stripAccents(p.name.split(/[\s.]+/).filter(Boolean).slice(-1)[0] ?? '');
-    if (surname.length >= 4 && lower.includes(surname)) {
+    // A player is "mentioned" if any meaningful part of their name (≥4 chars,
+    // not just the surname) appears in the query — so "compare messi and mbappe"
+    // resolves both, even with long official names ending in another surname.
+    const parts = stripAccents(p.name).split(/[\s.]+/).filter((t) => t.length >= 4);
+    if (parts.some((part) => lower.includes(part))) {
       const view = getPlayerViews().find((v) => v.id === p.id);
       if (view && !matches.find((mm) => mm.id === view.id)) matches.push(view);
     }
