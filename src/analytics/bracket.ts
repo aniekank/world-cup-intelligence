@@ -87,7 +87,9 @@ export function buildBracket(
   const bySeed = qualifiers.sort((a, b) => a.seedScore - b.seedScore).slice(0, bracketSize);
   const order = seedOrder(bracketSize);
   const slots: Qualifier[] = new Array(bracketSize);
-  order.forEach((seedNo, i) => (slots[i] = bySeed[seedNo - 1]!));
+  // Default any unresolved seed to a TBD placeholder (the dataset can be briefly
+  // inconsistent while the live feed loads, leaving a seed without a qualifier).
+  order.forEach((seedNo, i) => (slots[i] = bySeed[seedNo - 1] ?? { teamId: '', label: 'TBD', seedScore: 9999 }));
 
   const nodes: BracketNode[] = [];
   // Build stages from the bracket size down to the final
@@ -105,7 +107,7 @@ export function buildBracket(
   }));
 
   // Round 0 sides
-  let currentSides: { teamId: string; label: string }[] = slots.map((q) => ({ teamId: q.teamId, label: q.label }));
+  let currentSides: { teamId: string; label: string }[] = slots.map((q) => ({ teamId: q?.teamId ?? '', label: q?.label ?? 'TBD' }));
 
   stages.forEach((st, stageIdx) => {
     const winners: { teamId: string; label: string }[] = [];
