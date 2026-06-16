@@ -1,10 +1,12 @@
-# 🏆 WC26 Intelligence — World Cup Intelligence Platform
+# 🏆 TASK Enterprises presents — World Cup Intelligence
 
 A production-grade World Cup analytics platform combining the live coverage of **FotMob/SofaScore**, the advanced metrics of **Opta**, the natural-language query power of **StatMuse**, the probabilistic forecasting of **FiveThirtyEight**, and the dense, information-first UI of a **Bloomberg Terminal**.
 
-Built for fans, journalists, scouts, analysts, content creators, fantasy players and bettors — it tracks every match, player, team, group and bracket; computes advanced analytics; runs Monte Carlo tournament simulations; generates AI insights; and answers natural-language questions about the entire tournament.
+It tracks every match, player, team, group and bracket; computes advanced metrics; runs **8,000-simulation Monte Carlo** tournament forecasts; generates AI insights; and answers natural-language questions about the whole tournament — live for 2026, and across past tournaments for context.
 
-> **Runs instantly with zero infrastructure.** `npm install && npm run dev`. No database, no API keys, no external services required — the entire 48-team tournament is produced by a deterministic simulation engine.
+**Live demo:** _add your Render URL here_ &nbsp;·&nbsp; **Built by:** [Tobi Smith-Kayode](https://www.linkedin.com/)
+
+> **Runs instantly with zero infrastructure.** `npm install && npm run dev` boots the full 48-team tournament from a deterministic simulation engine — no database, no keys required. Add an API-Football key for the live 2026 feed (see Deploy).
 
 ---
 
@@ -22,10 +24,25 @@ Optional configuration (`cp .env.example .env`):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATA_SOURCE` | `seed` | `seed` (offline) or `postgres` (Prisma) |
-| `DATABASE_URL` | — | Postgres connection (production) |
-| `ANTHROPIC_API_KEY` | — | Upgrades AI narratives to Claude-authored prose |
-| `CACHE_TTL_*` | 15/300/86400 | Edge cache TTLs (live/standard/static) |
+| `DATA_SOURCE` | `seed` | `seed` (offline simulation), `statsbomb` (real historical), or `apifootball` (live 2026) |
+| `API_FOOTBALL_KEY` | — | Live 2026 feed via API-Football (required when `DATA_SOURCE=apifootball`) |
+| `ANTHROPIC_API_KEY` | — | Upgrades AI narratives to Claude-authored prose (optional; deterministic generator is the always-on fallback) |
+| `NEXT_PUBLIC_SITE_URL` | `localhost:3000` | Absolute base URL for social/Open Graph images |
+
+---
+
+## Deploy
+
+This is a **stateful single-process app** (a `globalThis` in-memory cache plus a background live-data load on boot), so it deploys as **one always-on Node instance**, not as serverless functions. A serverless host would not share the in-memory cache between invocations or reliably finish the background load.
+
+**Render (recommended):** the repo includes [`render.yaml`](./render.yaml). In the Render dashboard choose **New → Blueprint**, connect this repo, then set the one secret env var:
+
+| Env var | Value |
+|---|---|
+| `DATA_SOURCE` | `apifootball` (set by the blueprint) |
+| `API_FOOTBALL_KEY` | your API-Football key (set in the dashboard, never committed) |
+
+Build `npm install && npm run build`, start `npm start`, health check `/api/health`, Node 20. The `free` plan sleeps after ~15 min idle and cold-starts the data load on the next visit; switch to `starter` to keep it warm. Any host that runs one persistent Node process works the same way (Railway, Fly.io, a small VPS).
 
 ---
 

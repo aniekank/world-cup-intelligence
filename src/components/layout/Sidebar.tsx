@@ -103,7 +103,8 @@ function Brand() {
     <Link href="/" className="flex items-center gap-2.5 border-b border-terminal-border px-5 py-4">
       <BrandMark size={30} className="animate-spinSlow" />
       <div className="leading-tight">
-        <p className="text-manifesto-anim text-sm font-extrabold tracking-tight">WC26 Intelligence</p>
+        <p className="text-[9px] font-semibold uppercase tracking-widest text-terminal-muted">TASK Enterprises presents</p>
+        <p className="text-manifesto-anim text-sm font-extrabold tracking-tight">World Cup Intelligence</p>
         <p className="text-[10px] uppercase tracking-widest text-accent">Analytics Terminal</p>
       </div>
     </Link>
