@@ -4,7 +4,9 @@ A production-grade World Cup analytics platform combining the live coverage of *
 
 It tracks every match, player, team, group and bracket; computes advanced metrics; runs **8,000-simulation Monte Carlo** tournament forecasts; generates AI insights; and answers natural-language questions about the whole tournament — live for 2026, and across past tournaments for context.
 
-**Live demo:** _add your Render URL here_ &nbsp;·&nbsp; **Built by:** [Tobi Smith-Kayode](https://www.linkedin.com/)
+**Live demo:** **[world-cup-intelligence.onrender.com](https://world-cup-intelligence.onrender.com)** &nbsp;·&nbsp; **Built by:** Tobi Smith-Kayode
+
+> _Hosted on a free instance, so the first visit after a quiet spell takes ~30 seconds to wake and load the live feed._
 
 > **Runs instantly with zero infrastructure.** `npm install && npm run dev` boots the full 48-team tournament from a deterministic simulation engine — no database, no keys required. Add an API-Football key for the live 2026 feed (see Deploy).
 
