@@ -7,8 +7,8 @@ services:
   - type: web
     name: world-cup-intelligence
     runtime: node
-    plan: free               # $0; sleeps after ~15 min idle and cold-starts the data load on next visit.
-                             # Switch to "starter" (~$7/mo) later if you want it always warm.
+    plan: starter            # ~$7/mo; always warm so the live data is instant for visitors.
+                             # Drop back to "free" if you want $0 (it then sleeps after ~15 min idle).
     region: oregon           # change to your preferred region
     branch: main
     buildCommand: npm install && npm run build
