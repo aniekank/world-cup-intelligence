@@ -20,7 +20,7 @@ export async function register() {
     try {
       const { activateTournament } = await import('@/data/loadTournament');
       const snap = await activateTournament(id);
-      console.log(`[data] Active tournament: ${snap.competition.name} — ${snap.teams.length} teams, ${snap.matches.length} matches.`);
+      console.log(`[data] Active tournament: ${snap.competition.name} [src=${snap.meta?.source ?? '?'}] — ${snap.teams.length} teams, ${snap.players.length} players, ${snap.matches.length} matches.`);
     } catch (err) {
       console.error('[data] Tournament load failed — staying on simulation:', err);
     }
