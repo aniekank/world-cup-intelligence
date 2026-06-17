@@ -261,7 +261,7 @@ function teamPerformanceQuery(q: string, dir: 'over' | 'under'): NLQueryResult {
 }
 
 function breakoutQuery(q: string): NLQueryResult {
-  const pool = getPlayerViews().filter((p) => p.age <= 23 && p.position !== 'GK' && p.stats.minutes >= 90);
+  const pool = getPlayerViews().filter((p) => p.age >= 17 && p.age <= 23 && p.position !== 'GK' && p.stats.minutes >= 90);
   const ranked = pool
     .map((p) => ({
       p,

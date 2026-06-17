@@ -82,6 +82,7 @@ differently between the two.
 | WC-015 | Match events missing (goals, disallowed/offside, cards) | data adapter / live refresh | Adapter hardcoded `events: []`; the per-fixture timeline was never fetched | Fetch `/fixtures/events`, map goals/cards/subs/VAR, resolve scorer+team from squads, surface VAR/own-goal in the UI; backfill finished matches once (capped) · `a445a67` · `968c8c2` · `3521d7c` |
 | WC-017 | SportMonks: Australia/Austria & Iran/Iraq merged into one team | sportmonks adapter | Team code derived by slicing the first 3 letters of the name → `AUS`/`IRA` collisions merged distinct nations, corrupting groups | Use SportMonks' real `short_code` (AUS/AUT, IRN/IRQ) — also matches the enrichment table so flags/ELO populate · sportmonks adapter |
 | WC-018 | `/predictions` 500 — `reading 'gf'` on SportMonks data | analytics/simulate | A finished match referenced a team not in its group's base map (group-assignment gap) → `base.get(id)!` undefined | Guard the group base lookup and skip rather than crash (same rule as WC-002) · simulate.ts |
+| WC-019 | "Breakout" flagged 25-year-olds (Haaland) on SportMonks | narratives / nlq | SportMonks gives no player age (`age=0`), so the `age ≤ 23` filter passed everyone | Require `age >= 17 && age <= 23` — breakouts only surface when ages are actually known · narratives.ts · nlq.ts |
 
 ---
 
@@ -130,3 +131,7 @@ These are the classes of bug this codebase is prone to. Test these deliberately:
 - **Abbreviated player names** (`L. Messi`) come from the squad feed and upgrade to full names as
   players accrue match stats.
 - **Live data depends on API-Football** coverage and the daily request quota.
+- **SportMonks: no player age / height / market value / manager** in the current load. The lineup
+  feed omits them; fetching squads (`include=player`, ~48 calls) + coaches would restore real ages
+  (re-enabling breakout detection), heights, full rosters, and manager names/stories. Tracked in
+  `ROADMAP.md`. Until then: ages are 0 (breakouts suppressed), heights default 182cm, managers "—".

@@ -82,7 +82,7 @@ export function generateInsights(): Insight[] {
 
   // 3. Breakout players
   const breakout = getPlayerViews()
-    .filter((p) => p.team && p.age <= 23 && p.position !== 'GK' && p.stats.minutes >= 90)
+    .filter((p) => p.team && p.age >= 17 && p.age <= 23 && p.position !== 'GK' && p.stats.minutes >= 90)
     .map((p) => ({ p, score: p.stats.goals * 3 + p.stats.assists * 2 + p.stats.xG + p.stats.xA }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
