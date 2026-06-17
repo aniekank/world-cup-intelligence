@@ -98,6 +98,7 @@ function build() {
       await Promise.all(['tournaments', 'teams', 'squads', 'players', 'goals', 'bookings', 'player_appearances', 'matches', 'group_standings', 'manager_appointments'].map(fetchCSV));
 
     const playerById = new Map(players.map((p) => [p.player_id, p]));
+    const confByCode = new Map(teams.map((x) => [tid(x.team_code), x.confederation_code]));
     const editions = [];
     mkdirSync(CACHE, { recursive: true });
 
@@ -127,7 +128,7 @@ function build() {
         if (!id || teamMap.has(id)) continue;
         teamMap.set(id, {
           id, name: s.team_name, code: tcode(s.team_code), flag: flagFor(tcode(s.team_code)),
-          confederation: '', groupId: groupByTeam.get(id) ?? null, fifaRanking: 0, elo: 1700,
+          confederation: confByCode.get(id) || '', groupId: groupByTeam.get(id) ?? null, fifaRanking: 0, elo: 1700,
           preTournamentTitleOdds: 0, manager: mgrByTeam.get(id) || '—', attackRating: 70, defenseRating: 70,
           primaryColor: '#7c7c8a', squadIds: [],
         });

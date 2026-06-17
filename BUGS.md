@@ -83,6 +83,7 @@ differently between the two.
 | WC-017 | SportMonks: Australia/Austria & Iran/Iraq merged into one team | sportmonks adapter | Team code derived by slicing the first 3 letters of the name → `AUS`/`IRA` collisions merged distinct nations, corrupting groups | Use SportMonks' real `short_code` (AUS/AUT, IRN/IRQ) — also matches the enrichment table so flags/ELO populate · sportmonks adapter |
 | WC-018 | `/predictions` 500 — `reading 'gf'` on SportMonks data | analytics/simulate | A finished match referenced a team not in its group's base map (group-assignment gap) → `base.get(id)!` undefined | Guard the group base lookup and skip rather than crash (same rule as WC-002) · simulate.ts |
 | WC-019 | "Breakout" flagged 25-year-olds (Haaland) on SportMonks | narratives / nlq | SportMonks gives no player age (`age=0`), so the `age ≤ 23` filter passed everyone | Require `age >= 17 && age <= 23` — breakouts only surface when ages are actually known · narratives.ts · nlq.ts |
+| WC-020 | Historical `/teams` page empty (no teams) on every datahub edition | datahub importer | Teams were built with `confederation: ''`, but the `/teams` page groups by confederation → every team filtered out | Populate `confederation` from teams.csv `confederation_code` (UEFA/CONMEBOL/CAF/…) · fetch-datahub.mjs |
 
 ---
 
