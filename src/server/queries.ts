@@ -20,6 +20,7 @@ import {
   getLiveMatches,
 } from '@/data/store';
 import { engine } from '@/analytics';
+import { rankPlayers, rankTeams } from '@/ai/query/resolver';
 import { generateInsights, generateDailyBriefing, generateMatchSummary, storylines } from '@/ai/narratives';
 import type { Team, TeamView, Match } from '@/domain/types';
 
@@ -212,51 +213,25 @@ export function homeData() {
 }
 
 // ── Global search ────────────────────────────────────────────
-/** Lowercase + strip diacritics so "Mbappé" matches "mbappe". */
-function norm(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
-/**
- * Accent-insensitive name match. Every meaningful query token (≥3 chars) must
- * prefix-match SOME token of the player's name, so multi-part official names
- * like "Lionel Andrés Messi Cuccittini" still match "messi", "lionel messi", or
- * "messi cuccittini" — not just the surname. The whole query is also matched as
- * a contiguous substring for the common single-word case.
- */
-function nameMatches(normName: string, normQ: string, qTokens: string[]): boolean {
-  // Substring only for queries ≥4 chars, so short ones ("son") don't match mid-name ("Johansson")
-  if (normQ.length >= 4 && normName.includes(normQ)) return true;
-  const nameTokens = normName.split(/[\s.]+/).filter(Boolean);
-  const sig = qTokens.filter((t) => t.length >= 3); // ignore single-letter initials
-  if (!sig.length || !nameTokens.length) return false;
-  return sig.every((qt) => nameTokens.some((nt) => nt.startsWith(qt) || (qt.length >= 4 && nt.includes(qt))));
-}
-
+// Both player/team matching go through the shared resolver (src/ai/query/resolver)
+// — the same brain the natural-language engine uses — so "lionel messi", "messi",
+// "l messi", a typo, or a team alias all resolve identically here and in the AI.
 export function search(query: string) {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (!q) return { teams: [], players: [], matches: [] };
-  const nq = norm(q);
-  const qTokens = nq.split(/\s+/).filter((t) => t.length >= 2);
-  const teams = getTeams()
-    .filter((t) => norm(t.name).includes(nq) || t.code.toLowerCase().includes(q))
-    .slice(0, 6);
-  const playerHits = getPlayerViews()
-    .filter((p) => nameMatches(norm(p.name), nq, qTokens))
-    .sort((a, b) => b.stats.goals - a.stats.goals)
-    .slice(0, 8);
-  // Resolve both teams up front and DROP any fixture with an unresolved side
-  // (TBD knockout slots, or a hollow live feed where a match references a team
-  // that didn't load). Dereferencing those was crashing /api/search with a 500.
-  const matchHits = getMatches()
+  const teams = rankTeams(q, 6);
+  const players = rankPlayers(q, 8);
+  // Matches: any fixture involving a team the query resolves to. Resolve both
+  // sides and drop fixtures with an unresolved side (TBD knockout slots / hollow
+  // live feed) so /api/search can never crash on an undefined team.
+  const teamIds = new Set(rankTeams(q, 16).map((t) => t.id));
+  const matches = getMatches()
+    .filter((m) => teamIds.has(m.homeTeamId) || teamIds.has(m.awayTeamId))
     .map((m) => ({ m, home: getTeam(m.homeTeamId), away: getTeam(m.awayTeamId) }))
-    .filter((x): x is { m: Match; home: Team; away: Team } => {
-      if (!x.home || !x.away) return false;
-      return x.home.name.toLowerCase().includes(q) || x.away.name.toLowerCase().includes(q);
-    })
+    .filter((x): x is { m: Match; home: Team; away: Team } => Boolean(x.home && x.away))
     .slice(0, 6)
     .map(({ m, home, away }) => ({ ...m, home, away }));
-  return { teams, players: playerHits, matches: matchHits };
+  return { teams, players, matches };
 }
 
 export type TeamWithForecast = Team & {

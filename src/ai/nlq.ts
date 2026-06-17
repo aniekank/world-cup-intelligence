@@ -11,8 +11,9 @@
  * narration when ANTHROPIC_API_KEY is configured (see ai/narratives.ts).
  */
 
-import { getPlayerViews, getTeams, getTeam, getPlayers } from '@/data/store';
+import { getPlayerViews, getTeams, getTeam } from '@/data/store';
 import { engine } from '@/analytics';
+import { extractPlayers, extractTeam } from '@/ai/query/resolver';
 import type { NLQueryResult, PlayerView, Position } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
@@ -50,32 +51,16 @@ function metricValue(p: PlayerView, m: { key: string; source: 'stat' | 'per90' }
   return (p.stats as unknown as Record<string, number>)[m.key] ?? 0;
 }
 
+// Entity detection delegates to the shared resolver (src/ai/query/resolver) — the
+// same matcher the search box uses — so a name resolves identically whether it's
+// typed into search or named inside a question.
 function detectTeam(q: string): { id: string; name: string } | null {
-  const lower = q.toLowerCase();
-  for (const t of getTeams()) {
-    if (lower.includes(t.name.toLowerCase()) || new RegExp(`\\b${t.code.toLowerCase()}\\b`).test(lower)) {
-      return { id: t.id, name: t.name };
-    }
-  }
-  return null;
+  const t = extractTeam(q);
+  return t ? { id: t.id, name: t.name } : null;
 }
 
-const stripAccents = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
 function detectPlayers(q: string): PlayerView[] {
-  const lower = stripAccents(q);
-  const matches: PlayerView[] = [];
-  for (const p of getPlayers()) {
-    // A player is "mentioned" if any meaningful part of their name (≥4 chars,
-    // not just the surname) appears in the query — so "compare messi and mbappe"
-    // resolves both, even with long official names ending in another surname.
-    const parts = stripAccents(p.name).split(/[\s.]+/).filter((t) => t.length >= 4);
-    if (parts.some((part) => lower.includes(part))) {
-      const view = getPlayerViews().find((v) => v.id === p.id);
-      if (view && !matches.find((mm) => mm.id === view.id)) matches.push(view);
-    }
-  }
-  return matches.sort((a, b) => b.stats.minutes - a.stats.minutes);
+  return extractPlayers(q, 4);
 }
 
 export function answerQuery(rawQuery: string): NLQueryResult {
