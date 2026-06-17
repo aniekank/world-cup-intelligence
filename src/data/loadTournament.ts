@@ -1,7 +1,7 @@
 import 'server-only';
 import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
-import { getCachedTournament, setDataset } from './store';
+import { getCachedTournament, setDataset, getActiveTournamentId } from './store';
 import type { DatasetSnapshot } from '@/domain/types';
 
 function sourceLabel(t: TournamentInfo): string {
@@ -45,6 +45,63 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
 
   setDataset(snap, sourceLabel(t), id);
   return snap;
+}
+
+/** Window around kickoff in which a match is plausibly being played (minutes). */
+const LIVE_WINDOW_BEFORE_MS = 10 * 60_000;
+const LIVE_WINDOW_AFTER_MS = 150 * 60_000;
+
+/**
+ * Re-poll the fixtures feed and merge current status/score/minute into the
+ * active live snapshot, so in-play games flip to LIVE and scores update without
+ * re-fetching squads. Cheap: skips the API call entirely unless some match is
+ * actually in its play window, and only swaps the snapshot when something
+ * changed. Returns true if the dataset was updated. Safe to call on a timer.
+ */
+export async function refreshLiveScores(): Promise<boolean> {
+  const key = process.env.API_FOOTBALL_KEY;
+  if (!key) return false;
+  if (getActiveTournamentId() !== 'live-2026') return false; // only when the live edition is active
+  const cur = getCachedTournament('live-2026');
+  if (!cur) return false;
+
+  const now = Date.now();
+  const inPlayWindow = cur.matches.some((m) => {
+    if (m.status === 'FINISHED') return false;
+    const ko = new Date(m.kickoff).getTime();
+    return now >= ko - LIVE_WINDOW_BEFORE_MS && now <= ko + LIVE_WINDOW_AFTER_MS;
+  });
+  if (!inPlayWindow) return false; // nothing plausibly in play → don't spend an API call
+
+  const { fetchApiFootballFixtures } = await import('./providers/apiFootball');
+  const byId = new Map((await fetchApiFootballFixtures(key)).map((u) => [u.id, u]));
+
+  let changed = 0;
+  const matches = cur.matches.map((m) => {
+    const u = byId.get(m.id);
+    if (!u) return m;
+    if (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute) {
+      changed++;
+      return {
+        ...m,
+        status: u.status,
+        minute: u.minute,
+        homeScore: u.homeScore,
+        awayScore: u.awayScore,
+        homeScoreHT: u.homeScoreHT,
+        awayScoreHT: u.awayScoreHT,
+        penalties: u.penalties,
+      };
+    }
+    return m;
+  });
+  if (!changed) return false;
+
+  // New snapshot object (not an in-place mutation) so the store's snapshot-keyed
+  // indexes + analytics engine rebuild against the fresh scores.
+  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, 'API-Football (live)', 'live-2026');
+  console.log(`[data] Live refresh: ${changed} fixture(s) updated.`);
+  return true;
 }
 
 /**

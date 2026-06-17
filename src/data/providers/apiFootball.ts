@@ -106,6 +106,40 @@ function mapStatus(short: string): Match['status'] {
   return 'SCHEDULED';
 }
 
+/** A single fixture's live state, keyed by our match id (`m-<fixtureId>`). */
+export interface FixtureUpdate {
+  id: string;
+  status: Match['status'];
+  minute: number;
+  homeScore: number;
+  awayScore: number;
+  homeScoreHT: number;
+  awayScoreHT: number;
+  penalties: { home: number; away: number } | null;
+}
+
+/**
+ * Just the fixtures feed (one API call) — current status, score and minute for
+ * every match. Used by the periodic live refresh so in-play games flip to LIVE
+ * and scores update without re-fetching the heavy squad/player data.
+ */
+export async function fetchApiFootballFixtures(apiKey: string): Promise<FixtureUpdate[]> {
+  const afFixtures = await af<AFFixture[]>(`/fixtures?league=${WORLD_CUP_LEAGUE}&season=${SEASON}`, apiKey);
+  return afFixtures.map((f) => {
+    const status = mapStatus(f.fixture.status.short);
+    return {
+      id: `m-${f.fixture.id}`,
+      status,
+      minute: f.fixture.status.elapsed ?? (status === 'FINISHED' ? 90 : 0),
+      homeScore: f.goals.home ?? 0,
+      awayScore: f.goals.away ?? 0,
+      homeScoreHT: f.score.halftime.home ?? 0,
+      awayScoreHT: f.score.halftime.away ?? 0,
+      penalties: f.score.penalty.home != null ? { home: f.score.penalty.home, away: f.score.penalty.away ?? 0 } : null,
+    };
+  });
+}
+
 function mapStage(round: string): Match['stage'] {
   const r = round.toLowerCase();
   if (r.includes('final') && !r.includes('semi') && !r.includes('quarter')) return 'FINAL';

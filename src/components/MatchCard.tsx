@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { Match, MatchPrediction, Team } from '@/domain/types';
 import { Badge, LiveDot, ProbBar } from '@/components/ui';
-import { clock, stageName } from '@/lib/format';
+import { LocalTime } from '@/components/LocalTime';
+import { stageName } from '@/lib/format';
 
 export function MatchCard({
   match,
@@ -34,7 +35,7 @@ export function MatchCard({
         ) : finished ? (
           <span>FT</span>
         ) : (
-          <span>{clock(match.kickoff)}</span>
+          <LocalTime iso={match.kickoff} />
         )}
       </div>
 

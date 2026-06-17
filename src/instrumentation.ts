@@ -25,4 +25,21 @@ export async function register() {
       console.error('[data] Tournament load failed — staying on simulation:', err);
     }
   })();
+
+  // For the live edition, poll the fixtures feed so in-play games flip to LIVE
+  // and scores update mid-tournament. The refresh itself no-ops (no API call)
+  // unless a match is actually in its play window, so this is quota-cheap.
+  if (id === 'live-2026') {
+    const REFRESH_MS = 60_000;
+    setInterval(() => {
+      void (async () => {
+        try {
+          const { refreshLiveScores } = await import('@/data/loadTournament');
+          await refreshLiveScores();
+        } catch (err) {
+          console.error('[data] Live refresh failed:', err);
+        }
+      })();
+    }, REFRESH_MS);
+  }
 }

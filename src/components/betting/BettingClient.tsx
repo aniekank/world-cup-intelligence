@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Calculator, Receipt, TrendingUp } from 'lucide-react';
-import { clock } from '@/lib/format';
+import { LocalTime } from '@/components/LocalTime';
 
 interface EdgeOutcome {
   label: string;
@@ -96,7 +96,7 @@ export function BettingClient({ rows }: { rows: EdgeRow[] }) {
                   <div key={r.matchId} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                     <div className="min-w-0">
                       <p className="truncate text-terminal-bright">{r.home.flag} {r.home.code} v {r.away.code} {r.away.flag}</p>
-                      <p className="text-[11px] text-terminal-muted">{clock(r.kickoff)} · {r.books} books</p>
+                      <p className="text-[11px] text-terminal-muted"><LocalTime iso={r.kickoff} /> · {r.books} books</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">

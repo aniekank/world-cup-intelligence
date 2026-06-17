@@ -6,7 +6,8 @@ import { PageHeader, Panel, Badge, LiveDot, ProbBar } from '@/components/ui';
 import { ShotMap } from '@/components/charts/ShotMap';
 import { TeamBadge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
-import { clock, stageName } from '@/lib/format';
+import { stageName } from '@/lib/format';
+import { LocalTime } from '@/components/LocalTime';
 import type { MatchEvent } from '@/domain/types';
 
 export function generateMetadata({ params }: { params: { id: string } }): Metadata {
@@ -52,7 +53,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader kicker={match.groupId ? `Group ${match.groupId}` : stageName[match.stage]} title={`${home.name} v ${away.name}`} description={`${match.venue} · ${match.city} · ${clock(match.kickoff)}`} />
+      <PageHeader kicker={match.groupId ? `Group ${match.groupId}` : stageName[match.stage]} title={`${home.name} v ${away.name}`} description={`${match.venue} · ${match.city}`} />
 
       {/* Scoreboard */}
       <Panel bodyClassName="py-6">
@@ -64,7 +65,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
           <div className="flex flex-col items-center">
             {live && <span className="mb-1 flex items-center gap-1 text-xs font-semibold text-accent-red"><LiveDot /> {match.minute}′</span>}
             {finished && <span className="mb-1 text-xs text-terminal-muted">Full time</span>}
-            {match.status === 'SCHEDULED' && <span className="mb-1 text-xs text-terminal-muted">{clock(match.kickoff)}</span>}
+            {match.status === 'SCHEDULED' && <span className="mb-1 text-xs text-terminal-muted"><LocalTime iso={match.kickoff} /></span>}
             <div className="tnum text-5xl font-bold text-terminal-bright">
               {match.status === 'SCHEDULED' ? <span className="text-terminal-muted">vs</span> : `${match.homeScore} – ${match.awayScore}`}
             </div>
