@@ -118,6 +118,40 @@ export interface FixtureUpdate {
   penalties: { home: number; away: number } | null;
 }
 
+/** One raw event from /fixtures/events, normalized but not yet mapped to our ids. */
+export interface RawFixtureEvent {
+  minute: number;
+  extra: number;
+  apiType: string; // "Goal" | "Card" | "subst" | "Var"
+  detail: string; // e.g. "Normal Goal", "Penalty", "Goal Disallowed - offside", "Yellow Card"
+  teamName: string;
+  playerApiId: number | null;
+  assistApiId: number | null;
+}
+
+interface AFEvent {
+  time: { elapsed: number | null; extra: number | null };
+  team: { id: number; name: string };
+  player: { id: number | null; name: string | null };
+  assist: { id: number | null; name: string | null };
+  type: string;
+  detail: string;
+}
+
+/** Per-fixture timeline (goals, cards, subs, VAR). One API call per fixture. */
+export async function fetchFixtureEvents(apiKey: string, fixtureId: number): Promise<RawFixtureEvent[]> {
+  const res = await af<AFEvent[]>(`/fixtures/events?fixture=${fixtureId}`, apiKey).catch(() => [] as AFEvent[]);
+  return (res ?? []).map((e) => ({
+    minute: e.time?.elapsed ?? 0,
+    extra: e.time?.extra ?? 0,
+    apiType: e.type ?? '',
+    detail: e.detail ?? '',
+    teamName: e.team?.name ?? '',
+    playerApiId: e.player?.id ?? null,
+    assistApiId: e.assist?.id ?? null,
+  }));
+}
+
 /**
  * Just the fixtures feed (one API call) — current status, score and minute for
  * every match. Used by the periodic live refresh so in-play games flip to LIVE

@@ -18,9 +18,13 @@ export function generateMetadata({ params }: { params: { id: string } }): Metada
 const EVENT_ICON: Record<string, string> = {
   GOAL: '⚽',
   PENALTY_GOAL: '⚽',
+  OWN_GOAL: '⚽',
+  PENALTY_MISS: '❌',
   YELLOW_CARD: '🟨',
+  SECOND_YELLOW: '🟨',
   RED_CARD: '🟥',
   SUBSTITUTION: '🔁',
+  VAR: '📺',
 };
 
 export default function MatchPage({ params }: { params: { id: string } }) {
@@ -33,7 +37,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
   const as = match.teamStats[away.id];
 
   const keyEvents = match.events.filter((e) =>
-    ['GOAL', 'PENALTY_GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION'].includes(e.type),
+    ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL', 'PENALTY_MISS', 'YELLOW_CARD', 'SECOND_YELLOW', 'RED_CARD', 'SUBSTITUTION', 'VAR'].includes(e.type),
   );
 
   const statRows: { label: string; h: number; a: number; suffix?: string }[] = hs && as
@@ -163,7 +167,13 @@ function EventRow({ event, homeId }: { event: MatchEvent; homeId: string }) {
     <li className={`flex items-center gap-2 text-sm ${isHome ? '' : 'flex-row-reverse text-right'}`}>
       <span className="tnum w-8 shrink-0 text-xs text-terminal-muted">{event.minute}′</span>
       <span>{EVENT_ICON[event.type] ?? '•'}</span>
-      <span className="text-terminal-text">{player?.name ?? event.detail}</span>
+      <span className="text-terminal-text">
+        {player?.name ?? event.detail}
+        {/* VAR / own-goal carry the meaning in the detail string — always show it */}
+        {(event.type === 'VAR' || event.type === 'OWN_GOAL' || event.type === 'PENALTY_MISS') && (
+          <span className="text-terminal-muted"> — {event.detail}</span>
+        )}
+      </span>
     </li>
   );
 }
