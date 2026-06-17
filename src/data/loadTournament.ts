@@ -58,6 +58,7 @@ function mapFixtureEvents(
 }
 
 function sourceLabel(t: TournamentInfo): string {
+  if (t.source === 'sportmonks') return 'SportMonks (live)';
   if (t.source === 'apifootball') return 'API-Football (live)';
   if (t.source === 'statsbomb') return `StatsBomb · ${t.label}`;
   return 'Simulation';
@@ -88,7 +89,7 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   // a broken dataset. It auto-upgrades to live on the next load once the feed
   // is healthy again. The hollow snapshot is intentionally NOT cached, so a
   // later switch re-fetches.
-  if (t.source === 'apifootball' && !isHealthyLive(snap)) {
+  if ((t.source === 'apifootball' || t.source === 'sportmonks') && !isHealthyLive(snap)) {
     const withSquad = snap.teams.filter((x) => (x.squadIds?.length ?? 0) > 0).length;
     console.warn(`[data] Live feed incomplete (${snap.players.length} players, ${withSquad}/${snap.teams.length} squads) — serving the full simulation instead.`);
     const sim = generateDataset();
@@ -114,7 +115,9 @@ const LIVE_WINDOW_AFTER_MS = 150 * 60_000;
 export async function refreshLiveScores(): Promise<boolean> {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) return false;
-  if (getActiveTournamentId() !== 'live-2026') return false; // only when the live edition is active
+  // This in-play refresh is API-Football-specific. When live-2026 runs on
+  // SportMonks (or anything else), skip it — the boot snapshot carries the data.
+  if (getTournament(getActiveTournamentId())?.source !== 'apifootball') return false;
   const cur = getCachedTournament('live-2026');
   if (!cur) return false;
 
@@ -215,6 +218,13 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
     // Variable dynamic import → webpack bundles all cache JSONs as a context.
     const mod = await import(`./cache/${t.cacheFile}`);
     return ((mod as { default?: unknown }).default ?? mod) as unknown as DatasetSnapshot;
+  }
+
+  if (t.source === 'sportmonks') {
+    const key = process.env.SPORTMONKS_KEY;
+    if (!key) throw new Error('SPORTMONKS_KEY not set');
+    const { fetchSportMonksSnapshot } = await import('./providers/sportmonks');
+    return fetchSportMonksSnapshot(key);
   }
 
   if (t.source === 'apifootball') {

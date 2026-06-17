@@ -80,6 +80,8 @@ differently between the two.
 | WC-012 | Live games never flipped to LIVE; scores frozen | data refresh | Feed fetched once at boot, never refreshed | Poll fixtures every 60s during play windows; merge status/score/minute · `f05b844` |
 | WC-013 | Match report says a team "won" during a live game | narratives | `generateMatchSummary` only special-cased `SCHEDULED`; LIVE fell through to past-tense result | Add a LIVE/HALFTIME present-tense branch; reserve "won" for FINISHED · `c1603f0` |
 | WC-015 | Match events missing (goals, disallowed/offside, cards) | data adapter / live refresh | Adapter hardcoded `events: []`; the per-fixture timeline was never fetched | Fetch `/fixtures/events`, map goals/cards/subs/VAR, resolve scorer+team from squads, surface VAR/own-goal in the UI; backfill finished matches once (capped) · `a445a67` · `968c8c2` · `3521d7c` |
+| WC-017 | SportMonks: Australia/Austria & Iran/Iraq merged into one team | sportmonks adapter | Team code derived by slicing the first 3 letters of the name → `AUS`/`IRA` collisions merged distinct nations, corrupting groups | Use SportMonks' real `short_code` (AUS/AUT, IRN/IRQ) — also matches the enrichment table so flags/ELO populate · sportmonks adapter |
+| WC-018 | `/predictions` 500 — `reading 'gf'` on SportMonks data | analytics/simulate | A finished match referenced a team not in its group's base map (group-assignment gap) → `base.get(id)!` undefined | Guard the group base lookup and skip rather than crash (same rule as WC-002) · simulate.ts |
 
 ---
 

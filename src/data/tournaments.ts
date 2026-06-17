@@ -5,7 +5,7 @@
  * The active tournament is switchable at runtime (see src/data/store.ts).
  */
 
-export type TournamentSource = 'apifootball' | 'statsbomb' | 'simulation';
+export type TournamentSource = 'sportmonks' | 'apifootball' | 'statsbomb' | 'simulation';
 
 export interface TournamentInfo {
   id: string;
@@ -25,7 +25,7 @@ export interface TournamentInfo {
 export const TOURNAMENTS: TournamentInfo[] = [
   {
     id: 'live-2026', label: 'World Cup 2026', short: '2026', year: 2026, gender: 'men',
-    host: 'USA · Canada · Mexico', source: 'apifootball', coverage: 'live',
+    host: 'USA · Canada · Mexico', source: 'sportmonks', coverage: 'live',
     championFlag: '🏆', blurb: 'Live — 48 teams, in progress',
   },
   {
@@ -66,8 +66,7 @@ export function getTournament(id: string): TournamentInfo | undefined {
 /** Default active tournament implied by DATA_SOURCE at startup. */
 export function defaultTournamentId(): string {
   const src = (process.env.DATA_SOURCE ?? 'seed').toLowerCase();
-  if (src === 'apifootball') return 'live-2026';
+  if (src === 'sportmonks' || src === 'apifootball' || src === 'footballdata') return 'live-2026';
   if (src === 'statsbomb') return 'men-2022';
-  if (src === 'footballdata') return 'live-2026';
   return 'simulation';
 }

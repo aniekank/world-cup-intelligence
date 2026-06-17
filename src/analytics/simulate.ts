@@ -52,8 +52,9 @@ function buildGroupStates(groups: Group[], matches: Match[]): GroupState[] {
     const remaining: GroupState['remaining'] = [];
     for (const m of matches.filter((mm) => mm.groupId === g.id)) {
       if (m.status === 'FINISHED') {
-        const h = base.get(m.homeTeamId)!;
-        const a = base.get(m.awayTeamId)!;
+        const h = base.get(m.homeTeamId);
+        const a = base.get(m.awayTeamId);
+        if (!h || !a) continue; // a team isn't in this group's base — skip rather than crash
         h.gf += m.homeScore; h.ga += m.awayScore;
         a.gf += m.awayScore; a.ga += m.homeScore;
         if (m.homeScore > m.awayScore) h.pts += 3;
