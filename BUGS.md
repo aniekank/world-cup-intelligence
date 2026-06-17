@@ -94,6 +94,7 @@ differently between the two.
 |----|----------|-------|-----------|
 | INC-1 | Live feed dead / hollow for hours | The key in Render was a **RapidAPI** key with no subscription, used against the **direct** api-sports.io host; also the free tier's 100 req/day is below one full load (~114 calls) | Use the correct direct `api-sports.io` key on a paid plan; `DATA_SOURCE=apifootball` |
 | INC-2 | Deploys reported "Live" but ran old code | A Render **Rollback** pinned an old commit; env-var saves and "Clear build cache & deploy" rebuilt the *pinned* commit, not `HEAD` | Push a **fresh commit** — auto-deploy-on-commit always builds `HEAD` and breaks the pin |
+| INC-3 | Prod reverted to old (pre-SportMonks / API-Football) code after env-var save AND again after a plan change (Free→Pro) | Same root cause as INC-2: a still-active **rollback pin** means **any service config change** (env save, instance-plan change, restart) redeploys the *pinned* old commit, not `HEAD`. Diagnosed via `/api/health` reporting `API-Football (live)` instead of `SportMonks (live)`. | Push a fresh commit to force `HEAD`. **Durable fix:** clear the rollback in Render → service → **Manual Deploy → Deploy latest commit**, so future config changes rebuild `HEAD`, not the pin. |
 
 ---
 
