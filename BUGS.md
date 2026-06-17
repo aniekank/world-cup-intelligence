@@ -32,6 +32,16 @@ differently between the two.
 
 ## Open bugs
 
+### WC-016 — Advanced metrics show 0 / "0th percentile" on live data
+- **Area:** data adapter (`src/data/providers/apiFootball.ts`) + many UI surfaces (player detail, scouting, golden boot, standings, home stat strip, analytics, breakout)
+- **Severity:** high — pervasive; makes the live app look broken
+- **Steps:** On the live site, open any player page, the golden boot, or `/standings`.
+- **Expected:** Advanced metrics (xG, xA, progressive passes/carries, pressures, touches-in-box, ball recoveries) show real values OR are hidden/labeled "not available for this source."
+- **Actual:** They're all **0** — scouting shows "0th percentile" weaknesses, golden boot `xG 0`, standings show `xG 0.0 / 0.0` for every team, home "Total xG" reads ~0 next to real goals.
+- **Root cause:** API-Football's feed for this competition/plan carries only basic stats (goals, assists, minutes, shots, passes) — **no xG or advanced metrics**. But the adapter hardcodes `meta.hasAdvancedMetrics: true`, so the UI renders the empty metrics instead of degrading. (Confirmed: xG/xA/progressive/pressures/touches/recoveries are uniformly 0 across all sampled live players.)
+- **Fix (proposed):** adapter derives `hasAdvancedMetrics` from whether advanced data actually arrived; UI hides or labels advanced metrics + their percentiles when the active source doesn't provide them. The `datasetMeta().hasAdvancedMetrics` flag + `hasShotData` (already used to hide shot maps) are the hooks.
+- **Status:** 🔴 Open (high)
+
 ### WC-014 — Search runner-up noise on multi-word names
 - **Area:** search / resolver (`src/ai/query/resolver.ts`)
 - **Severity:** cosmetic
