@@ -2,24 +2,27 @@ import 'server-only';
 import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
 import { getCachedTournament, setDataset, getActiveTournamentId } from './store';
+import type { FixtureUpdate, RawFixtureEvent } from './providers/apiFootball';
 import type { DatasetSnapshot, Match, MatchEvent, EventType, Team } from '@/domain/types';
 
 /** Map an API-Football event (type + detail) to our EventType. */
 function mapEventType(apiType: string, detail: string): EventType {
+  // Tolerant of both API-Football ("Goal"/"Card"/"subst"/"Var") and SportMonks
+  // ("Goal"/"Yellowcard"/"Redcard"/"Substitution") naming.
   const t = apiType.toLowerCase();
   const d = detail.toLowerCase();
-  if (t === 'goal') {
-    if (d.includes('own')) return 'OWN_GOAL';
+  if (t.includes('goal')) {
+    if (t.includes('own') || d.includes('own')) return 'OWN_GOAL';
     if (d.includes('miss')) return 'PENALTY_MISS';
     if (d.includes('penalty')) return 'PENALTY_GOAL';
     return 'GOAL';
   }
-  if (t === 'card') {
-    if (d.includes('red')) return 'RED_CARD';
+  if (t.includes('card') || t.includes('yellow') || t.includes('red')) {
+    if (t.includes('red') || d.includes('red')) return 'RED_CARD';
     if (d.includes('second')) return 'SECOND_YELLOW';
     return 'YELLOW_CARD';
   }
-  if (t === 'subst') return 'SUBSTITUTION';
+  if (t.includes('subst')) return 'SUBSTITUTION';
   return 'VAR'; // VAR decisions (e.g. "Goal Disallowed - offside") and anything else
 }
 
@@ -113,11 +116,26 @@ const LIVE_WINDOW_AFTER_MS = 150 * 60_000;
  * changed. Returns true if the dataset was updated. Safe to call on a timer.
  */
 export async function refreshLiveScores(): Promise<boolean> {
-  const key = process.env.API_FOOTBALL_KEY;
+  // Resolve the live provider's fetchers by the active source. Skip for offline
+  // sources (simulation / StatsBomb) — nothing to poll.
+  const source = getTournament(getActiveTournamentId())?.source;
+  let key: string | undefined;
+  let fetchFixturesFn: () => Promise<FixtureUpdate[]>;
+  let fetchEventsFn: (fixtureId: number) => Promise<RawFixtureEvent[]>;
+  if (source === 'apifootball') {
+    key = process.env.API_FOOTBALL_KEY;
+    const m = await import('./providers/apiFootball');
+    fetchFixturesFn = () => m.fetchApiFootballFixtures(key!);
+    fetchEventsFn = (id) => m.fetchFixtureEvents(key!, id);
+  } else if (source === 'sportmonks') {
+    key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+    const m = await import('./providers/sportmonks');
+    fetchFixturesFn = () => m.fetchSportMonksFixtures(key!);
+    fetchEventsFn = (id) => m.fetchSportMonksEvents(key!, id);
+  } else {
+    return false;
+  }
   if (!key) return false;
-  // This in-play refresh is API-Football-specific. When live-2026 runs on
-  // SportMonks (or anything else), skip it — the boot snapshot carries the data.
-  if (getTournament(getActiveTournamentId())?.source !== 'apifootball') return false;
   const cur = getCachedTournament('live-2026');
   if (!cur) return false;
 
@@ -137,8 +155,7 @@ export async function refreshLiveScores(): Promise<boolean> {
   });
   if (!needsRefresh) return false; // nothing in play and no timeline to backfill → no API call
 
-  const { fetchApiFootballFixtures, fetchFixtureEvents } = await import('./providers/apiFootball');
-  const byId = new Map((await fetchApiFootballFixtures(key)).map((u) => [u.id, u]));
+  const byId = new Map((await fetchFixturesFn()).map((u) => [u.id, u]));
 
   // Pull the timeline (goals, cards, subs, VAR) for matches that are in play or
   // just finished — a handful of extra calls at most.
@@ -160,7 +177,7 @@ export async function refreshLiveScores(): Promise<boolean> {
     cur.matches.filter(wantEvents).slice(0, 8).map(async (m) => {
       const fixtureId = Number(m.id.replace('m-', ''));
       if (!Number.isFinite(fixtureId)) return;
-      const raw = await fetchFixtureEvents(key, fixtureId);
+      const raw = await fetchEventsFn(fixtureId);
       eventsByMatch.set(m.id, mapFixtureEvents(m.id, raw, teamById.get(m.homeTeamId), teamById.get(m.awayTeamId), playerByApi));
       const status = byId.get(m.id)?.status ?? m.status;
       if (status === 'FINISHED') eventsFetched.add(m.id); // don't re-fetch a finished match, even if it had no events

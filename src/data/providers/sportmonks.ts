@@ -14,6 +14,7 @@
  */
 
 import { enrichTeam } from '@/data/enrichment';
+import type { FixtureUpdate, RawFixtureEvent } from './apiFootball';
 import type {
   DatasetSnapshot,
   Team,
@@ -314,4 +315,52 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
     // is a separate add-on), so shot maps stay off.
     meta: { source: 'sportmonks', hasAdvancedMetrics: true, hasShotData: false, modeledMetrics: ['xA'] },
   };
+}
+
+// ── Live refresh helpers (shape-compatible with the API-Football refresh) ─────
+
+/** Lightweight per-fixture live state (scores + status) for every WC2026 game. */
+export async function fetchSportMonksFixtures(apiKey: string): Promise<FixtureUpdate[]> {
+  const raw = await smList<SMFixture>(
+    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state&per_page=50`,
+    apiKey,
+  );
+  const out: FixtureUpdate[] = [];
+  for (const f of raw) {
+    const home = (f.participants ?? []).find((p) => p.meta?.location === 'home');
+    const away = (f.participants ?? []).find((p) => p.meta?.location === 'away');
+    if (!home || !away) continue;
+    const cur = (f.scores ?? []).filter((s) => s.description === 'CURRENT');
+    const ht = (f.scores ?? []).filter((s) => s.description === '1ST_HALF');
+    const gf = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
+    const status = mapStatus(f.state?.developer_name);
+    out.push({
+      id: `m-${f.id}`,
+      status,
+      minute: status === 'FINISHED' ? 90 : 0,
+      homeScore: gf(home.id, cur),
+      awayScore: gf(away.id, cur),
+      homeScoreHT: gf(home.id, ht),
+      awayScoreHT: gf(away.id, ht),
+      penalties: null,
+    });
+  }
+  return out;
+}
+
+/** Per-fixture event timeline as RawFixtureEvent (player resolved downstream). */
+export async function fetchSportMonksEvents(apiKey: string, fixtureId: number): Promise<RawFixtureEvent[]> {
+  const r = await smGet<SMFixture & { events?: SMEvent[] }>(
+    `/fixtures/${fixtureId}?include=events.type`,
+    apiKey,
+  ).catch(() => null);
+  return (r?.data?.events ?? []).map((e) => ({
+    minute: e.minute ?? 0,
+    extra: 0,
+    apiType: e.type?.name ?? '',
+    detail: e.type?.name ?? '',
+    teamName: '',
+    playerApiId: e.player_id ?? null,
+    assistApiId: null,
+  }));
 }
