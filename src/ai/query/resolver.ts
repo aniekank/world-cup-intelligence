@@ -32,23 +32,34 @@ export function normalize(s: string): string {
 
 const toks = (s: string): string[] => normalize(s).split(' ').filter(Boolean);
 
-/** Bounded Levenshtein — returns `max+1` as soon as it's provably over budget. */
+/**
+ * Bounded Damerau (optimal string alignment) distance — like Levenshtein but an
+ * adjacent transposition ("halaand"↔"haaland") costs 1, since that's one of the
+ * most common typos. Returns `max+1` as soon as it's provably over budget.
+ */
 function editDistance(a: string, b: string, max: number): number {
-  if (Math.abs(a.length - b.length) > max) return max + 1;
-  let prevRow = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
+  const al = a.length;
+  const bl = b.length;
+  if (Math.abs(al - bl) > max) return max + 1;
+  let prevPrev: number[] = [];
+  let prev: number[] = Array.from({ length: bl + 1 }, (_, j) => j);
+  for (let i = 1; i <= al; i++) {
     const row = [i];
     let rowMin = i;
-    for (let j = 1; j <= b.length; j++) {
+    for (let j = 1; j <= bl; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const v = Math.min(prevRow[j]! + 1, row[j - 1]! + 1, prevRow[j - 1]! + cost);
+      let v = Math.min(prev[j]! + 1, row[j - 1]! + 1, prev[j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        v = Math.min(v, prevPrev[j - 2]! + 1); // adjacent transposition
+      }
       row.push(v);
       if (v < rowMin) rowMin = v;
     }
     if (rowMin > max) return max + 1;
-    prevRow = row;
+    prevPrev = prev;
+    prev = row;
   }
-  return prevRow[b.length]!;
+  return prev[bl]!;
 }
 
 /** Score one query token against one name token, 0..1. */
@@ -57,9 +68,9 @@ function tokenScore(qt: string, nt: string): number {
   if (nt.length === 1) return qt[0] === nt ? 0.5 : 0; // name initial, e.g. "l" of "L. Messi" ← "lionel" (alone < threshold)
   if (qt.length === 1) return nt[0] === qt ? 0.4 : 0; // query gave an initial
   if (nt.startsWith(qt)) return 0.7 + 0.25 * (qt.length / nt.length); // prefix
-  if (qt.startsWith(nt)) return 0.6 + 0.2 * (nt.length / qt.length);
+  if (nt.length >= 4 && qt.startsWith(nt)) return 0.6 + 0.2 * (nt.length / qt.length); // query extends a real name token (not a 2-char fragment like "ho")
   if (qt.length >= 4 && nt.includes(qt)) return 0.6; // internal substring
-  const max = qt.length >= 5 ? 2 : qt.length >= 4 ? 1 : 0; // typo tolerance, length-gated
+  const max = qt.length >= 6 ? 2 : qt.length >= 5 ? 1 : 0; // typo tolerance — only for ≥5-char tokens, so short names ("kane") don't fuzz into "sané"
   if (max > 0) {
     const d = editDistance(qt, nt, max);
     if (d === 1) return 0.62; // one typo → still a confident match

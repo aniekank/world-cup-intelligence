@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { generateDataset } from '@/data/generate';
 import { setDataset, getPlayerViews, getTeams } from '@/data/store';
-import { rankPlayers, rankTeams, extractPlayers, extractTeam, normalize } from './resolver';
+import { rankPlayers, rankTeams, extractPlayers, extractTeam, normalize, scoreName } from './resolver';
 
 beforeAll(() => setDataset(generateDataset(), 'simulation', 'simulation'));
 
@@ -116,6 +116,21 @@ describe('resolver — search-box coverage over the full roster', () => {
     const p = getPlayerViews().find((x) => x.stats.minutes > 0) ?? getPlayerViews()[0]!;
     const t = normalize(p.name).split(' ');
     expect(rankPlayers(`${t[0]} ${t[t.length - 1]}`, 1)[0]?.id).toBe(p.id);
+  });
+});
+
+describe('resolver — regressions caught by the live corpus', () => {
+  it('a long query does not match a short name fragment ("holland" ≠ Jun-Ho)', () => {
+    expect(scoreName('holland', 'Bae Jun-Ho')).toBeLessThan(0.55);
+  });
+  it('adjacent-transposition typo still resolves ("halaand" → Haaland)', () => {
+    expect(scoreName('halaand', 'Erling Haaland')).toBeGreaterThan(0.55);
+  });
+  it('short names do not fuzz into near-neighbors ("kane" ≠ Sané)', () => {
+    expect(scoreName('kane', 'Leroy Sané')).toBeLessThan(0.55);
+  });
+  it('one-char-deletion typo on a long surname still resolves ("morals" → Morales)', () => {
+    expect(scoreName('morals', 'Marcos Morales')).toBeGreaterThan(0.55);
   });
 });
 
