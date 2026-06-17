@@ -120,6 +120,16 @@ interface SMFixture {
 interface SMDetail { type_id: number; data?: { value?: number } }
 interface SMLineup { player_id: number; team_id: number; position_id: number | null; jersey_number: number | null; player_name: string; details?: SMDetail[] }
 interface SMEvent { type?: { name?: string }; minute?: number; player_id?: number | null; participant_id?: number | null }
+interface SMSquadEntry {
+  player_id: number;
+  position_id: number | null;
+  jersey_number: number | null;
+  player?: { display_name?: string; name?: string; date_of_birth?: string | null; height?: number | null; position_id?: number | null };
+}
+interface SMTeamDetail {
+  players?: SMSquadEntry[];
+  coaches?: { active?: boolean; coach?: { display_name?: string; name?: string } }[];
+}
 
 const emptyStats = (id: string): PlayerStats => ({
   playerId: id, minutes: 0, appearances: 0, goals: 0, assists: 0, xG: 0, xA: 0,
@@ -206,6 +216,43 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   const byId = new Map<string, Player>();
   const ratingSum = new Map<string, { sum: number; n: number }>();
 
+  // 4a) Full rosters (incl. unplayed) + managers — one call per team returns both
+  // the current squad (with DOB/height/position) and the active coach.
+  const teamEntries = [...teamById.entries()]; // [smTeamId, Team]
+  const SQUAD_BATCH = 6;
+  for (let i = 0; i < teamEntries.length; i += SQUAD_BATCH) {
+    const batch = teamEntries.slice(i, i + SQUAD_BATCH);
+    const results = await Promise.all(
+      batch.map(([smId]) => smGet<SMTeamDetail>(`/teams/${smId}?include=players.player;coaches.coach`, apiKey).catch(() => null)),
+    );
+    results.forEach((res, b) => {
+      const team = batch[b]![1];
+      const data = res?.data;
+      if (!data) return;
+      const coach = (data.coaches ?? []).find((c) => c.active) ?? (data.coaches ?? [])[0];
+      const mgr = coach?.coach?.display_name ?? coach?.coach?.name;
+      if (mgr) team.manager = mgr.trim();
+      for (const sp of data.players ?? []) {
+        const pl = sp.player ?? {};
+        const pid = `${team.id}-${sp.player_id}`;
+        if (byId.has(pid)) continue;
+        const pos = mapPosition(pl.position_id ?? sp.position_id ?? null);
+        const dob = pl.date_of_birth;
+        const age = dob ? Math.max(0, Math.floor((Date.now() - Date.parse(dob)) / 31_557_600_000)) : 0;
+        const p: Player = {
+          id: pid, name: (pl.display_name || pl.name || 'Unknown').trim(), teamId: team.id,
+          shirtNumber: sp.jersey_number ?? 0, position: pos, detailedPosition: DETAIL[pos],
+          age, heightCm: pl.height ?? 182, foot: 'right', club: '—', marketValueEur: 0,
+          rating: { overall: 76, pace: 76, shooting: 76, passing: 76, dribbling: 76, defending: 76, physical: 76 },
+        };
+        players.push(p);
+        byId.set(pid, p);
+        playerStats[pid] = emptyStats(pid);
+      }
+    });
+  }
+
+  // 4b) Aggregate per-player stats + events from PLAYED fixtures onto the rosters.
   const played = fixtures.filter((f) => mapStatus(f.state?.developer_name) === 'FINISHED');
   for (const f of played) {
     const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[] }>(

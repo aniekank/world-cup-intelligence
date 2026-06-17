@@ -53,7 +53,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | 📋 | **Scheduled disk-cache refresh** | Cache the heavy live load to disk and refresh on a schedule (1–2×/day) instead of re-fetching ~114 requests on every boot — sips the API quota instead of gulping it. |
 | 📋 | **Fail-fast on bad key** | Detect auth failures and stop retrying immediately, so a dead key never bogs down boot (and never trips a deploy health-check rollback). |
 | 📋 | **`API_FOOTBALL_HOST` toggle** | Support both the direct `api-sports.io` host and the RapidAPI host via one env var (would have saved the key incident). |
-| 📋 | **SportMonks player metadata + coaches** | Fetch squads (`include=player`, ~48 calls) for real **ages** (re-enables breakout detection — WC-019), heights, and full rosters; fetch **coaches** for manager names + manager stories. Currently ages=0, heights default, managers "—". |
+| ✅ | **SportMonks player metadata + coaches** | Per-team `players.player;coaches.coach` calls give real **ages** (breakout works), heights, **full rosters** (1249 players), and **managers** (Scaloni/Deschamps/…) — which unblocks manager stories. Market value still absent. |
 
 ---
 

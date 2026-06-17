@@ -131,7 +131,6 @@ These are the classes of bug this codebase is prone to. Test these deliberately:
 - **Abbreviated player names** (`L. Messi`) come from the squad feed and upgrade to full names as
   players accrue match stats.
 - **Live data depends on API-Football** coverage and the daily request quota.
-- **SportMonks: no player age / height / market value / manager** in the current load. The lineup
-  feed omits them; fetching squads (`include=player`, ~48 calls) + coaches would restore real ages
-  (re-enabling breakout detection), heights, full rosters, and manager names/stories. Tracked in
-  `ROADMAP.md`. Until then: ages are 0 (breakouts suppressed), heights default 182cm, managers "—".
+- **SportMonks: market value** isn't provided (stays 0 — affects only the value-adjusted breakout
+  weighting, which falls back to pure output). Ages, heights, full rosters, and managers are now
+  fetched via per-team `players.player;coaches.coach` calls (resolved).
