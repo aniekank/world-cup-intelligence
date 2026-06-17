@@ -119,12 +119,16 @@ export async function refreshLiveScores(): Promise<boolean> {
   if (!cur) return false;
 
   const now = Date.now();
-  const inPlayWindow = cur.matches.some((m) => {
-    if (m.status === 'FINISHED') return false;
+  const needsRefresh = cur.matches.some((m) => {
     const ko = new Date(m.kickoff).getTime();
-    return now >= ko - LIVE_WINDOW_BEFORE_MS && now <= ko + LIVE_WINDOW_AFTER_MS;
+    const inWindow = now >= ko - LIVE_WINDOW_BEFORE_MS && now <= ko + LIVE_WINDOW_AFTER_MS;
+    if (m.status !== 'FINISHED' && inWindow) return true; // in play or about to start
+    // A just-finished match whose timeline we haven't captured yet (so the final
+    // score's goals/cards/VAR get fetched even if nothing else is live).
+    if (m.status === 'FINISHED' && now - ko < 3 * 60 * 60_000 && m.events.length === 0) return true;
+    return false;
   });
-  if (!inPlayWindow) return false; // nothing plausibly in play → don't spend an API call
+  if (!needsRefresh) return false; // nothing in play and no fresh result to capture → no API call
 
   const { fetchApiFootballFixtures, fetchFixtureEvents } = await import('./providers/apiFootball');
   const byId = new Map((await fetchApiFootballFixtures(key)).map((u) => [u.id, u]));
