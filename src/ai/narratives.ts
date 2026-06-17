@@ -171,6 +171,19 @@ export function generateMatchSummary(matchId: string): string {
     })
     .filter(Boolean)
     .join(', ');
+
+  // In progress: present tense, live clock, and NEVER declare a winner.
+  if (m.status === 'LIVE' || m.status === 'HALFTIME') {
+    const state =
+      m.homeScore > m.awayScore
+        ? `${home.name} lead ${m.homeScore}–${m.awayScore}`
+        : m.awayScore > m.homeScore
+          ? `${away.name} lead ${m.awayScore}–${m.homeScore}`
+          : `it's level at ${m.homeScore}–${m.awayScore}`;
+    const clock = m.status === 'HALFTIME' ? 'Half-time' : `${m.minute}′`;
+    return `Live — ${clock}: ${state} at ${m.venue}.${scorers ? ' Scorers: ' + scorers + '.' : ''}`;
+  }
+
   const result = m.homeScore > m.awayScore ? `${home.name} won` : m.homeScore < m.awayScore ? `${away.name} won` : 'It finished level';
   const xgLine =
     hStat && aStat
