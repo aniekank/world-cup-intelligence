@@ -69,6 +69,7 @@ differently between the two.
 | WC-011 | Kickoff shown as "tomorrow 1pm" | formatting | `timeZone: 'UTC'` hardcoded; WC-2026 is in North America, so evening games roll onto the next UTC day | `<LocalTime>` renders each fixture in the viewer's own zone · `f05b844` |
 | WC-012 | Live games never flipped to LIVE; scores frozen | data refresh | Feed fetched once at boot, never refreshed | Poll fixtures every 60s during play windows; merge status/score/minute · `f05b844` |
 | WC-013 | Match report says a team "won" during a live game | narratives | `generateMatchSummary` only special-cased `SCHEDULED`; LIVE fell through to past-tense result | Add a LIVE/HALFTIME present-tense branch; reserve "won" for FINISHED · `c1603f0` |
+| WC-015 | Match events missing (goals, disallowed/offside, cards) | data adapter / live refresh | Adapter hardcoded `events: []`; the per-fixture timeline was never fetched | Fetch `/fixtures/events` for in-play & recent matches in the refresh; map goals/cards/subs/VAR and resolve scorer+team from squads; surface VAR/own-goal in the timeline UI · `a445a67` |
 
 ---
 
