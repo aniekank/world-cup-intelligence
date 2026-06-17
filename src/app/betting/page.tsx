@@ -24,9 +24,11 @@ export default async function BettingPage() {
 
       {!data.available ? (
         <EmptyState>
-          {data.isLive
-            ? 'Live odds are loading from the market — refresh in a moment.'
-            : 'Betting markets are only available for the live World Cup 2026. Switch to it in the top-right selector.'}
+          {!data.isLive
+            ? 'Betting markets are only available for the live World Cup 2026. Switch to it in the top-right selector.'
+            : data.hasMarket
+              ? 'No upcoming fixtures are priced by the market right now — check back closer to kickoff.'
+              : 'Live betting markets are currently unavailable.'}
         </EmptyState>
       ) : (
         <BettingClient rows={data.rows} />
