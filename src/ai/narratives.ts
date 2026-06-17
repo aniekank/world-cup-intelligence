@@ -11,7 +11,7 @@
  * keeps the product fully functional offline while supporting a premium AI tier.
  */
 
-import { getTeams, getTeam, getPlayerViews, getMatch, getMatches, getPlayer } from '@/data/store';
+import { getTeams, getTeam, getPlayerViews, getMatch, getMatches, getPlayer, datasetMeta } from '@/data/store';
 import { engine } from '@/analytics';
 import { criticalMatches } from '@/ai/previews';
 import type { Match, PlayerView } from '@/domain/types';
@@ -199,16 +199,24 @@ export function generateScoutingReport(playerId: string): { summary: string; str
   const p = getPlayerViews().find((v) => v.id === playerId);
   if (!p || !p.team) return { summary: 'Player not found.', strengths: [], weaknesses: [] };
   const pct = p.percentiles;
-  const labelled: { label: string; v: number }[] = [
-    { label: 'goal threat (xG)', v: pct.xG ?? 50 },
-    { label: 'creativity (xA)', v: pct.xA ?? 50 },
-    { label: 'progressive passing', v: pct.progressivePasses ?? 50 },
-    { label: 'ball carrying', v: pct.progressiveCarries ?? 50 },
-    { label: 'pressing volume', v: pct.pressuresApplied ?? 50 },
-    { label: 'tackling', v: pct.tackles ?? 50 },
-    { label: 'interceptions', v: pct.interceptions ?? 50 },
-    { label: 'shot volume', v: pct.shots ?? 50 },
-  ];
+  const modeled = new Set(datasetMeta().modeledMetrics ?? []);
+  const lbl = (base: string, key: string) => (modeled.has(key) ? `${base} (est.)` : base);
+  // Only traits the active source actually provides (percentile present) — no
+  // false "0th percentile" weaknesses for metrics that aren't in the feed.
+  const labelled = (
+    [
+      { label: 'goal threat (xG)', key: 'xG' },
+      { label: 'creativity (xA)', key: 'xA' },
+      { label: 'progressive passing', key: 'progressivePasses' },
+      { label: 'ball carrying', key: 'progressiveCarries' },
+      { label: 'pressing volume', key: 'pressuresApplied' },
+      { label: 'tackling', key: 'tackles' },
+      { label: 'interceptions', key: 'interceptions' },
+      { label: 'shot volume', key: 'shots' },
+    ] as { label: string; key: string }[]
+  )
+    .filter((x) => typeof pct[x.key] === 'number')
+    .map((x) => ({ label: lbl(x.label, x.key), v: pct[x.key]! }));
   const strengths = labelled.filter((x) => x.v >= 70).sort((a, b) => b.v - a.v).map((x) => `${cap(x.label)} (${x.v}th pct)`);
   const weaknesses = labelled.filter((x) => x.v <= 35).sort((a, b) => a.v - b.v).map((x) => `${cap(x.label)} (${x.v}th pct)`);
   const agePart = p.age ? `${p.age}, ` : '';

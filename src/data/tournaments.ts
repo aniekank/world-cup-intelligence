@@ -65,8 +65,10 @@ export function getTournament(id: string): TournamentInfo | undefined {
 
 /** Default active tournament implied by DATA_SOURCE at startup. */
 export function defaultTournamentId(): string {
-  const src = (process.env.DATA_SOURCE ?? 'seed').toLowerCase();
-  if (src === 'sportmonks' || src === 'apifootball' || src === 'footballdata') return 'live-2026';
-  if (src === 'statsbomb') return 'men-2022';
+  // Tolerant matching so a spelling slip (e.g. "sportsmonks") doesn't silently
+  // fall back to the simulation. 'monk' / 'apifoot' are distinctive enough.
+  const src = (process.env.DATA_SOURCE ?? 'seed').toLowerCase().replace(/[^a-z]/g, '');
+  if (src.includes('monk') || src.includes('apifoot') || src.includes('footballdata')) return 'live-2026';
+  if (src.includes('statsbomb')) return 'men-2022';
   return 'simulation';
 }

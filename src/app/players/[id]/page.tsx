@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { playerDetail } from '@/server/queries';
-import { getMatches, getTeam } from '@/data/store';
+import { getMatches, getTeam, datasetMeta } from '@/data/store';
 import { generateScoutingReport } from '@/ai/narratives';
 import { Panel, Stat, Badge, MetricBar } from '@/components/ui';
 import { Radar2 } from '@/components/charts/Recharts';
@@ -25,8 +25,18 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
   const scouting = generateScoutingReport(p.id);
   const shots = getMatches().flatMap((m) => m.shots).filter((s) => s.playerId === p.id);
 
-  const radarMetrics = ['xG', 'xA', 'Shots', 'Key passes', 'Prog. passes', 'Carries', 'Tackles', 'Pressures'];
-  const radarKeys = ['xG', 'xA', 'shots', 'keyPasses', 'progressivePasses', 'progressiveCarries', 'tackles', 'pressuresApplied'];
+  // Only chart metrics the active source actually provides (percentile present).
+  const modeled = new Set(datasetMeta().modeledMetrics ?? []);
+  const est = (base: string, key: string) => (modeled.has(key) ? `${base} (est.)` : base);
+  const radarDef = (
+    [
+      ['xG', 'xG'], ['xA', 'xA'], ['Shots', 'shots'], ['Key passes', 'keyPasses'],
+      ['Prog. passes', 'progressivePasses'], ['Carries', 'progressiveCarries'],
+      ['Tackles', 'tackles'], ['Pressures', 'pressuresApplied'],
+    ] as [string, string][]
+  ).filter(([, k]) => p.percentiles[k] != null);
+  const radarMetrics = radarDef.map(([m, k]) => est(m, k));
+  const radarKeys = radarDef.map(([, k]) => k);
   const radarValues = radarKeys.map((k) => p.percentiles[k] ?? 0);
 
   const attrs: { label: string; value: number }[] = [
@@ -38,19 +48,23 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
     { label: 'Physical', value: p.rating.physical },
   ];
 
-  const percentileRows: { label: string; key: string }[] = [
-    { label: 'Goals', key: 'goals' },
-    { label: 'Assists', key: 'assists' },
-    { label: 'xG', key: 'xG' },
-    { label: 'xA', key: 'xA' },
-    { label: 'Shots', key: 'shots' },
-    { label: 'Key passes', key: 'keyPasses' },
-    { label: 'Prog. passes', key: 'progressivePasses' },
-    { label: 'Prog. carries', key: 'progressiveCarries' },
-    { label: 'Tackles', key: 'tackles' },
-    { label: 'Interceptions', key: 'interceptions' },
-    { label: 'Pressures', key: 'pressuresApplied' },
-  ];
+  const percentileRows = (
+    [
+      { label: 'Goals', key: 'goals' },
+      { label: 'Assists', key: 'assists' },
+      { label: 'xG', key: 'xG' },
+      { label: 'xA', key: 'xA' },
+      { label: 'Shots', key: 'shots' },
+      { label: 'Key passes', key: 'keyPasses' },
+      { label: 'Prog. passes', key: 'progressivePasses' },
+      { label: 'Prog. carries', key: 'progressiveCarries' },
+      { label: 'Tackles', key: 'tackles' },
+      { label: 'Interceptions', key: 'interceptions' },
+      { label: 'Pressures', key: 'pressuresApplied' },
+    ] as { label: string; key: string }[]
+  )
+    .filter((r) => p.percentiles[r.key] != null)
+    .map((r) => ({ ...r, label: est(r.label, r.key) }));
 
   return (
     <div className="space-y-6">

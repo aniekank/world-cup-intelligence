@@ -235,7 +235,12 @@ export function getPlayerView(id: ID): PlayerView | undefined {
   if (table) {
     for (const [key, val] of Object.entries(p90)) {
       const sorted = table.get(key);
-      if (sorted) percentiles[key] = percentileRank(sorted, val);
+      // Omit metrics the active data source doesn't provide (uniformly 0 across
+      // the field) — their percentiles are meaningless and otherwise render as a
+      // false "0th percentile" weakness (see WC-016).
+      if (sorted && sorted.length && (sorted[0] !== 0 || sorted[sorted.length - 1] !== 0)) {
+        percentiles[key] = percentileRank(sorted, val);
+      }
     }
   }
   return {

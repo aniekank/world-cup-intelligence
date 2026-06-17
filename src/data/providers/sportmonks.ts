@@ -312,6 +312,6 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
     generatedAt: new Date().toISOString(),
     // We now have real xG + advanced stats; no shot-coordinate data (xgfixture
     // is a separate add-on), so shot maps stay off.
-    meta: { source: 'sportmonks', hasAdvancedMetrics: true, hasShotData: false },
+    meta: { source: 'sportmonks', hasAdvancedMetrics: true, hasShotData: false, modeledMetrics: ['xA'] },
   };
 }

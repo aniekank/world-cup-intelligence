@@ -221,7 +221,8 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
   }
 
   if (t.source === 'sportmonks') {
-    const key = process.env.SPORTMONKS_KEY;
+    // Tolerate common key-name misspellings so a slip doesn't fall back to sim.
+    const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
     if (!key) throw new Error('SPORTMONKS_KEY not set');
     const { fetchSportMonksSnapshot } = await import('./providers/sportmonks');
     return fetchSportMonksSnapshot(key);

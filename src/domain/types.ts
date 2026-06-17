@@ -462,6 +462,7 @@ export interface DatasetMeta {
   source: string; // 'simulation' | 'statsbomb-open-data' | 'football-data.org' | 'api-football'
   hasAdvancedMetrics: boolean; // xG, progressive actions, pressures available
   hasShotData: boolean; // per-shot coordinates available (shot maps)
+  modeledMetrics?: string[]; // stat keys that are estimated/modeled, not measured (label "est.")
 }
 
 export interface DatasetSnapshot {
