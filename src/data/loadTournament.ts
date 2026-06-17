@@ -64,6 +64,7 @@ function sourceLabel(t: TournamentInfo): string {
   if (t.source === 'sportmonks') return 'SportMonks (live)';
   if (t.source === 'apifootball') return 'API-Football (live)';
   if (t.source === 'statsbomb') return `StatsBomb · ${t.label}`;
+  if (t.source === 'datahub') return `Archive · ${t.label}`;
   return 'Simulation';
 }
 
@@ -230,7 +231,7 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
 
   if (t.source === 'simulation') return generateDataset();
 
-  if (t.source === 'statsbomb') {
+  if (t.source === 'statsbomb' || t.source === 'datahub') {
     if (!t.cacheFile) throw new Error(`No cache file for ${id}`);
     // Variable dynamic import → webpack bundles all cache JSONs as a context.
     const mod = await import(`./cache/${t.cacheFile}`);

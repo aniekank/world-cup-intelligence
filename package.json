@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "data:statsbomb": "node scripts/fetch-statsbomb.mjs 43 106",
     "data:statsbomb:2018": "node scripts/fetch-statsbomb.mjs 43 3",
+    "data:datahub": "node scripts/fetch-datahub.mjs",
     "data:clubs": "node scripts/fetch-clubs.mjs"
   },
   "dependencies": {

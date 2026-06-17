@@ -5,7 +5,9 @@
  * The active tournament is switchable at runtime (see src/data/store.ts).
  */
 
-export type TournamentSource = 'sportmonks' | 'apifootball' | 'statsbomb' | 'simulation';
+import datahubEditions from './datahub-editions.json';
+
+export type TournamentSource = 'sportmonks' | 'apifootball' | 'statsbomb' | 'datahub' | 'simulation';
 
 export interface TournamentInfo {
   id: string;
@@ -15,12 +17,19 @@ export interface TournamentInfo {
   gender: 'men' | 'women';
   host: string;
   source: TournamentSource;
-  cacheFile?: string; // StatsBomb snapshot filename (under src/data/cache)
+  cacheFile?: string; // bundled snapshot filename (under src/data/cache)
   champion?: string;
   championFlag?: string;
-  coverage: 'live' | 'full';
+  coverage: 'live' | 'full' | 'historical';
   blurb: string;
 }
+
+// Every other World Cup (1930–2015) from the Fjelstul database — results, scorers
+// and squads only (pre-tracking era), so the UI degrades the advanced surfaces.
+const HISTORICAL: TournamentInfo[] = (datahubEditions as Array<Omit<TournamentInfo, 'source'>>).map((e) => ({
+  ...e,
+  source: 'datahub',
+}));
 
 export const TOURNAMENTS: TournamentInfo[] = [
   {
@@ -57,6 +66,7 @@ export const TOURNAMENTS: TournamentInfo[] = [
     host: 'USA · Canada · Mexico', source: 'simulation', coverage: 'full',
     championFlag: '🎲', blurb: 'Deterministic simulation · offline',
   },
+  ...HISTORICAL,
 ];
 
 export function getTournament(id: string): TournamentInfo | undefined {

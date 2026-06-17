@@ -54,6 +54,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | 📋 | **Fail-fast on bad key** | Detect auth failures and stop retrying immediately, so a dead key never bogs down boot (and never trips a deploy health-check rollback). |
 | 📋 | **`API_FOOTBALL_HOST` toggle** | Support both the direct `api-sports.io` host and the RapidAPI host via one env var (would have saved the key incident). |
 | ✅ | **SportMonks player metadata + coaches** | Per-team `players.player;coaches.coach` calls give real **ages** (breakout works), heights, **full rosters** (1249 players), and **managers** (Scaloni/Deschamps/…) — which unblocks manager stories. Market value still absent. |
+| ✅ | **Historical archive — every World Cup** | All other editions 1930–2015 (men + women) from the Fjelstul DB via datahub.io (`npm run data:datahub`): real results, scorers (Müller's 10, Pelé), squads, managers, champions. Bundled as 27 switchable editions; WC-016 degradation hides the advanced surfaces (pre-tracking era). Deep StatsBomb kept for 2018/2022/W-2019/W-2023. |
 
 ---
 
