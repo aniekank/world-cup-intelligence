@@ -14,7 +14,7 @@ interface T {
   source: string;
   champion?: string;
   championFlag?: string;
-  coverage: 'live' | 'full';
+  coverage: 'live' | 'full' | 'historical';
   blurb: string;
 }
 
@@ -83,7 +83,7 @@ export function TournamentSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-terminal-border bg-terminal-elevated shadow-glow">
+        <div className="absolute right-0 z-50 mt-2 max-h-[75vh] w-72 overflow-y-auto rounded-xl border border-terminal-border bg-terminal-elevated shadow-glow">
           {(['live', 'men', 'women', 'sim'] as const).map((g) => {
             const items = group(g);
             if (!items.length) return null;
