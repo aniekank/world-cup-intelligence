@@ -93,21 +93,43 @@ let _playerIndex: Map<ID, Player> | null = null;
 let _statsIndex: Map<ID, PlayerStats> | null = null;
 let _matchIndex: Map<ID, Match> | null = null;
 
+// The snapshot the indexes below were built from. instrumentation.ts runs in a
+// SEPARATE module instance from the request handlers, so setDataset()'s in-instance
+// invalidation can't reach a handler instance that already built its indexes from
+// the startup-default simulation. Keying the indexes to the snapshot identity —
+// which lives on globalThis and is shared across instances — makes every instance
+// self-heal the instant the active snapshot swaps (live-load completion, or a
+// tournament switch). Without this, getPlayers() returns the NEW snapshot's rows
+// while getPlayer()/getTeam() look them up in a STALE index → every lookup misses
+// and the whole app renders empty despite the data being present.
+let _indexedSnap: DatasetSnapshot | null = null;
+
+function syncIndexes(): void {
+  const snap = dataset();
+  if (_indexedSnap === snap) return;
+  _teamIndex = new Map(snap.teams.map((t) => [t.id, t]));
+  _playerIndex = new Map(snap.players.map((p) => [p.id, p]));
+  _statsIndex = new Map(Object.entries(snap.playerStats));
+  _matchIndex = new Map(snap.matches.map((m) => [m.id, m]));
+  _percentileCache = null; // recomputed lazily against the new snapshot
+  _indexedSnap = snap;
+}
+
 function teamIndex(): Map<ID, Team> {
-  if (!_teamIndex) _teamIndex = new Map(dataset().teams.map((t) => [t.id, t]));
-  return _teamIndex;
+  syncIndexes();
+  return _teamIndex!;
 }
 function playerIndex(): Map<ID, Player> {
-  if (!_playerIndex) _playerIndex = new Map(dataset().players.map((p) => [p.id, p]));
-  return _playerIndex;
+  syncIndexes();
+  return _playerIndex!;
 }
 function statsIndex(): Map<ID, PlayerStats> {
-  if (!_statsIndex) _statsIndex = new Map(Object.entries(dataset().playerStats));
-  return _statsIndex;
+  syncIndexes();
+  return _statsIndex!;
 }
 function matchIndex(): Map<ID, Match> {
-  if (!_matchIndex) _matchIndex = new Map(dataset().matches.map((m) => [m.id, m]));
-  return _matchIndex;
+  syncIndexes();
+  return _matchIndex!;
 }
 
 // ── Basic accessors ──────────────────────────────────────────
@@ -162,6 +184,7 @@ function per90(stats: PlayerStats): Record<string, number> {
 
 let _percentileCache: Map<Position, Map<string, number[]>> | null = null;
 function percentileTables(): Map<Position, Map<string, number[]>> {
+  syncIndexes();
   if (_percentileCache) return _percentileCache;
   const byPos = new Map<Position, PlayerView['per90'][]>();
   for (const p of getPlayers()) {
