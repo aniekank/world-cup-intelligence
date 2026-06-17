@@ -119,16 +119,20 @@ export async function refreshLiveScores(): Promise<boolean> {
   if (!cur) return false;
 
   const now = Date.now();
+  // Track which finished matches we've already pulled a timeline for, so an
+  // event-less match isn't re-fetched every tick. Lives on globalThis to survive
+  // the module-instance split (same reason the dataset cache does).
+  const g = globalThis as unknown as { __wcEventsFetched?: Set<string> };
+  const eventsFetched = g.__wcEventsFetched ?? (g.__wcEventsFetched = new Set<string>());
+
   const needsRefresh = cur.matches.some((m) => {
     const ko = new Date(m.kickoff).getTime();
     const inWindow = now >= ko - LIVE_WINDOW_BEFORE_MS && now <= ko + LIVE_WINDOW_AFTER_MS;
     if (m.status !== 'FINISHED' && inWindow) return true; // in play or about to start
-    // A just-finished match whose timeline we haven't captured yet (so the final
-    // score's goals/cards/VAR get fetched even if nothing else is live).
-    if (m.status === 'FINISHED' && now - ko < 3 * 60 * 60_000 && m.events.length === 0) return true;
+    if (m.status === 'FINISHED' && m.events.length === 0 && !eventsFetched.has(m.id)) return true; // backfill timeline once
     return false;
   });
-  if (!needsRefresh) return false; // nothing in play and no fresh result to capture → no API call
+  if (!needsRefresh) return false; // nothing in play and no timeline to backfill → no API call
 
   const { fetchApiFootballFixtures, fetchFixtureEvents } = await import('./providers/apiFootball');
   const byId = new Map((await fetchApiFootballFixtures(key)).map((u) => [u.id, u]));
@@ -141,18 +145,22 @@ export async function refreshLiveScores(): Promise<boolean> {
     const dash = p.id.indexOf('-');
     if (dash >= 0) playerByApi.set(p.id.slice(dash + 1), { id: p.id, teamId: p.teamId });
   }
-  const isActive = (m: Match): boolean => {
+  const wantEvents = (m: Match): boolean => {
     const status = byId.get(m.id)?.status ?? m.status;
-    if (status === 'LIVE' || status === 'HALFTIME') return true;
-    return status === 'FINISHED' && now - new Date(m.kickoff).getTime() < 3 * 60 * 60_000;
+    if (status === 'LIVE' || status === 'HALFTIME') return true; // always refresh a live timeline
+    return status === 'FINISHED' && m.events.length === 0 && !eventsFetched.has(m.id); // one-time backfill
   };
+  // Cap per tick so a backlog of finished matches backfills gradually, not in one
+  // burst that could trip a per-minute rate limit.
   const eventsByMatch = new Map<string, MatchEvent[]>();
   await Promise.all(
-    cur.matches.filter(isActive).map(async (m) => {
+    cur.matches.filter(wantEvents).slice(0, 8).map(async (m) => {
       const fixtureId = Number(m.id.replace('m-', ''));
       if (!Number.isFinite(fixtureId)) return;
       const raw = await fetchFixtureEvents(key, fixtureId);
       eventsByMatch.set(m.id, mapFixtureEvents(m.id, raw, teamById.get(m.homeTeamId), teamById.get(m.awayTeamId), playerByApi));
+      const status = byId.get(m.id)?.status ?? m.status;
+      if (status === 'FINISHED') eventsFetched.add(m.id); // don't re-fetch a finished match, even if it had no events
     }),
   );
 
