@@ -13,7 +13,8 @@
 
 import { getTeams, getTeam, getPlayerViews, getMatch, getMatches, getPlayer } from '@/data/store';
 import { engine } from '@/analytics';
-import type { PlayerView } from '@/domain/types';
+import { criticalMatches } from '@/ai/previews';
+import type { Match, PlayerView } from '@/domain/types';
 import type { Insight } from '@/domain/types';
 
 const NOW = '2026-06-13T12:00:00.000Z';
@@ -223,39 +224,83 @@ export function generateScoutingReport(playerId: string): { summary: string; str
   };
 }
 
+/** Where the tournament actually is right now, from the fixtures themselves. */
+function phaseLabel(scheduled: Match[]): string {
+  const groupSched = scheduled.filter((m) => m.stage === 'GROUP');
+  if (groupSched.length) {
+    const md = Math.min(...groupSched.map((m) => m.matchday));
+    return `the group stage (matchday ${md})`;
+  }
+  const order: [Match['stage'], string][] = [
+    ['R32', 'the round of 32'],
+    ['R16', 'the round of 16'],
+    ['QF', 'the quarter-finals'],
+    ['SF', 'the semi-finals'],
+    ['THIRD_PLACE', 'the third-place play-off'],
+    ['FINAL', 'the final'],
+  ];
+  for (const [stage, label] of order) if (scheduled.some((m) => m.stage === stage)) return label;
+  return 'the closing stages';
+}
+
 export function generateDailyBriefing(): { headline: string; body: string; bullets: string[] } {
   const eng = engine();
+  const all = getMatches();
+  const live = all.filter((m) => m.status === 'LIVE' || m.status === 'HALFTIME');
+  const scheduled = all.filter((m) => m.status === 'SCHEDULED');
+  const finished = all.filter((m) => m.status === 'FINISHED');
   const fav = getTeams()
-    .map((t) => ({ t, f: eng.forecasts.get(t.id)! }))
-    .filter((x) => x.f)
+    .map((t) => ({ t, f: eng.forecasts.get(t.id) }))
+    .filter((x): x is { t: (typeof x)['t']; f: NonNullable<(typeof x)['f']> } => Boolean(x.f))
     .sort((a, b) => b.f.winTitle - a.f.winTitle)[0];
-  const live = getMatches().filter((m) => m.status === 'LIVE');
-  const insights = generateInsights();
-  const upset = insights.find((i) => i.kind === 'upset');
+
   // No forecasts yet (data still loading) — return a safe, content-free briefing.
   if (!fav) {
     return {
       headline: 'Tournament data is loading',
       body: `${live.length} matches are live right now. Forecasts populate as soon as the feed is ready.`,
-      bullets: [
-        `${live.length} live matches • ${getMatches().filter((m) => m.status === 'SCHEDULED').length} still to play`,
-      ],
+      bullets: [`${live.length} live • ${scheduled.length} still to play`],
     };
   }
-  return {
-    headline: `${fav.t.name} lead the title race as the group stage reaches its climax`,
-    body: `With the final round of group matches underway, ${fav.t.name} remain favourites at ${pct(fav.f.winTitle)} to lift the trophy. ${live.length} matches are live right now. ${
-      upset ? upset.title + '.' : 'Form is holding to seeding across most groups.'
-    }`,
-    bullets: [
-      `${fav.t.name} project as champions in ${pct(fav.f.winTitle)} of ${(8000).toLocaleString()} simulations`,
-      eng.goldenBoot[0]
-        ? `Golden Boot race led by ${getPlayerViews().find((p) => p.id === eng.goldenBoot[0]!.playerId)?.name} (${eng.goldenBoot[0]!.currentGoals} goals)`
-        : 'Golden Boot race wide open',
-      upset ? upset.title : 'No major upsets in the latest round',
-      `${live.length} live matches • ${getMatches().filter((m) => m.status === 'SCHEDULED').length} still to play`,
-    ],
-  };
+
+  const phase = phaseLabel(scheduled);
+  const top = criticalMatches(1)[0];
+  const tm = top ? getMatch(top.matchId) : null;
+  const th = tm ? getTeam(tm.homeTeamId) : null;
+  const ta = tm ? getTeam(tm.awayTeamId) : null;
+  const marquee = top && th && ta ? { teams: `${th.name} v ${ta.name}`, headline: top.headline, blurb: top.blurb } : null;
+
+  const insights = generateInsights();
+  const upset = insights.find((i) => i.kind === 'upset');
+  const mover = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum)[0];
+  const moverTeam = mover ? getTeam(mover.teamId) : null;
+  const gb = eng.goldenBoot[0];
+  const gbName = gb ? getPlayerViews().find((p) => p.id === gb.playerId)?.name : null;
+
+  const headline = live.length
+    ? `${live.length} live now — ${fav.t.name} lead the race through ${phase}`
+    : marquee
+      ? `${marquee.teams} headlines ${phase}`
+      : `${fav.t.name} lead the title race through ${phase}`;
+
+  const body = [
+    `${fav.t.name} remain the model's favourites at ${pct(fav.f.winTitle)} to lift the trophy.`,
+    live.length ? `${live.length} ${live.length === 1 ? 'match is' : 'matches are'} live right now.` : null,
+    marquee ? marquee.blurb : null,
+    upset ? `${upset.title}.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const bullets = [
+    `${fav.t.name} — ${pct(fav.f.winTitle)} to win it across ${(8000).toLocaleString()} simulations`,
+    gbName ? `Golden Boot: ${gbName} leads on ${gb!.currentGoals} (proj. ${gb!.projectedGoals})` : 'Golden Boot race wide open',
+    marquee ? `Biggest fixture next: ${marquee.teams} — ${marquee.headline.toLowerCase()}` : null,
+    moverTeam && mover && mover.momentum > 0 ? `Momentum: ${moverTeam.name} surging (+${mover.momentum})` : null,
+    `${finished.length} played • ${live.length} live • ${scheduled.length} to come`,
+  ].filter((b): b is string => Boolean(b));
+
+  return { headline, body, bullets };
 }
 
 /**

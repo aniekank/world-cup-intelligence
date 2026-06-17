@@ -5,6 +5,7 @@ import { getMatches, getTeam } from '@/data/store';
 import { Panel, Stat, Badge, TeamBadge, MetricBar, EmptyState } from '@/components/ui';
 import { CountUp, Reveal, Spotlight } from '@/components/ui/motion';
 import { MatchCard } from '@/components/MatchCard';
+import { CriticalMatchCard } from '@/components/CriticalMatchCard';
 import { LiveTicker } from '@/components/home/LiveTicker';
 import { ParallaxBurst } from '@/components/effects/ParallaxBurst';
 import { pct } from '@/lib/format';
@@ -90,6 +91,21 @@ export default function HomePage() {
             })}
             {data.live.length === 0 && data.upcoming.length === 0 && <EmptyState>No scheduled matches.</EmptyState>}
           </Panel>
+
+          {/* Matches that matter — ranked by what's at stake */}
+          {data.criticalMatches.length > 0 && (
+            <Panel
+              title="Matches that matter"
+              subtitle="Upcoming fixtures ranked by what's at stake"
+              action={<Flame className="h-4 w-4 text-accent-red" />}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                {data.criticalMatches.map((p) => (
+                  <CriticalMatchCard key={p.matchId} p={p} />
+                ))}
+              </div>
+            </Panel>
+          )}
 
           {/* Title contenders */}
           <Panel

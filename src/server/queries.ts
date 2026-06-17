@@ -22,6 +22,7 @@ import {
 import { engine } from '@/analytics';
 import { rankPlayers, rankTeams } from '@/ai/query/resolver';
 import { generateInsights, generateDailyBriefing, generateMatchSummary, storylines } from '@/ai/narratives';
+import { criticalMatches, matchPreview } from '@/ai/previews';
 import type { Team, TeamView, Match } from '@/domain/types';
 
 export function competition() {
@@ -117,6 +118,7 @@ export function matchDetail(id: string) {
     away,
     prediction: eng.predictions.get(id) ?? null,
     summary: generateMatchSummary(id),
+    preview: m.status === 'SCHEDULED' ? matchPreview(id) : null,
   };
 }
 
@@ -174,6 +176,19 @@ export function predictionsView() {
   };
 }
 
+// ── Critical match previews ──────────────────────────────────
+export function criticalMatchesView(limit = 4) {
+  const eng = engine();
+  return criticalMatches(limit)
+    .map((p) => {
+      const m = getMatch(p.matchId);
+      const home = m ? getTeam(m.homeTeamId) : undefined;
+      const away = m ? getTeam(m.awayTeamId) : undefined;
+      return { ...p, home, away, prediction: eng.predictions.get(p.matchId) ?? null };
+    })
+    .filter((x): x is typeof x & { home: Team; away: Team } => Boolean(x.home && x.away));
+}
+
 // ── Insights / briefing ──────────────────────────────────────
 export function insights() {
   return generateInsights();
@@ -196,6 +211,7 @@ export function homeData() {
   return {
     competition: getCompetition(),
     briefing: generateDailyBriefing(),
+    criticalMatches: criticalMatchesView(4),
     favorites,
     live,
     upcoming,

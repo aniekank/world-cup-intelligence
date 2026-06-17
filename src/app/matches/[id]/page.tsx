@@ -30,7 +30,12 @@ const EVENT_ICON: Record<string, string> = {
 export default function MatchPage({ params }: { params: { id: string } }) {
   const d = matchDetail(params.id);
   if (!d) notFound();
-  const { match, home, away, prediction, summary } = d;
+  const { match, home, away, prediction, summary, preview } = d;
+  const tagTone: Record<string, string> = {
+    hot: 'border-accent-red/40 text-accent-red',
+    high: 'border-accent-amber/40 text-accent-amber',
+    mid: 'border-terminal-border text-terminal-muted',
+  };
   const live = match.status === 'LIVE';
   const finished = match.status === 'FINISHED';
   const hs = match.teamStats[home.id];
@@ -99,9 +104,27 @@ export default function MatchPage({ params }: { params: { id: string } }) {
         )}
       </Panel>
 
-      <Panel title="Match Report" subtitle="AI-generated">
-        <p className="text-sm leading-relaxed text-terminal-text">{summary}</p>
-      </Panel>
+      {preview ? (
+        <Panel title="What's at stake" subtitle="Why this one matters">
+          {preview.tags.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {preview.tags.map((t, i) => (
+                <span
+                  key={i}
+                  className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tagTone[t.tone] ?? tagTone.mid}`}
+                >
+                  {t.label}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-sm leading-relaxed text-terminal-text">{preview.blurb}</p>
+        </Panel>
+      ) : (
+        <Panel title="Match Report" subtitle="AI-generated">
+          <p className="text-sm leading-relaxed text-terminal-text">{summary}</p>
+        </Panel>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {statRows.length > 0 && (
