@@ -69,7 +69,7 @@ differently between the two.
 | WC-011 | Kickoff shown as "tomorrow 1pm" | formatting | `timeZone: 'UTC'` hardcoded; WC-2026 is in North America, so evening games roll onto the next UTC day | `<LocalTime>` renders each fixture in the viewer's own zone · `f05b844` |
 | WC-012 | Live games never flipped to LIVE; scores frozen | data refresh | Feed fetched once at boot, never refreshed | Poll fixtures every 60s during play windows; merge status/score/minute · `f05b844` |
 | WC-013 | Match report says a team "won" during a live game | narratives | `generateMatchSummary` only special-cased `SCHEDULED`; LIVE fell through to past-tense result | Add a LIVE/HALFTIME present-tense branch; reserve "won" for FINISHED · `c1603f0` |
-| WC-015 | Match events missing (goals, disallowed/offside, cards) | data adapter / live refresh | Adapter hardcoded `events: []`; the per-fixture timeline was never fetched | Fetch `/fixtures/events` for in-play & recent matches in the refresh; map goals/cards/subs/VAR and resolve scorer+team from squads; surface VAR/own-goal in the timeline UI · `a445a67` |
+| WC-015 | Match events missing (goals, disallowed/offside, cards) | data adapter / live refresh | Adapter hardcoded `events: []`; the per-fixture timeline was never fetched | Fetch `/fixtures/events`, map goals/cards/subs/VAR, resolve scorer+team from squads, surface VAR/own-goal in the UI; backfill finished matches once (capped) · `a445a67` · `968c8c2` · `3521d7c` |
 
 ---
 
@@ -105,6 +105,9 @@ These are the classes of bug this codebase is prone to. Test these deliberately:
    not divide by zero or rank everyone identically.
 8. **Hollow live feed.** If the API returns teams but no squads, the app must fall back to the full
    simulation (WC-005), not go blank.
+9. **Match event timelines.** Goals, VAR/disallowed, cards, subs. Test three states: a **live** match
+   (timeline grows each refresh), a **just-finished** match (final events captured), and an **older
+   finished** match (timeline backfilled once). These have distinct code paths (WC-015).
 
 ---
 
