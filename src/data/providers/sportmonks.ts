@@ -114,6 +114,7 @@ interface SMFixture {
   participants?: SMParticipant[];
   scores?: SMScore[];
   state?: { developer_name?: string };
+  periods?: { ticking?: boolean; minutes?: number }[];
   group?: { name?: string };
   round?: { name?: string };
 }
@@ -369,7 +370,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
 /** Lightweight per-fixture live state (scores + status) for every WC2026 game. */
 export async function fetchSportMonksFixtures(apiKey: string): Promise<FixtureUpdate[]> {
   const raw = await smList<SMFixture>(
-    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state&per_page=50`,
+    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state;periods&per_page=50`,
     apiKey,
   );
   const out: FixtureUpdate[] = [];
@@ -381,10 +382,16 @@ export async function fetchSportMonksFixtures(apiKey: string): Promise<FixtureUp
     const ht = (f.scores ?? []).filter((s) => s.description === '1ST_HALF');
     const gf = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
     const status = mapStatus(f.state?.developer_name);
+    // Live minute = the ticking period's clock (SportMonks runs it there); fall
+    // back to the furthest period (≈45 at half-time) or 0. Was hardcoded to 0, so
+    // every in-play match showed 0′.
+    const periods = f.periods ?? [];
+    const liveMinute = periods.find((p) => p.ticking)?.minutes
+      ?? (periods.length ? Math.max(...periods.map((p) => p.minutes ?? 0)) : 0);
     out.push({
       id: `m-${f.id}`,
       status,
-      minute: status === 'FINISHED' ? 90 : 0,
+      minute: status === 'FINISHED' ? 90 : liveMinute,
       homeScore: gf(home.id, cur),
       awayScore: gf(away.id, cur),
       homeScoreHT: gf(home.id, ht),
