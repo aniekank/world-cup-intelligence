@@ -16,7 +16,10 @@ import { Rng } from '@/data/prng';
 import { eloExpectation } from './elo';
 import type { Match, Team, Group, TeamForecast } from '@/domain/types';
 
-const RUNS = 8000;
+// 3,000 Monte Carlo runs: forecast probabilities are stable to ~1% at this count,
+// while keeping a (now-rare, status-change-only) engine rebuild well under a second
+// of CPU instead of the 13-18s an 8,000-run resim cost on the request path.
+const RUNS = 3000;
 
 interface GroupState {
   groupId: string;

@@ -73,7 +73,12 @@ export function dataset(): DatasetSnapshot {
  * derived indexes + the analytics engine. The whole app reads `dataset()`, so
  * this switches every page/route to the new tournament.
  */
-export function setDataset(snapshot: DatasetSnapshot, source = 'live', id = 'live-2026'): void {
+export function setDataset(
+  snapshot: DatasetSnapshot,
+  source = 'live',
+  id = 'live-2026',
+  opts?: { rebuildEngine?: boolean },
+): void {
   byId().set(id, snapshot);
   G.__wcCache = snapshot;
   G.__wcSource = source;
@@ -83,8 +88,14 @@ export function setDataset(snapshot: DatasetSnapshot, source = 'live', id = 'liv
   _statsIndex = null;
   _matchIndex = null;
   _percentileCache = null;
-  // Invalidate the analytics engine snapshot (lives on globalThis too)
-  (globalThis as unknown as { __wcEngine?: unknown }).__wcEngine = undefined;
+  // Invalidate the analytics engine (lives on globalThis too). The 8,000-run
+  // Monte Carlo is expensive, so a routine live score/minute tick skips it
+  // (rebuildEngine:false) — only activation or a match STATUS flip (kickoff /
+  // full-time) rebuilds forecasts. Without this, the simulation re-ran on every
+  // 60s refresh, making page renders take 13-18s and time out (502s).
+  if (opts?.rebuildEngine !== false) {
+    (globalThis as unknown as { __wcEngine?: unknown }).__wcEngine = undefined;
+  }
 }
 
 // ── Indexes (built once) ─────────────────────────────────────

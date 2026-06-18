@@ -187,11 +187,13 @@ export async function refreshLiveScores(): Promise<boolean> {
   );
 
   let changed = 0;
+  let statusChanged = false;
   const matches = cur.matches.map((m) => {
     const u = byId.get(m.id);
     const ev = eventsByMatch.get(m.id);
     const scoreChanged =
       !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute);
+    if (u && u.status !== m.status) statusChanged = true; // kickoff / full-time → forecasts worth rebuilding
     const eventsChanged = !!ev && ev.length !== m.events.length;
     if (!scoreChanged && !eventsChanged) return m;
     changed++;
@@ -215,7 +217,9 @@ export async function refreshLiveScores(): Promise<boolean> {
 
   // New snapshot object (not an in-place mutation) so the store's snapshot-keyed
   // indexes + analytics engine rebuild against the fresh scores.
-  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId());
+  // Only rebuild the (expensive) forecast engine when a match status flips —
+  // routine score/minute ticks reuse the cached engine so renders stay fast.
+  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId(), { rebuildEngine: statusChanged });
   console.log(`[data] Live refresh: ${changed} fixture(s) updated.`);
   return true;
 }
