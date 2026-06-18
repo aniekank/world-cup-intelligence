@@ -263,10 +263,23 @@ export function getPlayerView(id: ID): PlayerView | undefined {
   };
 }
 
+// Building 1,249 PlayerViews (per-90s + percentiles + team join) is expensive and
+// was re-run on EVERY call — and homeData() calls this ~6× per render (insights ×2,
+// golden boot, players list), which alone made the home page take ~15s and time out
+// (502s). Memoize it, keyed to the players-array identity: the live-score refresh
+// reuses the same players array (it only swaps `matches`), so this cache survives
+// every refresh and only rebuilds on a real data reload / tournament switch.
+let _playerViews: PlayerView[] | null = null;
+let _playerViewsKey: Player[] | null = null;
+
 export function getPlayerViews(): PlayerView[] {
-  return getPlayers()
-    .map((p) => getPlayerView(p.id)!)
-    .filter(Boolean);
+  const players = getPlayers();
+  if (_playerViews && _playerViewsKey === players) return _playerViews;
+  _playerViews = players
+    .map((p) => getPlayerView(p.id))
+    .filter((v): v is PlayerView => Boolean(v));
+  _playerViewsKey = players;
+  return _playerViews;
 }
 
 function emptyStatsFor(playerId: ID): PlayerStats {
