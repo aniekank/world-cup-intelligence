@@ -119,7 +119,8 @@ const LIVE_WINDOW_AFTER_MS = 150 * 60_000;
 export async function refreshLiveScores(): Promise<boolean> {
   // Resolve the live provider's fetchers by the active source. Skip for offline
   // sources (simulation / StatsBomb) — nothing to poll.
-  const source = getTournament(getActiveTournamentId())?.source;
+  const activeT = getTournament(getActiveTournamentId());
+  const source = activeT?.source;
   let key: string | undefined;
   let fetchFixturesFn: () => Promise<FixtureUpdate[]>;
   let fetchEventsFn: (fixtureId: number) => Promise<RawFixtureEvent[]>;
@@ -214,7 +215,7 @@ export async function refreshLiveScores(): Promise<boolean> {
 
   // New snapshot object (not an in-place mutation) so the store's snapshot-keyed
   // indexes + analytics engine rebuild against the fresh scores.
-  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, 'API-Football (live)', 'live-2026');
+  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId());
   console.log(`[data] Live refresh: ${changed} fixture(s) updated.`);
   return true;
 }
