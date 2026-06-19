@@ -6,6 +6,7 @@ import { InfoTip } from '@/components/ui/InfoTip';
 import { SimulationBanner } from '@/components/SimulationBanner';
 import { HBar } from '@/components/charts/Recharts';
 import { pct } from '@/lib/format';
+import { TrackActivation } from '@/components/TrackActivation';
 
 export const metadata: Metadata = { title: 'Predictions' };
 
@@ -19,6 +20,7 @@ export default function PredictionsPage() {
 
   return (
     <div className="space-y-6">
+      <TrackActivation action="prediction_viewed" />
       <PageHeader
         kicker="Forecasting"
         title="Tournament Predictions"
