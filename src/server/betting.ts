@@ -130,7 +130,16 @@ export async function bettingEdge() {
     }
   }
 
-  rows.sort((a, b) => b.bestEv - a.bestEv);
+  // Live tournament tool: a fixture kicking off tonight is more actionable than a
+  // bigger model edge days away, so surface imminent matches first (soonest first),
+  // then rank the rest by best EV.
+  rows.sort((a, b) => {
+    const soonA = Date.parse(a.kickoff) - Date.now() < 864e5; // within 24h
+    const soonB = Date.parse(b.kickoff) - Date.now() < 864e5;
+    if (soonA !== soonB) return soonA ? -1 : 1;
+    if (soonA && soonB) return Date.parse(a.kickoff) - Date.parse(b.kickoff);
+    return b.bestEv - a.bestEv;
+  });
   return {
     isLive,
     hasMarket: events.length > 0,

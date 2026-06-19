@@ -4,6 +4,7 @@ import { PageHeader, EmptyState } from '@/components/ui';
 import { ResponsibleGamblingBanner } from '@/components/betting/ResponsibleGamblingBanner';
 import { SimulationBanner } from '@/components/SimulationBanner';
 import { BettingClient } from '@/components/betting/BettingClient';
+import { TrackActivation } from '@/components/TrackActivation';
 
 export const metadata: Metadata = { title: 'Betting Edge' };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export default async function BettingPage() {
 
   return (
     <div className="space-y-6">
+      <TrackActivation action="betting_viewed" />
       <PageHeader
         kicker="Model vs Market"
         title="Betting Edge"
