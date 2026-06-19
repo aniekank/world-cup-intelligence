@@ -19,8 +19,8 @@ export interface EdgeOutcome {
   model: number; // model probability
   market: number; // de-vigged market probability
   odds: number; // best available decimal price
-  edge: number; // model - market
-  ev: number; // model*odds - 1
+  edge: number; // model - market (raw disagreement, always honest)
+  ev: number; // expected value on the market-shrunk probability (see shrunkEv)
 }
 
 export interface EdgeRow {
@@ -33,6 +33,25 @@ export interface EdgeRow {
   outcomes: EdgeOutcome[];
   bestEv: number;
 }
+
+// Guardrails so the value list stays credible (see BUGS.md WC-022). Long odds mean
+// the market is very confident, and a seeded Poisson's disagreement there is almost
+// always model error, not signal. Left raw, EV = model*odds - 1 explodes on longshots
+// (model 20% vs market 8% at 12.0 reads +140% EV and dominated the list — e.g. it
+// surfaced "Iraq beat France" as the top pick). Two guards:
+//   1. Shrink the model toward the de-vigged market as the price lengthens, so the
+//      EV we display and rank on no longer balloons on longshots. The raw `edge`
+//      (model - market) is kept untouched so the genuine disagreement still shows.
+//   2. Never flag value on an outcome the model itself rates below MIN_MODEL_P.
+const MIN_MODEL_P = 0.12;
+const VALUE_THRESHOLD = 0.02;
+function shrunkEv(model: number, market: number, odds: number): number {
+  if (odds <= 0) return -1;
+  const w = Math.max(0, Math.min(1, 1 - (odds - 2) / 10)); // 1.0 at evens → 0 by 12.0
+  const p = market + (model - market) * w;
+  return p * odds - 1;
+}
+const isValue = (o: EdgeOutcome): boolean => o.model >= MIN_MODEL_P && o.ev > VALUE_THRESHOLD;
 
 export async function bettingEdge() {
   const isLive = getActiveTournamentId() === 'live-2026';
@@ -83,7 +102,7 @@ export async function bettingEdge() {
 
     const fixtureId = Number(m.id.replace('m-', ''));
     const mk = (side: 'home' | 'draw' | 'away', label: string, model: number, mkt: number, price: number): EdgeOutcome => ({
-      label, side, model, market: mkt, odds: price, edge: model - mkt, ev: price > 0 ? model * price - 1 : -1,
+      label, side, model, market: mkt, odds: price, edge: model - mkt, ev: shrunkEv(model, mkt, price),
     });
     const outcomes = [
       mk('home', `${home.code} win`, pred.homeWin, market.home, best.home),
@@ -117,6 +136,6 @@ export async function bettingEdge() {
     hasMarket: events.length > 0,
     available: isLive && rows.length > 0,
     rows,
-    valueBets: rows.filter((r) => r.bestEv > 0.02),
+    valueBets: rows.filter((r) => r.outcomes.some(isValue)),
   };
 }
