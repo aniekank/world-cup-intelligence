@@ -86,16 +86,23 @@ async function teamsForLeague(id) {
   return { teams: [], season: null };
 }
 
-// Cross-provider match key: accent-stripped surname + birthdate. Robust because
-// WC squads come from SportMonks (different id namespace) — name + exact DOB is
-// near-unique, where last-name alone or a shared id is not. Mirrored in
-// src/data/clubAffiliations.ts so the live join builds the same key. (WC-024)
-const stripDia = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-function surnameKey(name, dob) {
-  if (!name || !dob) return null;
-  const toks = stripDia(name).toLowerCase().replace(/[^a-z\s'-]/g, '').trim().split(/\s+/).filter(Boolean);
-  const surname = toks[toks.length - 1];
-  return surname ? `${surname}|${dob}` : null;
+// Cross-provider match keys: accent-stripped surname token(s) + birthdate.
+// Robust because WC squads come from SportMonks (different id namespace) — a
+// surname token + exact DOB is near-unique. We index an API-Football player
+// under EVERY token of their `lastname` (so compound surnames like "García
+// López" match whichever token the other provider treats as the last name),
+// gated by DOB to keep precision high. Mirrored in clubAffiliations.ts. (WC-024)
+const stripDia = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+const toks = (s) => stripDia(s).toLowerCase().replace(/[^a-z\s'-]/g, ' ').replace(/-/g, ' ').trim().split(/\s+/).filter((t) => t.length > 1);
+
+/** All candidate keys for an API-Football player (surname tokens, DOB-gated). */
+function nameKeys(firstname, lastname, name, dob) {
+  if (!dob) return [];
+  const set = new Set();
+  for (const t of toks(lastname)) set.add(`${t}|${dob}`); // each surname token
+  const all = toks(name || `${firstname} ${lastname}`);
+  if (all.length) set.add(`${all[all.length - 1]}|${dob}`); // last token fallback
+  return [...set];
 }
 
 // Pull every player (with bio: name/dob/nationality) for a team & season,
@@ -147,9 +154,10 @@ async function main() {
         for (const p of roster) {
           map[p.id] = aff;
           players++;
-          const full = [p.firstname, p.lastname].filter(Boolean).join(' ') || p.name;
-          const k = surnameKey(full, p.dob);
-          if (k) { byKey[k] = aff; keyed++; }
+          for (const k of nameKeys(p.firstname, p.lastname, p.name, p.dob)) {
+            if (!byKey[k]) keyed++;
+            byKey[k] = aff;
+          }
         }
       });
     }

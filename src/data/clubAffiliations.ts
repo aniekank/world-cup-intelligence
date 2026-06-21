@@ -44,17 +44,26 @@ const G = globalThis as unknown as {
 };
 
 /**
- * Cross-provider match key: accent-stripped surname + birthdate. Mirrors the
- * key built in scripts/fetch-clubs.mjs so World Cup squads (SportMonks ids) join
- * the API-Football club map by identity, not by a shared id namespace. (WC-024)
+ * Cross-provider match keys: accent-stripped surname token(s) + birthdate.
+ * Mirrors the keys built in scripts/fetch-clubs.mjs so World Cup squads
+ * (SportMonks ids) join the API-Football club map by identity, not by a shared
+ * id namespace. We try every name token except the given name (plus the last
+ * token), so compound surnames match whichever token each provider treats as
+ * the last name; the exact DOB keeps it precise. (WC-024)
  */
-export function clubMatchKey(name?: string | null, dob?: string | null): string | null {
-  if (!name || !dob) return null;
+export function clubMatchKeys(name?: string | null, dob?: string | null): string[] {
+  if (!name || !dob) return [];
   const toks = name
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().replace(/[^a-z\s'-]/g, '').trim().split(/\s+/).filter(Boolean);
-  const surname = toks[toks.length - 1];
-  return surname ? `${surname}|${dob}` : null;
+    .toLowerCase().replace(/[^a-z\s'-]/g, ' ').replace(/-/g, ' ').trim()
+    .split(/\s+/).filter((t) => t.length > 1);
+  if (!toks.length) return [];
+  const set = new Set<string>();
+  // Every token after the given name is a surname candidate…
+  for (const t of toks.slice(1)) set.add(`${t}|${dob}`);
+  // …and always the last token (covers single-token / surname-only names).
+  set.add(`${toks[toks.length - 1]}|${dob}`);
+  return [...set];
 }
 
 async function load(): Promise<void> {

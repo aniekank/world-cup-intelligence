@@ -1,6 +1,6 @@
 import 'server-only';
 import { getPlayerViews, getTeams, getActiveTournamentId } from '@/data/store';
-import { getClubKeyMap, clubMatchKey, type ClubAffiliation } from '@/data/clubAffiliations';
+import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 
 /**
  * Joins the active tournament's squads to the club-affiliation map, producing
@@ -35,9 +35,11 @@ export async function clubConnections() {
   const links: ClubPlayerLink[] = [];
 
   for (const p of getPlayerViews()) {
-    const key = clubMatchKey(p.name, p.birthDate);
-    if (!key) continue;
-    const club = keyMap.get(key);
+    let club: ClubAffiliation | undefined;
+    for (const key of clubMatchKeys(p.name, p.birthDate)) {
+      club = keyMap.get(key);
+      if (club) break;
+    }
     if (!club) continue;
     const team = teamMap.get(p.teamId);
     if (!team) continue;

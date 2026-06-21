@@ -1,7 +1,7 @@
 import 'server-only';
 import { getTeams, getActiveTournamentId, getPlayerViews, getSquad } from '@/data/store';
 import { engine } from '@/analytics';
-import { getClubKeyMap, clubMatchKey, type ClubAffiliation } from '@/data/clubAffiliations';
+import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { debutantsForYear } from '@/data/debutants';
 import { getTournament } from '@/data/tournaments';
 
@@ -51,9 +51,11 @@ export async function discoveries() {
   // ── Underrated by continent ──
   const candidates: (UnderratedPlayer & { score: number; conf: string })[] = [];
   for (const p of getPlayerViews()) {
-    const key = clubMatchKey(p.name, p.birthDate);
-    if (!key) continue;
-    const club = keyMap.get(key);
+    let club: ClubAffiliation | undefined;
+    for (const key of clubMatchKeys(p.name, p.birthDate)) {
+      club = keyMap.get(key);
+      if (club) break;
+    }
     if (!club) continue;
     const team = teamById.get(p.teamId);
     if (!team) continue;
@@ -92,8 +94,8 @@ export async function discoveries() {
       // Europe/top-league based players for the spotlight
       const keyPlayers = squad
         .map((p) => {
-          const k = clubMatchKey(p.name, p.birthDate);
-          const club = k ? keyMap.get(k) : undefined;
+          let club;
+          for (const k of clubMatchKeys(p.name, p.birthDate)) { club = keyMap.get(k); if (club) break; }
           return club ? { id: p.id, name: p.name, club: club.club, league: club.leagueShort } : null;
         })
         .filter((x): x is { id: string; name: string; club: string; league: string } => Boolean(x))
