@@ -8,6 +8,9 @@ export const metadata: Metadata = { title: 'Standings' };
 
 export default function StandingsPage() {
   const { groups, bestThirds } = standingsView();
+  // Team-level xG comes from per-match team stats, which the live feed leaves
+  // empty — hide the xG line entirely rather than show "0.0 / 0.0" (WC-016).
+  const hasXg = groups.some((g) => g.rows.some((r) => r.xGFor > 0 || r.xGAgainst > 0));
 
   return (
     <div className="space-y-6">
@@ -71,7 +74,7 @@ export default function StandingsPage() {
                 <div key={r.teamId} className="flex items-center gap-2 text-[10px] text-terminal-muted">
                   <span className="w-8 font-mono">{r.team.code}</span>
                   <FormString form={r.form} />
-                  <span className="ml-auto tnum">xG {r.xGFor.toFixed(1)} / {r.xGAgainst.toFixed(1)}</span>
+                  {hasXg && <span className="ml-auto tnum">xG {r.xGFor.toFixed(1)} / {r.xGAgainst.toFixed(1)}</span>}
                 </div>
               ))}
             </div>

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { players, rankingsView } from '@/server/queries';
-import { getTeams, getMatches } from '@/data/store';
+import { getTeams, getMatches, datasetMeta } from '@/data/store';
 import { PageHeader, Panel, Stat } from '@/components/ui';
 import { Scatter2, HBar } from '@/components/charts/Recharts';
 
@@ -9,18 +9,23 @@ export const metadata: Metadata = { title: 'Analytics' };
 export default function AnalyticsPage() {
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
 
-  // Real tournament-wide shot aggregates
+  // Tournament-wide aggregates from PLAYER stats (real on every source, incl.
+  // live). Shot-level extras (set-piece share) need shot coordinates the live
+  // feed lacks, so they're gated on hasShotData rather than shown as 0 (WC-016).
+  const hasShotData = datasetMeta().hasShotData;
+  const pv = players({ limit: 2000 });
+  const totalShots = pv.reduce((s, p) => s + p.stats.shots, 0);
+  const goals = pv.reduce((s, p) => s + p.stats.goals, 0);
+  const totalXG = pv.reduce((s, p) => s + p.stats.xG, 0);
+  const bigChances = Math.round(pv.reduce((s, p) => s + p.stats.bigChancesCreated, 0));
+  const xgPerShot = totalShots ? totalXG / totalShots : 0;
+  const conversion = totalShots ? (goals / totalShots) * 100 : 0;
   const allShots = getMatches().flatMap((m) => m.shots);
-  const totalShots = allShots.length;
-  const goals = allShots.filter((s) => s.outcome === 'goal' || s.outcome === 'penalty_goal').length;
-  const totalXG = allShots.reduce((s, sh) => s + sh.xG, 0);
-  const bigChances = allShots.filter((s) => s.isBigChance).length;
   const setPieceXG = allShots
     .filter((s) => s.situation === 'corner' || s.situation === 'set_piece' || s.situation === 'free_kick' || s.situation === 'direct_free_kick')
     .reduce((s, sh) => s + sh.xG, 0);
-  const xgPerShot = totalShots ? totalXG / totalShots : 0;
-  const conversion = totalShots ? (goals / totalShots) * 100 : 0;
-  const setPieceShare = totalXG ? (setPieceXG / totalXG) * 100 : 0;
+  const setPieceShare = totalXG && setPieceXG ? (setPieceXG / totalXG) * 100 : 0;
+  const hasPressures = pv.some((p) => p.stats.pressuresApplied > 0);
 
   // Team offense vs defense (from power ratings)
   const teamPoints = rankingsView().map((r) => ({
@@ -61,7 +66,11 @@ export default function AnalyticsPage() {
         <Stat label="Avg xG / shot" value={xgPerShot.toFixed(2)} sub={`${totalShots.toLocaleString()} shots`} accent="#22e0d0" />
         <Stat label="Conversion" value={`${conversion.toFixed(1)}%`} sub="goals / shots" accent="#1fe5c4" />
         <Stat label="Big chances" value={bigChances} sub="created" />
-        <Stat label="Set-piece xG" value={`${setPieceShare.toFixed(0)}%`} sub="of total" accent="#ff8a1e" />
+        {hasShotData && setPieceShare > 0 ? (
+          <Stat label="Set-piece xG" value={`${setPieceShare.toFixed(0)}%`} sub="of total" accent="#ff8a1e" />
+        ) : (
+          <Stat label="Total xG" value={totalXG.toFixed(1)} sub={`${goals} goals`} accent="#ff8a1e" />
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -89,9 +98,11 @@ export default function AnalyticsPage() {
         <Panel title="Top Tacklers" subtitle="Defensive actions">
           <HBar data={lead('tackles')} color="#1fe5c4" height={300} />
         </Panel>
-        <Panel title="Pressing Volume" subtitle="Pressures applied">
-          <HBar data={lead('pressuresApplied')} color="#ff8a3d" height={300} />
-        </Panel>
+        {hasPressures && (
+          <Panel title="Pressing Volume" subtitle="Pressures applied">
+            <HBar data={lead('pressuresApplied')} color="#ff8a3d" height={300} />
+          </Panel>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Brain, Flame, Goal, Trophy } from 'lucide-react';
 import { homeData } from '@/server/queries';
-import { getMatches, getTeam } from '@/data/store';
+import { getMatches, getTeam, getPlayerViews } from '@/data/store';
 import { Panel, Stat, Badge, TeamBadge, MetricBar, EmptyState } from '@/components/ui';
 import { CountUp, Reveal, Spotlight } from '@/components/ui/motion';
 import { MatchCard } from '@/components/MatchCard';
@@ -15,10 +15,9 @@ export default function HomePage() {
   const allMatches = getMatches();
   const played = allMatches.filter((m) => m.status === 'FINISHED');
   const totalGoals = played.reduce((s, m) => s + m.homeScore + m.awayScore, 0);
-  const totalXG = played.reduce(
-    (s, m) => s + (m.teamStats[m.homeTeamId]?.xG ?? 0) + (m.teamStats[m.awayTeamId]?.xG ?? 0),
-    0,
-  );
+  // Sum player xG (real on every source) rather than per-match team stats, which
+  // the live feed leaves empty — otherwise "Total xG" reads 0 on live (WC-016).
+  const totalXG = getPlayerViews().reduce((s, p) => s + p.stats.xG, 0);
 
   return (
     <div className="space-y-6">
