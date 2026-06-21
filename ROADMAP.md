@@ -51,7 +51,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **Hollow-feed fallback** | If the live API returns teams but no squads, serve the full simulation instead of going blank. |
 | 📋 | **Scheduled disk-cache refresh** | Cache the heavy live load to disk and refresh on a schedule (1–2×/day) instead of re-fetching ~114 requests on every boot — sips the API quota instead of gulping it. |
-| 📋 | **Defer heavy boot fetches** (PERF-1) | Load TV listings + the country map *off* the live-snapshot critical path so live boots faster and the brief "Simulated" cold-start window shrinks. Safer than blocking startup (which risks slow/failed cold starts on free tier). |
+| ✅ | **Defer heavy boot fetches** (PERF-1) | Load TV listings + the country map *off* the live-snapshot critical path so live boots faster and the brief "Simulated" cold-start window shrinks. Safer than blocking startup (which risks slow/failed cold starts on free tier). |
 | 📋 | **Fail-fast on bad key** | Detect auth failures and stop retrying immediately, so a dead key never bogs down boot (and never trips a deploy health-check rollback). |
 | 📋 | **`API_FOOTBALL_HOST` toggle** | Support both the direct `api-sports.io` host and the RapidAPI host via one env var (would have saved the key incident). |
 | ✅ | **SportMonks player metadata + coaches** | Per-team `players.player;coaches.coach` calls give real **ages** (breakout works), heights, **full rosters** (1249 players), and **managers** (Scaloni/Deschamps/…) — which unblocks manager stories. Market value still absent. |

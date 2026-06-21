@@ -133,7 +133,7 @@ async function fetchCountryMap(apiKey: string): Promise<Map<number, SMCountry>> 
 }
 
 /** Fetch broadcasters per fixture, resolve countries, attach grouped listings. */
-async function attachTvListings(matches: Match[], apiKey: string): Promise<void> {
+export async function attachTvListings(matches: Match[], apiKey: string): Promise<void> {
   const countries = await fetchCountryMap(apiKey);
   if (!countries.size) return;
   const byMatch = new Map(matches.map((m) => [m.id, m]));
@@ -464,12 +464,9 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
     }
   }
 
-  // International TV listings (best-effort; matches simply carry none on failure).
-  try {
-    await attachTvListings(matches, apiKey);
-  } catch {
-    /* no broadcast data available — the "Where to watch" panel stays hidden */
-  }
+  // International TV listings are fetched OFF the boot critical path (see
+  // enrichLiveTvListings in loadTournament) so the live snapshot swaps in fast
+  // after a deploy; the "Where to watch" panel fills in a beat later.
 
   // squadIds per team.
   const teams = [...teamById.values()];

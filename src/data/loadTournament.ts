@@ -1,7 +1,7 @@
 import 'server-only';
 import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
-import { getCachedTournament, setDataset, getActiveTournamentId } from './store';
+import { getCachedTournament, setDataset, getActiveTournamentId, getMatches } from './store';
 import type { FixtureUpdate, RawFixtureEvent } from './providers/apiFootball';
 import type { DatasetSnapshot, Match, MatchEvent, EventType, Team } from '@/domain/types';
 
@@ -102,6 +102,11 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   }
 
   setDataset(snap, sourceLabel(t), id);
+  // Fill TV listings off the critical path (non-blocking) once live is active —
+  // covers both boot and the runtime tournament switcher.
+  if (id === 'live-2026' && !snap.matches.some((m) => m.tvListings?.length)) {
+    void enrichLiveTvListings().catch(() => {});
+  }
   return snap;
 }
 
@@ -259,4 +264,23 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
   }
 
   throw new Error(`Unsupported source: ${t.source}`);
+}
+
+/**
+ * Deferred TV-listings enrichment for the live edition. Run AFTER the live
+ * snapshot is active (off the boot critical path), so a deploy lands on live
+ * fast and the "Where to watch" panel fills in a beat later. Mutates the active
+ * snapshot's match objects in place — force-dynamic match pages pick it up on
+ * the next request. Best-effort: a failure just leaves listings empty.
+ */
+export async function enrichLiveTvListings(): Promise<void> {
+  if (getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+  if (!key) return;
+  try {
+    const { attachTvListings } = await import('./providers/sportmonks');
+    await attachTvListings(getMatches(), key);
+  } catch {
+    /* listings stay empty — non-fatal */
+  }
 }
