@@ -44,6 +44,13 @@ export function IntroSplash() {
         .wci-striker{position:absolute;z-index:2;left:50%;bottom:0;max-height:min(92vh,880px);max-width:92vw;width:auto;height:auto;
           transform-origin:50% 100%;animation:wciStriker 2.8s cubic-bezier(.2,.7,.3,1) forwards;
           -webkit-user-drag:none;user-select:none;}
+        .wci-ground{position:absolute;z-index:3;left:0;right:0;bottom:0;height:15vh;opacity:0;
+          background:
+            repeating-linear-gradient(93deg, rgba(255,255,255,.05) 0 5%, rgba(0,0,0,.06) 5% 10%),
+            linear-gradient(180deg, #57a83f 0%, #3a852d 46%, #21551a 100%);
+          -webkit-mask:linear-gradient(180deg, transparent 0, #000 28%);
+                  mask:linear-gradient(180deg, transparent 0, #000 28%);
+          animation:wciGround 2.8s ease forwards;}
         .wci-word{position:absolute;z-index:3;left:0;right:0;top:7%;text-align:center;color:#1c1030;font-weight:800;
           letter-spacing:.2em;text-transform:uppercase;font-size:clamp(13px,2.4vmin,21px);animation:wciWord 2.8s ease forwards;}
         .wci-word small{display:block;margin-top:.5em;font-size:.6em;letter-spacing:.32em;color:#7c2fc7;}
@@ -70,6 +77,7 @@ export function IntroSplash() {
         @keyframes wciCurtain{0%,78%{opacity:0}92%{opacity:1}100%{opacity:1}}
         @keyframes wciFlash{0%,82%{opacity:0}90%{opacity:.95}100%{opacity:0}}
         @keyframes wciStriker{0%{opacity:0;transform:translateX(-50%) scale(1.07)}12%{opacity:1}26%{transform:translateX(-50%) scale(1)}100%{opacity:1;transform:translateX(-50%) scale(1)}}
+        @keyframes wciGround{0%{opacity:0}14%{opacity:1}100%{opacity:1}}
         @keyframes wciBallIn{0%{opacity:0}8%{opacity:1}100%{opacity:1}}
         @keyframes wciBallMove{
           0%{transform:translate(-50%,-50%) translate(-13vw,25vh) scale(.10) rotate(0)}
@@ -86,6 +94,9 @@ export function IntroSplash() {
       {/* Real striker, mid-set-piece */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className="wci-striker" src="/intro/striker.webp" alt="" aria-hidden="true" decoding="async" />
+
+      {/* Grassy pitch band over the photo's gravel strip */}
+      <div className="wci-ground" />
 
       <div className="wci-word">World Cup Intelligence<small>TASK Enterprises</small></div>
       <div className="wci-skip">tap to skip ›</div>
