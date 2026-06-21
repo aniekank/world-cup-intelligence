@@ -83,7 +83,8 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | Status | Feature | What it does |
 |--------|---------|--------------|
 | ✅ | **Betting Edge guardrails** (WC-022) | Shrunk-EV + min-model-probability so longshot "troll" value bets don't top the list; imminent fixtures surfaced first. |
-| 📋 | **Track record — "Did it beat the bookies?"** (FEAT-1) | Scorecard of model vs market vs actual results (Brier, closing-line value). Phase 1: model-vs-actual, no infra. Phase 2: snapshot model+market+odds to durable storage (Upstash/Neon), then join results. **The feature the recent live-data fixes were clearing the path for.** |
+| ✅ | **Track record — Phase 1** (FEAT-1) | `/track-record` grades every finished match against the model's pre-match probabilities (predictMatch runs off static ratings, so it's a fair pre-match read): hit rate, multiclass Brier vs a coin-flip baseline, Brier skill, log loss, best-call / biggest-miss highlights, and a per-match graded table. (`src/server/trackRecord.ts`) |
+| 📋 | **Track record — Phase 2: vs the bookies** (FEAT-1b) | The "did it beat the market?" half. Snapshot each fixture's model prob + de-vigged market price *before kickoff* to durable storage (Upstash/Neon, or a committed JSON snapshot via cron), then join results → closing-line value + model-vs-market Brier. Needs an infra choice; the live odds feed only carries upcoming games so it can't be reconstructed after the fact. |
 | 🧊 | **Multi-sport betting product** | Separate odds product for bettors, off the WC critical path. |
 
 ## 8. Live data quality
