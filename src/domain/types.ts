@@ -170,12 +170,15 @@ export interface Player {
   // Latent per-90 ability ratings (0..100), drive the simulation
   rating: {
     overall: number;
-    pace: number;
-    shooting: number;
-    passing: number;
-    dribbling: number;
-    defending: number;
-    physical: number;
+    // Per-attribute scouting ratings are modeled (seeded / historical only).
+    // Live data (SportMonks) has no FIFA-style attributes, so these are omitted
+    // there and the UI shows the real match rating instead. (WC-023)
+    pace?: number;
+    shooting?: number;
+    passing?: number;
+    dribbling?: number;
+    defending?: number;
+    physical?: number;
   };
 }
 

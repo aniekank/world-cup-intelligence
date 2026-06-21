@@ -39,14 +39,18 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
   const radarKeys = radarDef.map(([, k]) => k);
   const radarValues = radarKeys.map((k) => p.percentiles[k] ?? 0);
 
-  const attrs: { label: string; value: number }[] = [
-    { label: 'Pace', value: p.rating.pace },
-    { label: 'Shooting', value: p.rating.shooting },
-    { label: 'Passing', value: p.rating.passing },
-    { label: 'Dribbling', value: p.rating.dribbling },
-    { label: 'Defending', value: p.rating.defending },
-    { label: 'Physical', value: p.rating.physical },
-  ];
+  // WC-023: per-attribute ratings exist only for seeded / historical editions.
+  // Live (SportMonks) data omits them; the page shows the real match rating card.
+  const r = p.rating;
+  const hasAttrs = typeof r.pace === 'number';
+  const attrs: { label: string; value: number }[] = hasAttrs
+    ? (
+        [
+          ['Pace', r.pace], ['Shooting', r.shooting], ['Passing', r.passing],
+          ['Dribbling', r.dribbling], ['Defending', r.defending], ['Physical', r.physical],
+        ] as [string, number | undefined][]
+      ).map(([label, value]) => ({ label, value: value ?? 0 }))
+    : [];
 
   const percentileRows = (
     [
@@ -147,19 +151,41 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel title="Attributes" subtitle="Scouting ratings 0–100">
-          <div className="space-y-3">
-            {attrs.map((a) => (
-              <div key={a.label} className="flex items-center gap-3">
-                <span className="w-20 text-xs text-terminal-muted">{a.label}</span>
-                <div className="flex-1">
-                  <MetricBar value={a.value} />
+        {hasAttrs ? (
+          <Panel title="Attributes" subtitle="Scouting ratings 0–100">
+            <div className="space-y-3">
+              {attrs.map((a) => (
+                <div key={a.label} className="flex items-center gap-3">
+                  <span className="w-20 text-xs text-terminal-muted">{a.label}</span>
+                  <div className="flex-1">
+                    <MetricBar value={a.value} />
+                  </div>
+                  <span className="tnum w-8 text-right text-sm text-terminal-bright">{a.value}</span>
                 </div>
-                <span className="tnum w-8 text-right text-sm text-terminal-bright">{a.value}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
+              ))}
+            </div>
+          </Panel>
+        ) : (
+          <Panel title="Match Rating" subtitle="average · live data">
+            {p.stats.appearances > 0 ? (
+              <>
+                <div className="flex items-baseline justify-center gap-1.5 py-2">
+                  <span className="text-4xl font-extrabold text-accent">{(p.stats.formIndex / 10).toFixed(1)}</span>
+                  <span className="text-sm text-terminal-muted">/ 10</span>
+                </div>
+                <p className="text-center text-xs text-terminal-muted">
+                  across {p.stats.appearances} {p.stats.appearances === 1 ? 'appearance' : 'appearances'}
+                </p>
+              </>
+            ) : (
+              <p className="py-6 text-center text-sm text-terminal-muted">Yet to feature at this tournament.</p>
+            )}
+            <p className="mt-4 border-t border-terminal-border pt-3 text-[11px] leading-relaxed text-terminal-muted">
+              Per-attribute scouting ratings aren&apos;t published for live tournament data. See the performance radar
+              and percentile rankings, all from real matches.
+            </p>
+          </Panel>
+        )}
 
         <Panel title="Percentile Rankings" subtitle="vs positional peers" bodyClassName="space-y-2.5">
           {percentileRows.map((r) => {

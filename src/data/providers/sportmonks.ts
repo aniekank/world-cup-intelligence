@@ -244,7 +244,11 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
           id: pid, name: (pl.display_name || pl.name || 'Unknown').trim(), teamId: team.id,
           shirtNumber: sp.jersey_number ?? 0, position: pos, detailedPosition: DETAIL[pos],
           age, heightCm: pl.height ?? 182, foot: 'right', club: '—', marketValueEur: 0,
-          rating: { overall: 76, pace: 76, shooting: 76, passing: 76, dribbling: 76, defending: 76, physical: 76 },
+          // WC-023: SportMonks has no FIFA-style attributes. Seed `overall` from a
+          // team-strength prior (used only for sorting/roster ordering until the
+          // player's real match rating is aggregated below) and omit the per-
+          // attribute bars entirely rather than stamping a flat 76 on everyone.
+          rating: { overall: Math.round((team.attackRating + team.defenseRating) / 2) },
         };
         players.push(p);
         byId.set(pid, p);
@@ -254,6 +258,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   }
 
   // 4b) Aggregate per-player stats + events from PLAYED fixtures onto the rosters.
+  const teamByCode = new Map([...teamById.values()].map((t) => [t.id, t]));
   const played = fixtures.filter((f) => mapStatus(f.state?.developer_name) === 'FINISHED');
   for (const f of played) {
     const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[] }>(
@@ -272,7 +277,8 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
           id: pid, name: lp.player_name, teamId: code, shirtNumber: lp.jersey_number ?? 0,
           position: mapPosition(lp.position_id), detailedPosition: DETAIL[mapPosition(lp.position_id)],
           age: 0, heightCm: 182, foot: 'right', club: '—', marketValueEur: 0,
-          rating: { overall: 76, pace: 76, shooting: 76, passing: 76, dribbling: 76, defending: 76, physical: 76 },
+          // WC-023: overall-only prior; see roster path above.
+          rating: { overall: (() => { const t = teamByCode.get(code); return t ? Math.round((t.attackRating + t.defenseRating) / 2) : 72; })() },
         };
         players.push(p);
         byId.set(pid, p);
@@ -332,10 +338,15 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
     }
   }
 
-  // formIndex from average SportMonks match rating (×10), clamped.
+  // formIndex from average SportMonks match rating (×10), clamped. The same real
+  // rating drives the player's `overall` for live data (WC-023), replacing the
+  // team-strength prior once they've actually featured.
   for (const [pid, acc] of ratingSum) {
     if (acc.n > 0 && playerStats[pid]) {
-      playerStats[pid]!.formIndex = Math.max(1, Math.min(100, Math.round((acc.sum / acc.n) * 10)));
+      const scaled = Math.max(1, Math.min(100, Math.round((acc.sum / acc.n) * 10)));
+      playerStats[pid]!.formIndex = scaled;
+      const pl = byId.get(pid);
+      if (pl) pl.rating.overall = scaled;
     }
   }
 

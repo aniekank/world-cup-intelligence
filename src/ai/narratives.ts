@@ -192,7 +192,16 @@ export function generateMatchSummary(matchId: string): string {
           (hStat.xG > aStat.xG) === m.homeScore > m.awayScore ? ' — the better side won' : ', against the run of expected goals'
         }.`
       : '';
-  return `${result} ${m.homeScore}-${m.awayScore} at ${m.venue}. ${scorers ? 'Scorers: ' + scorers + '.' : 'A goalless affair.'}${xgLine} ${home.code} held ${fmt(hStat?.possession ?? 50)}% possession with a field tilt of ${fmt(hStat?.fieldTilt ?? 50)}%.`;
+  // WC-023: omit possession / field tilt when the live source doesn't provide
+  // them, rather than fabricating a flat 50/50. Only seeded and historical
+  // editions populate teamStats; SportMonks live data leaves it empty.
+  const possLine =
+    typeof hStat?.possession === 'number'
+      ? ` ${home.code} held ${fmt(hStat.possession)}% possession${
+          typeof hStat?.fieldTilt === 'number' ? ` with a field tilt of ${fmt(hStat.fieldTilt)}%` : ''
+        }.`
+      : '';
+  return `${result} ${m.homeScore}-${m.awayScore} at ${m.venue}. ${scorers ? 'Scorers: ' + scorers + '.' : 'A goalless affair.'}${xgLine}${possLine}`;
 }
 
 export function generateScoutingReport(playerId: string): { summary: string; strengths: string[]; weaknesses: string[] } {

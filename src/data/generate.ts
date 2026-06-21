@@ -224,7 +224,7 @@ function simulateMatch(
       const minute = rng.int(1, liveMinute);
       const shotMeta = sampleShot(rng, atkStr);
       const shooter = weightedShooter(rng, shooters);
-      const finishing = shooter.rating.shooting / 100;
+      const finishing = (shooter.rating.shooting ?? shooter.rating.overall) / 100;
       // Goal probability is xG nudged by finisher quality
       const goalP = clamp(shotMeta.xg * (0.78 + finishing * 0.5), 0.01, 0.96);
       const scored = rng.chance(goalP) && minute <= liveMinute;
@@ -396,7 +396,7 @@ function pickStarters(squad: Player[]): Player[] {
 function weightedShooter(rng: Rng, players: Player[]): Player {
   const weights = players.map((p) => {
     const posW = p.position === 'FW' ? 3 : p.position === 'MF' ? 1.4 : 0.4;
-    return Math.pow(p.rating.shooting / 60, 2) * posW;
+    return Math.pow((p.rating.shooting ?? p.rating.overall) / 60, 2) * posW;
   });
   return rng.weighted(players, weights);
 }
@@ -405,7 +405,7 @@ function weightedPasser(rng: Rng, players: Player[]): Player {
   if (!players.length) return players[0]!;
   const weights = players.map((p) => {
     const posW = p.position === 'MF' ? 2.4 : p.position === 'FW' ? 1.8 : 0.7;
-    return Math.pow(p.rating.passing / 60, 2) * posW;
+    return Math.pow((p.rating.passing ?? p.rating.overall) / 60, 2) * posW;
   });
   return rng.weighted(players, weights);
 }
@@ -421,7 +421,7 @@ function accumulateOutfieldStats(ctx: SimContext, starters: Player[], team: Team
     st.minutes += minutes;
     const passVol = p.position === 'MF' ? 70 : p.position === 'DF' ? 62 : 38;
     const passes = Math.max(8, Math.round(rng.gaussian(passVol * (minutes / 90), 12)));
-    const acc = clamp(p.rating.passing / 100, 0.6, 0.95);
+    const acc = clamp((p.rating.passing ?? p.rating.overall) / 100, 0.6, 0.95);
     st.passes += passes;
     st.passesCompleted += Math.round(passes * acc);
     st.progressivePasses += Math.round(rng.gaussian(p.position === 'MF' ? 7 : p.position === 'DF' ? 5 : 4, 2) * (minutes / 90));
@@ -433,7 +433,7 @@ function accumulateOutfieldStats(ctx: SimContext, starters: Player[], team: Team
     st.ballRecoveries += Math.max(0, Math.round(rng.gaussian(p.position === 'MF' ? 6 : 4, 2)));
     const duels = Math.max(1, Math.round(rng.gaussian(8, 3)));
     st.duelsTotal += duels;
-    st.duelsWon += Math.round(duels * clamp(p.rating.physical / 100, 0.4, 0.75));
+    st.duelsWon += Math.round(duels * clamp((p.rating.physical ?? p.rating.overall) / 100, 0.4, 0.75));
     st.pressuresApplied += Math.max(0, Math.round(rng.gaussian(14, 5) * (minutes / 90)));
     st.pressRegains += Math.max(0, Math.round(rng.gaussian(3, 1.5)));
     st.foulsCommitted += rng.chance(0.5) ? rng.int(0, 2) : 0;
