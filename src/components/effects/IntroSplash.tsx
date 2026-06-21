@@ -44,6 +44,9 @@ export function IntroSplash() {
           transform-origin:50% 100%;animation:wciStriker 3s cubic-bezier(.2,.7,.3,1) forwards;
           -webkit-user-drag:none;user-select:none;}
         .wci-ball{position:absolute;left:50%;top:50%;width:15vmin;height:15vmin;will-change:transform,opacity;
+          /* the source PNG baked its transparency into a checkerboard, so clip to
+             the ball's circle (rotation-invariant, so it still spins) */
+          clip-path:circle(39% at 50% 50%);
           animation:wciBall 3s cubic-bezier(.5,.02,.6,1) forwards;
           filter:drop-shadow(0 0 28px rgba(86,25,143,.5));}
         .wci-flash{position:absolute;inset:0;opacity:0;
@@ -75,25 +78,8 @@ export function IntroSplash() {
       <img className="wci-striker" src="/intro/striker.png" alt="" aria-hidden="true" decoding="async" />
 
       {/* Purple ball off the boot, straight at the camera */}
-      <svg className="wci-ball" viewBox="0 0 100 100" aria-hidden="true">
-        <defs>
-          <radialGradient id="wciBallG" cx="38%" cy="34%" r="72%">
-            <stop offset="0%" stopColor="#cda6ff" />
-            <stop offset="44%" stopColor="#9d3df0" />
-            <stop offset="100%" stopColor="#56198f" />
-          </radialGradient>
-        </defs>
-        <circle cx="50" cy="50" r="48" fill="url(#wciBallG)" stroke="#34115e" strokeWidth="2" />
-        <polygon points="50,29 65,40 59,58 41,58 35,40" fill="#280d49" />
-        <g stroke="#280d49" strokeWidth="2.6" fill="none" strokeLinejoin="round">
-          <path d="M50 29 L50 10" />
-          <path d="M65 40 L84 33" />
-          <path d="M59 58 L71 74" />
-          <path d="M41 58 L29 74" />
-          <path d="M35 40 L16 33" />
-        </g>
-        <ellipse cx="37" cy="33" rx="12" ry="8" fill="#ffffff" opacity="0.22" />
-      </svg>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="wci-ball" src="/intro/ball.png" alt="" aria-hidden="true" decoding="async" />
 
       <div className="wci-flash" />
       <div className="wci-skip">tap to skip ›</div>
