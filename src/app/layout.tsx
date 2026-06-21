@@ -4,7 +4,8 @@ import './globals.css';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { ManifestoBackdrop } from '@/components/effects/ManifestoBackdrop';
-import { IntroSplash } from '@/components/effects/IntroSplash';
+// IntroSplash is temporarily unmounted — awaiting a real (lifelike) player image
+// to rebuild it around. The component is kept in place to re-enable.
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
@@ -28,7 +29,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen">
-        <IntroSplash />
         <ManifestoBackdrop />
         <div className="flex min-h-screen">
           <Sidebar />
