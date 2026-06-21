@@ -408,6 +408,7 @@ export type InsightKind =
   | 'breakout'
   | 'form'
   | 'tactical'
+  | 'wall'
   | 'milestone'
   | 'prediction';
 

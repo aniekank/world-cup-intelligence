@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { teamView, squadViews } from '@/server/queries';
+import { tacticalProfile } from '@/server/tactics';
 import { getTeam } from '@/data/store';
 import { Panel, Stat, Badge, FormString, Table, Th, Td, MetricBar } from '@/components/ui';
 import { MiniMatchRow } from '@/components/MatchCard';
@@ -19,6 +20,7 @@ export default function TeamPage({ params }: { params: { id: string } }) {
   const squad = squadViews(params.id);
   const f = t.forecast;
   const pr = t.powerRanking;
+  const tactics = tacticalProfile(params.id);
   const s = t.standing;
 
   const positions = ['GK', 'DF', 'MF', 'FW'] as const;
@@ -131,6 +133,30 @@ export default function TeamPage({ params }: { params: { id: string } }) {
           ))}
         </Panel>
       </div>
+
+      {tactics.available && tactics.metrics && (
+        <Panel title="Tactical Identity" subtitle="Derived playing style · averaged over played matches">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge tone="violet">{tactics.label}</Badge>
+            <span className="text-xs uppercase tracking-wide text-terminal-muted">{tactics.tag}</span>
+          </div>
+          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-terminal-text">{tactics.blurb}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { label: 'Possession', value: tactics.metrics.possession, suffix: '%' },
+              { label: 'Press intensity', value: tactics.metrics.press, suffix: '' },
+              { label: 'Field tilt', value: tactics.metrics.fieldTilt, suffix: '%' },
+              { label: 'Pass accuracy', value: tactics.metrics.passAccuracy, suffix: '%' },
+            ].map((r) => (
+              <div key={r.label} className="flex items-center gap-3">
+                <span className="w-28 shrink-0 text-xs text-terminal-muted">{r.label}</span>
+                <div className="flex-1"><MetricBar value={r.value} /></div>
+                <span className="tnum w-10 text-right text-sm text-terminal-bright">{Math.round(r.value)}{r.suffix}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       <Panel title="Squad" subtitle={`${squad.length} players`} bodyClassName="p-0">
         <Table>

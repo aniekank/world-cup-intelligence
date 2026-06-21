@@ -221,6 +221,40 @@ export function generateInsights(): Insight[] {
     }
   }
 
+  // 6. The wall — tournament's meanest defense (real results, every source)
+  const csByTeam = new Map<string, number>();
+  for (const m of getMatches().filter((x) => x.status === 'FINISHED')) {
+    if (m.awayScore === 0) csByTeam.set(m.homeTeamId, (csByTeam.get(m.homeTeamId) ?? 0) + 1);
+    if (m.homeScore === 0) csByTeam.set(m.awayTeamId, (csByTeam.get(m.awayTeamId) ?? 0) + 1);
+  }
+  const wall = eng.standingsByGroup
+    .flat()
+    .filter((s) => s.played > 0)
+    .map((s) => ({ s, gpg: s.goalsAgainst / s.played, cs: csByTeam.get(s.teamId) ?? 0 }))
+    .sort((a, b) => a.gpg - b.gpg || b.cs - a.cs || a.s.goalsAgainst - b.s.goalsAgainst)[0];
+  if (wall) {
+    const t = teamMap.get(wall.s.teamId);
+    if (t) {
+      insights.push({
+        id: `wall-${t.id}`,
+        kind: 'wall',
+        severity: 'medium',
+        title: `${t.name}: the tournament's meanest defense`,
+        body: `${t.name} have conceded just ${wall.s.goalsAgainst} in ${wall.s.played} ${wall.s.played === 1 ? 'game' : 'games'}${
+          wall.cs > 0 ? ` with ${wall.cs} clean sheet${wall.cs > 1 ? 's' : ''}` : ''
+        } — ${wall.gpg.toFixed(2)} goals against per game, the stingiest at the tournament.`,
+        entityType: 'team',
+        entityId: t.id,
+        metrics: [
+          { label: 'Goals against', value: String(wall.s.goalsAgainst) },
+          { label: 'Per game', value: wall.gpg.toFixed(2) },
+          { label: 'Clean sheets', value: String(wall.cs) },
+        ],
+        createdAt: NOW,
+      });
+    }
+  }
+
   const order = { high: 0, medium: 1, low: 2 };
   return insights.sort((a, b) => order[a.severity] - order[b.severity]);
 }
@@ -424,8 +458,11 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
   const tallies = [...tally.entries()]
     .map(([id, v]) => ({ t: teamMap.get(id), ...v }))
     .filter((x): x is { t: NonNullable<typeof x.t> } & Tally => Boolean(x.t) && x.pld > 0);
+  const meanest = [...tallies].filter((x) => x.pld >= 2).sort((a, b) => a.ga / a.pld - b.ga / b.pld || b.cs - a.cs)[0];
+  if (meanest) add(66, `Meanest defense: ${meanest.t.name} (${(meanest.ga / meanest.pld).toFixed(2)} GA/game)`,
+    `${meanest.t.name} own the tournament's meanest defense — ${(meanest.ga / meanest.pld).toFixed(2)} goals conceded a game${meanest.cs > 0 ? `, ${meanest.cs} clean sheet${meanest.cs > 1 ? 's' : ''}` : ''}.`);
   const wall = [...tallies].filter((x) => x.cs > 0).sort((a, b) => b.cs - a.cs || a.ga - b.ga)[0];
-  if (wall && wall.cs >= 2) add(52, `${wall.t.name}: ${wall.cs} clean sheets`);
+  if (wall && wall.cs >= 2 && (!meanest || wall.t.id !== meanest.t.id)) add(50, `${wall.t.name}: ${wall.cs} clean sheets`);
   const sharp = [...tallies].sort((a, b) => b.gf - a.gf)[0];
   if (sharp && sharp.gf >= 5) add(48, `${sharp.t.name} top the scoring (${sharp.gf} goals)`);
 

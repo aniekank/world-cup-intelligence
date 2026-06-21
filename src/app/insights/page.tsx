@@ -14,6 +14,7 @@ const KIND_TONE: Record<string, 'accent' | 'amber' | 'red' | 'blue' | 'violet' |
   form: 'blue',
   milestone: 'accent',
   tactical: 'default',
+  wall: 'blue',
   prediction: 'blue',
 };
 
