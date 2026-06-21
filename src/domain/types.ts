@@ -163,6 +163,7 @@ export interface Player {
   position: Position;
   detailedPosition: DetailedPosition;
   age: number;
+  birthDate?: string; // ISO yyyy-mm-dd when known (live); used to join club affiliations (WC-024)
   heightCm: number;
   foot: Foot;
   club: string;

@@ -86,10 +86,44 @@ async function teamsForLeague(id) {
   return { teams: [], season: null };
 }
 
+// Cross-provider match key: accent-stripped surname + birthdate. Robust because
+// WC squads come from SportMonks (different id namespace) — name + exact DOB is
+// near-unique, where last-name alone or a shared id is not. Mirrored in
+// src/data/clubAffiliations.ts so the live join builds the same key. (WC-024)
+const stripDia = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+function surnameKey(name, dob) {
+  if (!name || !dob) return null;
+  const toks = stripDia(name).toLowerCase().replace(/[^a-z\s'-]/g, '').trim().split(/\s+/).filter(Boolean);
+  const surname = toks[toks.length - 1];
+  return surname ? `${surname}|${dob}` : null;
+}
+
+// Pull every player (with bio: name/dob/nationality) for a team & season,
+// following pagination. Returns [{ id, name, firstname, lastname, dob }].
+async function playersForTeam(teamId, season) {
+  const out = [];
+  let page = 1, total = 1;
+  while (page <= total) {
+    const res = await fetch(`${BASE}/players?team=${teamId}&season=${season}&page=${page}`, {
+      headers: { 'x-apisports-key': KEY },
+    });
+    if (res.status === 429) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+    const j = await res.json().catch(() => ({}));
+    total = j.paging?.total ?? 1;
+    for (const row of j.response ?? []) {
+      const p = row.player;
+      if (p) out.push({ id: p.id, name: p.name, firstname: p.firstname, lastname: p.lastname, dob: p.birth?.date ?? null });
+    }
+    page++;
+  }
+  return out;
+}
+
 async function main() {
-  const map = {};
+  const map = {};   // afId -> affiliation (kept for any direct-id join)
+  const byKey = {}; // "surname|dob" -> affiliation (the live SportMonks join)
   const leagueStats = [];
-  let calls = 0;
+  let calls = 0, keyed = 0;
 
   for (const lg of LEAGUES) {
     const { teams, season } = await teamsForLeague(lg.id);
@@ -99,19 +133,23 @@ async function main() {
       continue;
     }
     let players = 0;
-    const batchSize = 10;
+    const batchSize = 6;
     for (let i = 0; i < teams.length; i += batchSize) {
       const batch = teams.slice(i, i + batchSize);
-      const squads = await Promise.all(batch.map((t) => af(`/players/squads?team=${t.team.id}`)));
-      calls += batch.length;
-      squads.forEach((sq, b) => {
+      const rosters = await Promise.all(batch.map((t) => playersForTeam(t.team.id, season)));
+      calls += batch.reduce((n, _, b) => n + Math.max(1, Math.ceil((rosters[b].length || 1) / 20)), 0);
+      rosters.forEach((roster, b) => {
         const team = batch[b].team;
-        for (const p of sq?.[0]?.players ?? []) {
-          map[p.id] = {
-            club: team.name, clubId: team.id, clubLogo: team.logo,
-            league: lg.name, leagueShort: lg.short, leagueColor: lg.color, leagueFlag: lg.flag, country: lg.country,
-          };
+        const aff = {
+          club: team.name, clubId: team.id, clubLogo: team.logo,
+          league: lg.name, leagueShort: lg.short, leagueColor: lg.color, leagueFlag: lg.flag, country: lg.country,
+        };
+        for (const p of roster) {
+          map[p.id] = aff;
           players++;
+          const full = [p.firstname, p.lastname].filter(Boolean).join(' ') || p.name;
+          const k = surnameKey(full, p.dob);
+          if (k) { byKey[k] = aff; keyed++; }
         }
       });
     }
@@ -121,9 +159,9 @@ async function main() {
 
   const out = `${ROOT}/src/data/cache/clubs.json`;
   mkdirSync(dirname(out), { recursive: true });
-  const payload = { generatedAt: new Date().toISOString(), leagues: leagueStats, map };
+  const payload = { generatedAt: new Date().toISOString(), leagues: leagueStats, map, byKey };
   writeFileSync(out, JSON.stringify(payload));
-  console.log(`\n✓ ${Object.keys(map).length} players across ${leagueStats.length} leagues · ${calls} API calls`);
+  console.log(`\n✓ ${Object.keys(map).length} players · ${Object.keys(byKey).length} unique surname|dob keys across ${leagueStats.length} leagues · ${calls} API calls`);
   console.log(`✓ wrote ${out} (${(JSON.stringify(payload).length / 1e6).toFixed(1)} MB)`);
 }
 

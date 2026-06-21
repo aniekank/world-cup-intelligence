@@ -1,7 +1,7 @@
 import 'server-only';
 import { getTeams, getActiveTournamentId, getPlayerViews, getSquad } from '@/data/store';
 import { engine } from '@/analytics';
-import { getClubMap, type ClubAffiliation } from '@/data/clubAffiliations';
+import { getClubKeyMap, clubMatchKey, type ClubAffiliation } from '@/data/clubAffiliations';
 import { debutantsForYear } from '@/data/debutants';
 import { getTournament } from '@/data/tournaments';
 
@@ -20,11 +20,6 @@ function clubTier(c: ClubAffiliation): number {
   if (MARQUEE.some((m) => n.includes(m))) return 3;
   if (TOP5.has(c.leagueShort)) return 2;
   return 1;
-}
-
-function apiId(playerId: string): number | null {
-  const n = Number(playerId.split('-')[1]);
-  return Number.isFinite(n) ? n : null;
 }
 
 export interface UnderratedPlayer {
@@ -50,14 +45,15 @@ export async function discoveries() {
   const eng = engine();
   const teamByCode = new Map(getTeams().map((t) => [t.code, t]));
   const teamById = new Map(getTeams().map((t) => [t.id, t]));
-  const clubMap = isLive ? await getClubMap() : new Map<number, ClubAffiliation>();
+  // WC-024: join by surname+DOB (SportMonks ↔ API-Football share no id namespace).
+  const keyMap = isLive ? await getClubKeyMap() : new Map<string, ClubAffiliation>();
 
   // ── Underrated by continent ──
   const candidates: (UnderratedPlayer & { score: number; conf: string })[] = [];
   for (const p of getPlayerViews()) {
-    const aid = apiId(p.id);
-    if (aid == null) continue;
-    const club = clubMap.get(aid);
+    const key = clubMatchKey(p.name, p.birthDate);
+    if (!key) continue;
+    const club = keyMap.get(key);
     if (!club) continue;
     const team = teamById.get(p.teamId);
     if (!team) continue;
@@ -96,8 +92,8 @@ export async function discoveries() {
       // Europe/top-league based players for the spotlight
       const keyPlayers = squad
         .map((p) => {
-          const aid = apiId(p.id);
-          const club = aid != null ? clubMap.get(aid) : undefined;
+          const k = clubMatchKey(p.name, p.birthDate);
+          const club = k ? keyMap.get(k) : undefined;
           return club ? { id: p.id, name: p.name, club: club.club, league: club.leagueShort } : null;
         })
         .filter((x): x is { id: string; name: string; club: string; league: string } => Boolean(x))

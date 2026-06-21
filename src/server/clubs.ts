@@ -1,6 +1,6 @@
 import 'server-only';
 import { getPlayerViews, getTeams, getActiveTournamentId } from '@/data/store';
-import { getClubMap, type ClubAffiliation } from '@/data/clubAffiliations';
+import { getClubKeyMap, clubMatchKey, type ClubAffiliation } from '@/data/clubAffiliations';
 
 /**
  * Joins the active tournament's squads to the club-affiliation map, producing
@@ -24,23 +24,20 @@ export interface ClubPlayerLink {
   goals: number;
 }
 
-function apiId(playerId: string): number | null {
-  const n = Number(playerId.split('-')[1]);
-  return Number.isFinite(n) ? n : null;
-}
-
 export async function clubConnections() {
   const activeId = getActiveTournamentId();
   const isLive = activeId === 'live-2026';
-  const clubMap = isLive ? await getClubMap() : new Map<number, ClubAffiliation>();
+  // WC-024: join SportMonks squads to the API-Football club map by surname+DOB
+  // (the two providers share no id namespace), not by a raw player id.
+  const keyMap = isLive ? await getClubKeyMap() : new Map<string, ClubAffiliation>();
 
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
   const links: ClubPlayerLink[] = [];
 
   for (const p of getPlayerViews()) {
-    const aid = apiId(p.id);
-    if (aid == null) continue;
-    const club = clubMap.get(aid);
+    const key = clubMatchKey(p.name, p.birthDate);
+    if (!key) continue;
+    const club = keyMap.get(key);
     if (!club) continue;
     const team = teamMap.get(p.teamId);
     if (!team) continue;

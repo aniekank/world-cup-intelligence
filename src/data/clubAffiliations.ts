@@ -33,13 +33,29 @@ interface ClubsCache {
   generatedAt: string;
   leagues: LeagueStat[];
   map: Record<string, ClubAffiliation>;
+  byKey?: Record<string, ClubAffiliation>;
 }
 
 const G = globalThis as unknown as {
   __wcClubs?: Map<number, ClubAffiliation>;
+  __wcClubsByKey?: Map<string, ClubAffiliation>;
   __wcClubLeagues?: LeagueStat[];
   __wcClubsPromise?: Promise<void>;
 };
+
+/**
+ * Cross-provider match key: accent-stripped surname + birthdate. Mirrors the
+ * key built in scripts/fetch-clubs.mjs so World Cup squads (SportMonks ids) join
+ * the API-Football club map by identity, not by a shared id namespace. (WC-024)
+ */
+export function clubMatchKey(name?: string | null, dob?: string | null): string | null {
+  if (!name || !dob) return null;
+  const toks = name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z\s'-]/g, '').trim().split(/\s+/).filter(Boolean);
+  const surname = toks[toks.length - 1];
+  return surname ? `${surname}|${dob}` : null;
+}
 
 async function load(): Promise<void> {
   try {
@@ -47,10 +63,14 @@ async function load(): Promise<void> {
     const cache = ((mod as { default?: unknown }).default ?? mod) as unknown as ClubsCache;
     const m = new Map<number, ClubAffiliation>();
     for (const [id, aff] of Object.entries(cache.map)) m.set(Number(id), aff);
+    const k = new Map<string, ClubAffiliation>();
+    for (const [key, aff] of Object.entries(cache.byKey ?? {})) k.set(key, aff);
     G.__wcClubs = m;
+    G.__wcClubsByKey = k;
     G.__wcClubLeagues = cache.leagues ?? [];
   } catch {
     G.__wcClubs = new Map();
+    G.__wcClubsByKey = new Map();
     G.__wcClubLeagues = [];
   }
 }
@@ -65,6 +85,12 @@ async function ensure(): Promise<void> {
 export async function getClubMap(): Promise<Map<number, ClubAffiliation>> {
   await ensure();
   return G.__wcClubs ?? new Map();
+}
+
+/** "surname|dob" → club map — the live join key for SportMonks squads. */
+export async function getClubKeyMap(): Promise<Map<string, ClubAffiliation>> {
+  await ensure();
+  return G.__wcClubsByKey ?? new Map();
 }
 
 /** Per-league coverage stats from the precompute. */
