@@ -44,7 +44,7 @@ export function IntroSplash() {
         .wci-striker{position:absolute;z-index:2;left:50%;bottom:0;max-height:min(92vh,880px);max-width:92vw;width:auto;height:auto;
           transform-origin:50% 100%;animation:wciStriker 2.8s cubic-bezier(.2,.7,.3,1) forwards;
           -webkit-user-drag:none;user-select:none;}
-        .wci-ground{position:absolute;z-index:3;left:0;right:0;bottom:0;height:15vh;opacity:0;
+        .wci-ground{position:absolute;z-index:3;left:0;right:0;bottom:0;height:21vh;opacity:0;
           background:
             repeating-linear-gradient(93deg, rgba(255,255,255,.05) 0 5%, rgba(0,0,0,.06) 5% 10%),
             linear-gradient(180deg, #57a83f 0%, #3a852d 46%, #21551a 100%);
@@ -70,10 +70,10 @@ export function IntroSplash() {
         .wci-ball.t4{z-index:7;opacity:.32;filter:blur(11px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 280ms both;}
         .wci-ball.t5{z-index:6;opacity:.22;filter:blur(15px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 375ms both;}
         @keyframes wciFade{0%,93%{opacity:1}100%{opacity:0;visibility:hidden}}
-        @keyframes wciShake{0%,79%{transform:translate(0,0)}
-          81%{transform:translate(-15px,11px)}83%{transform:translate(14px,-13px)}85%{transform:translate(-12px,9px)}
-          87%{transform:translate(10px,-8px)}89%{transform:translate(-7px,6px)}91%{transform:translate(5px,-4px)}
-          93%{transform:translate(-3px,2px)}95%,100%{transform:translate(0,0)}}
+        @keyframes wciShake{0%,80%{transform:translate(0,0)}
+          82%{transform:translate(-9px,6px)}84%{transform:translate(8px,-7px)}86%{transform:translate(-6px,5px)}
+          88%{transform:translate(4px,-3px)}90%{transform:translate(-3px,2px)}92%{transform:translate(2px,-1px)}
+          94%,100%{transform:translate(0,0)}}
         @keyframes wciWord{0%,12%{opacity:0;transform:translateY(8px)}30%{opacity:1;transform:translateY(0)}66%{opacity:1}78%{opacity:0}}
         @keyframes wciSpeed{0%,22%{opacity:0}48%{opacity:.95}84%{opacity:.6}100%{opacity:0}}
         @keyframes wciCurtain{0%,78%{opacity:0}92%{opacity:1}100%{opacity:1}}
