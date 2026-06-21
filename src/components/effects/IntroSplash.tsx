@@ -77,7 +77,7 @@ export function IntroSplash() {
 
       {/* Real striker, mid-set-piece */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="wci-striker" src="/intro/striker.png" alt="" aria-hidden="true" decoding="async" />
+      <img className="wci-striker" src="/intro/striker.webp" alt="" aria-hidden="true" decoding="async" />
 
       <div className="wci-word">World Cup Intelligence<small>TASK Enterprises</small></div>
       <div className="wci-skip">tap to skip ›</div>
@@ -88,7 +88,7 @@ export function IntroSplash() {
 
       {/* Purple ball off the boot, straight at the camera */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="wci-ball" src="/intro/ball.png" alt="" aria-hidden="true" decoding="async" />
+      <img className="wci-ball" src="/intro/ball.webp" alt="" aria-hidden="true" decoding="async" />
     </div>
   );
 }
