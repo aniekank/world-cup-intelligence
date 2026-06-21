@@ -40,7 +40,7 @@ export default async function DiscoveriesPage() {
                 {grp.players.map((p) => (
                   <div key={p.id} className="card-interactive glass flex flex-col gap-3 rounded-xl border border-terminal-border p-4">
                     <div className="flex items-center gap-3">
-                      <PlayerPortrait id={p.id} name={p.name} size={52} rounded="xl" className="shrink-0 drop-shadow" />
+                      <PlayerPortrait id={p.id} name={p.name} photo={p.photo} size={52} rounded="xl" className="shrink-0 drop-shadow" />
                       <div className="min-w-0">
                         <Link href={`/players/${p.id}`} className="block truncate text-base font-bold text-terminal-bright hover:text-accent">
                           {p.name}

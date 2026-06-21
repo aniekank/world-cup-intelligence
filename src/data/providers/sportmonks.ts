@@ -239,7 +239,7 @@ interface SMSquadEntry {
   player_id: number;
   position_id: number | null;
   jersey_number: number | null;
-  player?: { display_name?: string; name?: string; date_of_birth?: string | null; height?: number | null; position_id?: number | null };
+  player?: { display_name?: string; name?: string; date_of_birth?: string | null; height?: number | null; position_id?: number | null; image_path?: string | null };
 }
 interface SMTeamDetail {
   players?: SMSquadEntry[];
@@ -357,7 +357,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         const p: Player = {
           id: pid, name: (pl.display_name || pl.name || 'Unknown').trim(), teamId: team.id,
           shirtNumber: sp.jersey_number ?? 0, position: pos, detailedPosition: DETAIL[pos],
-          age, birthDate: dob ?? undefined, heightCm: pl.height ?? 182, foot: 'right', club: '—', marketValueEur: 0,
+          age, birthDate: dob ?? undefined, photo: pl.image_path ?? undefined, heightCm: pl.height ?? 182, foot: 'right', club: '—', marketValueEur: 0,
           // WC-023: SportMonks has no FIFA-style attributes. Seed `overall` from a
           // team-strength prior (used only for sorting/roster ordering until the
           // player's real match rating is aggregated below) and omit the per-

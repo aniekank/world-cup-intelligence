@@ -9,12 +9,14 @@ import { accentFor, darken, lighten, initials, hashStr } from '@/lib/visual';
 export function PlayerPortrait({
   id,
   name,
+  photo,
   size = 96,
   rounded = 'full',
   className,
 }: {
   id: string;
   name: string;
+  photo?: string;
   size?: number;
   rounded?: 'full' | 'xl';
   className?: string;
@@ -78,6 +80,12 @@ export function PlayerPortrait({
           {/* Shadow side of the face for the duotone split */}
           <path d="M52 19.5 a20.5 20.5 0 0 0 0 41 a20.5 20.5 0 0 1 0 -41" fill="#0b0613" fillOpacity={0.22} />
         </g>
+
+        {/* Real head-shot (live data) drawn over the procedural bust — if it
+            fails to load, the duotone silhouette beneath shows through. */}
+        {photo ? (
+          <image href={photo} x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid slice" />
+        ) : null}
       </g>
 
       {/* Rim light */}

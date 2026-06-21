@@ -78,7 +78,7 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
       >
         <div className="halftone pointer-events-none absolute inset-0 opacity-15" />
         <div className="relative flex flex-wrap items-center gap-5">
-          <PlayerPortrait id={p.id} name={p.name} size={96} rounded="xl" className="art-hover shrink-0 cursor-pointer drop-shadow-lg" />
+          <PlayerPortrait id={p.id} name={p.name} photo={p.photo} size={96} rounded="xl" className="art-hover shrink-0 cursor-pointer drop-shadow-lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-accent">
               {POS_FULL[p.position]} · {p.detailedPosition}

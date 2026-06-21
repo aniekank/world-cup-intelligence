@@ -460,6 +460,7 @@ export interface Storyline {
   blurb: string;
   entityType: 'player' | 'team';
   entityId: string;
+  photo?: string; // real head-shot for player storylines (live data)
   metrics: { label: string; value: string }[];
   accent: 'accent' | 'magenta' | 'amber' | 'violet' | 'cyan' | 'lime';
 }
@@ -519,7 +520,7 @@ export function playersToWatch(limit = 6): Storyline[] {
     out.push({
       id: `pw-${p.id}`, archetype: hook.archetype, tag: hook.tag, title: p.name,
       subtitle: `${posFull(p.position).replace(/^./, (c) => c.toUpperCase())} · ${p.team.name}`,
-      blurb: hook.blurb, entityType: 'player', entityId: p.id,
+      blurb: hook.blurb, entityType: 'player', entityId: p.id, photo: p.photo,
       metrics: [
         { label: 'Goals', value: String(p.stats.goals) },
         { label: 'Assists', value: String(p.stats.assists) },

@@ -25,6 +25,7 @@ function clubTier(c: ClubAffiliation): number {
 export interface UnderratedPlayer {
   id: string;
   name: string;
+  photo?: string;
   position: string;
   positionFull: string;
   nation: string;
@@ -65,7 +66,7 @@ export async function discoveries() {
     if (win > 0.06) continue; // skip players of the tournament favourites
     const last = p.name.split(' ').slice(-1)[0];
     candidates.push({
-      id: p.id, name: p.name, position: p.position, positionFull: POS[p.position] ?? p.position,
+      id: p.id, name: p.name, photo: p.photo, position: p.position, positionFull: POS[p.position] ?? p.position,
       nation: team.name, nationFlag: team.flag, nationId: team.id,
       club: club.club, clubLogo: club.clubLogo, league: club.league, leagueColor: club.leagueColor,
       titleOdds: win,

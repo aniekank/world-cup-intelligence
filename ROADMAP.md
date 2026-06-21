@@ -91,6 +91,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | Status | Feature | What it does |
 |--------|---------|--------------|
 | ✅ | **Live attribute + narrative honesty** (WC-023) | Player attributes show the real SportMonks match rating (no flat 76); match reports omit fabricated 50/50 possession / field tilt. |
+| ✅ | **Real player head-shots** (IMG-1) | SportMonks `image_path` photos render on player profile / discoveries / storylines, composited over the procedural portrait (which stays the fallback for seeded/historical or a failed load). (`src/components/brand/PlayerPortrait.tsx`) |
 | 📋 | **Advanced metrics graceful-degrade** (WC-016) | xG/xA/progressive passes/pressures read **0** across player pages, standings, analytics, golden boot on live data — the feed lacks them but the UI renders them. Hide/label like WC-023 did for attributes. **Biggest "live looks broken" gap.** See `BUGS.md`. |
 
 ---

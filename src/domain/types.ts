@@ -164,6 +164,7 @@ export interface Player {
   detailedPosition: DetailedPosition;
   age: number;
   birthDate?: string; // ISO yyyy-mm-dd when known (live); used to join club affiliations (WC-024)
+  photo?: string; // real head-shot URL when the source provides one (live); else procedural portrait
   heightCm: number;
   foot: Foot;
   club: string;

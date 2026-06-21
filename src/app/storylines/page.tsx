@@ -69,7 +69,7 @@ function PlayerStory({ s }: { s: Storyline }) {
       className={`card-interactive glass flex flex-col gap-3 rounded-xl border border-terminal-border p-4 ${a.ring}`}
     >
       <div className="flex items-center gap-3">
-        <PlayerPortrait id={s.entityId} name={s.title} size={56} rounded="xl" className="shrink-0 drop-shadow" />
+        <PlayerPortrait id={s.entityId} name={s.title} photo={s.photo} size={56} rounded="xl" className="shrink-0 drop-shadow" />
         <div className="min-w-0">
           <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${a.chip}`}>
             {s.tag}
