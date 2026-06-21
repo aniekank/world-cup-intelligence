@@ -270,3 +270,37 @@ body {
   .page-in { animation: none !important; }
   .art-hover:hover, .crest-hover:hover { transform: none; }
 }
+
+/* ── Model Lab range sliders ── */
+.lab-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--terminal-border, #2a2a3a);
+  outline: none;
+  cursor: pointer;
+}
+.lab-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #22e0d0;
+  border: 2px solid #0b0613;
+  box-shadow: 0 0 0 1px rgba(34, 224, 208, 0.4);
+  transition: transform 0.1s ease;
+}
+.lab-range::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.lab-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #22e0d0;
+  border: 2px solid #0b0613;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab-range::-webkit-slider-thumb { transition: none; }
+}

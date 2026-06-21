@@ -3,9 +3,22 @@
 Proposed features and enhancements, so good ideas don't get buried under bug-fixing.
 Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-06-21
 
 **Status:** ✅ Shipped · 🔨 Building now · 📋 Proposed · 🧊 Deferred (revisit later)
+
+---
+
+## 0. Model Lab — interactive DS/ML showcase (`/lab`)
+*Surfaces the engine's math as manipulable visuals — the portfolio centrepiece. Every visual recomputes live in the browser from real data; the numerical kernels (`src/lib/labMath.ts`) are written from first principles, no charting/ML deps.*
+
+| Status | Feature | What it does |
+|--------|---------|--------------|
+| ✅ | **Bivariate-Poisson score heatmap** | Drag the two λ (expected-goals) sliders + the correlation term and the full joint scoreline grid + win/draw/loss / BTTS / over-2.5 recompute. Load any real fixture as a preset. (`PoissonHeatmap`) |
+| ✅ | **Monte Carlo what-if simulator** | Override a team's attack/defense/ELO → the real 3,000-run engine re-simulates the rest of the tournament server-side (`/api/lab/simulate`, ~80ms warm) and the survival funnel + title-odds leaderboard react. (`MonteCarloSimulator`) |
+| ✅ | **Team embedding (PCA + k-means)** | 48 teams × 8 style metrics → 2D via in-browser covariance eigendecomposition (power iteration); k-means clusters; toggle metrics / k and it re-projects live. Shows explained variance + loadings. (`TeamEmbedding`, `pca`/`kmeans` in labMath) |
+| ✅ | **Calibration lab** | Reliability diagram + Murphy Brier decomposition (reliability − resolution + uncertainty) over every finished match; adjustable bins + one-vs-rest class filter. (`CalibrationLab`) |
+| ✅ | **Prediction explainer (Shapley)** | Exact Shapley attribution of a single match's P(home win) across home advantage + both sides' attack/defense, as a waterfall from neutral baseline to model output. (`PredictionExplainer`, `shapleyContributions`) |
 
 ---
 

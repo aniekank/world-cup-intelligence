@@ -24,6 +24,7 @@ import {
   Coins,
   LayoutGrid,
   LifeBuoy,
+  FlaskConical,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -50,6 +51,7 @@ export const NAV: NavItem[] = [
   { label: 'Track Record', href: '/track-record', icon: Target, section: 'analyze' },
   { label: 'Betting Edge', href: '/betting', icon: Coins, section: 'analyze' },
   { label: 'Analytics', href: '/analytics', icon: LineChart, section: 'analyze' },
+  { label: 'Model Lab', href: '/lab', icon: FlaskConical, section: 'analyze' },
   { label: 'Defense', href: '/defense', icon: ShieldHalf, section: 'analyze' },
   { label: 'Card Builder', href: '/compare', icon: LayoutGrid, section: 'analyze' },
   { label: 'Rankings', href: '/rankings', icon: Award, section: 'analyze' },
