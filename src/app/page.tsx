@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { ArrowRight, Brain, Flame, Goal, Trophy } from 'lucide-react';
+import { ArrowRight, Flame, Goal, Trophy } from 'lucide-react';
 import { homeData } from '@/server/queries';
 import { getMatches, getTeam, getPlayerViews } from '@/data/store';
-import { Panel, Stat, Badge, TeamBadge, MetricBar, EmptyState } from '@/components/ui';
+import { Panel, Stat, TeamBadge, MetricBar, EmptyState } from '@/components/ui';
 import { CountUp, Reveal, Spotlight } from '@/components/ui/motion';
+import { BriefingDeck } from '@/components/home/BriefingDeck';
 import { MatchCard } from '@/components/MatchCard';
 import { CriticalMatchCard } from '@/components/CriticalMatchCard';
 import { LiveTicker } from '@/components/home/LiveTicker';
@@ -30,22 +31,7 @@ export default function HomePage() {
       <Reveal>
         <section className="manifesto-hero gradient-border relative overflow-hidden rounded-2xl border border-terminal-border bg-terminal-panel/40 p-6 shadow-glow sm:p-8">
           <ParallaxBurst className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 opacity-50 sm:-right-10" />
-          <div className="relative">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest">
-              <Brain className="h-3.5 w-3.5 text-accent" /> <span className="text-manifesto-anim">Daily Intelligence Briefing</span>
-            </div>
-            <h1 className="mt-3 max-w-3xl text-3xl font-extrabold leading-tight tracking-tight text-terminal-bright sm:text-4xl">
-              {data.briefing.headline}
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm text-terminal-muted sm:text-base">{data.briefing.body}</p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {data.briefing.bullets.map((b, i) => (
-                <Badge key={i} tone={i === 0 ? 'accent' : 'default'}>
-                  {b}
-                </Badge>
-              ))}
-            </div>
-          </div>
+          <BriefingDeck cards={data.briefingDeck} />
         </section>
       </Reveal>
 

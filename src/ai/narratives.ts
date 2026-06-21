@@ -515,6 +515,189 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
   return { headline, body, bullets };
 }
 
+// ── Briefing deck ────────────────────────────────────────────────────────────
+// The single daily briefing collapses every signal into one paragraph. The deck
+// keeps them as separate, self-contained cards — title race, live recaps, recent
+// results, golden boot, the meanest defense, marquee fixtures — so the home hero
+// can rotate through deeper stories instead of showing one static blurb.
+
+export interface BriefingCard {
+  id: string;
+  kicker: string;
+  headline: string;
+  body: string;
+  tags: string[];
+  accent?: string;
+}
+
+export function generateBriefingDeck(): BriefingCard[] {
+  const eng = engine();
+  const all = getMatches();
+  const teamMap = new Map(getTeams().map((t) => [t.id, t]));
+  const live = all.filter((m) => m.status === 'LIVE' || m.status === 'HALFTIME');
+  const scheduled = all.filter((m) => m.status === 'SCHEDULED');
+  const finished = all.filter((m) => m.status === 'FINISHED');
+  const cards: BriefingCard[] = [];
+  const usedMatch = new Set<string>();
+
+  // 1) Overview — the merged daily briefing leads the deck.
+  const brief = generateDailyBriefing();
+  cards.push({
+    id: 'overview',
+    kicker: 'Daily Briefing',
+    headline: brief.headline,
+    body: brief.body || `${finished.length} played, ${live.length} live, ${scheduled.length} still to come.`,
+    tags: brief.bullets.slice(0, 4),
+    accent: '#22e0d0',
+  });
+
+  const ranked = getTeams()
+    .map((t) => ({ t, f: eng.forecasts.get(t.id) }))
+    .filter((x): x is { t: (typeof x)['t']; f: NonNullable<(typeof x)['f']> } => Boolean(x.f))
+    .sort((a, b) => b.f.winTitle - a.f.winTitle);
+
+  // 2) Title race.
+  const fav = ranked[0], second = ranked[1], third = ranked[2];
+  if (fav) {
+    cards.push({
+      id: 'title-race',
+      kicker: 'Title Race',
+      headline: `${fav.t.name} lead at ${pct(fav.f.winTitle)} to win it`,
+      body: `The Monte Carlo makes ${fav.t.name} the favourites at ${pct(fav.f.winTitle)} to lift the trophy${second ? `, ${pct(fav.f.winTitle - second.f.winTitle)} clear of ${second.t.name} on ${pct(second.f.winTitle)}` : ''}${third ? `, with ${third.t.name} third at ${pct(third.f.winTitle)}` : ''}. Drawn from 8,000 tournament simulations.`,
+      tags: ranked.slice(0, 3).map((r) => `${r.t.flag} ${r.t.name} ${pct(r.f.winTitle)}`),
+      accent: '#1fe5c4',
+    });
+  }
+
+  // 3) Live now — one recap per match in progress.
+  for (const m of live.slice(0, 3)) {
+    const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
+    if (!h || !a) continue;
+    usedMatch.add(m.id);
+    cards.push({
+      id: `live-${m.id}`,
+      kicker: 'Live Now',
+      headline: `${h.name} ${m.homeScore}–${m.awayScore} ${a.name}`,
+      body: generateMatchSummary(m.id),
+      tags: [m.status === 'HALFTIME' ? 'Half-time' : `${m.minute}′`, `${h.code} v ${a.code}`],
+      accent: '#ff2e9a',
+    });
+  }
+
+  // 4) Recent results — recaps for the latest finished fixtures.
+  const recent = [...finished].sort((a, b) => b.kickoff.localeCompare(a.kickoff)).slice(0, 3);
+  for (const m of recent) {
+    const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
+    if (!h || !a) continue;
+    usedMatch.add(m.id);
+    cards.push({
+      id: `recap-${m.id}`,
+      kicker: 'Result',
+      headline: `${h.name} ${m.homeScore}–${m.awayScore} ${a.name}`,
+      body: generateMatchSummary(m.id),
+      tags: [`${h.code} ${m.homeScore}-${m.awayScore} ${a.code}`, m.city].filter(Boolean) as string[],
+    });
+  }
+
+  // 5) Golden Boot.
+  const gb = eng.goldenBoot[0];
+  const gbV = gb ? getPlayerViews().find((p) => p.id === gb.playerId) : null;
+  if (gb && gbV) {
+    cards.push({
+      id: 'golden-boot',
+      kicker: 'Golden Boot',
+      headline: `${gbV.name} leads on ${gb.currentGoals}`,
+      body: `${gbV.name} (${gbV.team.name}) tops the scoring chart on ${gb.currentGoals} goal${gb.currentGoals === 1 ? '' : 's'}, with the model projecting ${gb.projectedGoals} by the final${gbV.stats.xG ? ` — backed by ${gbV.stats.xG.toFixed(1)} expected goals` : ''}.`,
+      tags: eng.goldenBoot.slice(0, 3)
+        .map((g) => { const v = getPlayerViews().find((p) => p.id === g.playerId); return v ? `${v.name} ${g.currentGoals}` : null; })
+        .filter(Boolean) as string[],
+      accent: '#ff8a1e',
+    });
+  }
+
+  // 6) Momentum.
+  const riser = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum)[0];
+  if (riser && riser.momentum > 0) {
+    const t = teamMap.get(riser.teamId);
+    if (t) cards.push({
+      id: 'momentum',
+      kicker: 'Momentum',
+      headline: `${t.name} are surging (+${riser.momentum})`,
+      body: `${t.name} carry the tournament's hottest form — +${riser.momentum} momentum and up to #${riser.rank} in the power rankings.`,
+      tags: [`#${riser.rank} power`, `+${riser.momentum} momentum`],
+      accent: '#1fe5c4',
+    });
+  }
+
+  // 7) Results-derived: meanest defense + biggest rout.
+  type Tally = { ga: number; pld: number; cs: number };
+  const tally = new Map<string, Tally>();
+  const bump = (id: string): Tally => { let v = tally.get(id); if (!v) { v = { ga: 0, pld: 0, cs: 0 }; tally.set(id, v); } return v; };
+  let rout: { margin: number; m: Match } | null = null;
+  for (const m of finished) {
+    const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
+    if (!h || !a) continue;
+    const th = bump(h.id), ta = bump(a.id);
+    th.ga += m.awayScore; th.pld++; if (m.awayScore === 0) th.cs++;
+    ta.ga += m.homeScore; ta.pld++; if (m.homeScore === 0) ta.cs++;
+    const margin = Math.abs(m.homeScore - m.awayScore);
+    if (margin >= 2 && (!rout || margin > rout.margin)) rout = { margin, m };
+  }
+  const tallies = [...tally.entries()]
+    .map(([id, v]) => ({ t: teamMap.get(id), ...v }))
+    .filter((x): x is { t: NonNullable<typeof x.t> } & Tally => Boolean(x.t) && x.pld >= 2);
+  const meanest = [...tallies].sort((a, b) => a.ga / a.pld - b.ga / b.pld || b.cs - a.cs)[0];
+  if (meanest) cards.push({
+    id: 'defense',
+    kicker: 'The Wall',
+    headline: `${meanest.t.name} concede just ${(meanest.ga / meanest.pld).toFixed(2)} a game`,
+    body: `${meanest.t.name} own the tournament's meanest defense — ${(meanest.ga / meanest.pld).toFixed(2)} goals conceded per game across ${meanest.pld} played${meanest.cs > 0 ? `, with ${meanest.cs} clean sheet${meanest.cs > 1 ? 's' : ''}` : ''}.`,
+    tags: [`${(meanest.ga / meanest.pld).toFixed(2)} GA/game`, `${meanest.cs} clean sheet${meanest.cs === 1 ? '' : 's'}`],
+    accent: '#8b5cf6',
+  });
+  if (rout && !usedMatch.has(rout.m.id)) {
+    const h = teamMap.get(rout.m.homeTeamId), a = teamMap.get(rout.m.awayTeamId);
+    if (h && a) {
+      usedMatch.add(rout.m.id);
+      cards.push({
+        id: 'rout',
+        kicker: 'Statement Win',
+        headline: `${h.name} ${rout.m.homeScore}–${rout.m.awayScore} ${a.name}`,
+        body: generateMatchSummary(rout.m.id),
+        tags: [`${rout.margin}-goal margin`],
+        accent: '#ff8a1e',
+      });
+    }
+  }
+
+  // 8) Upset + breakout from the insight engine.
+  const ins = generateInsights();
+  const upset = ins.find((i) => i.kind === 'upset');
+  if (upset) cards.push({ id: 'upset', kicker: 'Upset', headline: upset.title.replace(/^Upset:\s*/, ''), body: upset.body, tags: [`${upset.severity} signal`], accent: '#ff2e9a' });
+  const breakout = ins.find((i) => i.kind === 'breakout');
+  if (breakout) cards.push({ id: 'breakout', kicker: 'Breakout', headline: breakout.title.replace(/^Breakout watch:\s*/, ''), body: breakout.body, tags: [], accent: '#22e0d0' });
+
+  // 9) Marquee fixtures still to come.
+  for (const c of criticalMatches(2)) {
+    if (usedMatch.has(c.matchId)) continue;
+    const m = getMatch(c.matchId);
+    if (!m) continue;
+    const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
+    if (!h || !a) continue;
+    usedMatch.add(c.matchId);
+    cards.push({
+      id: `next-${c.matchId}`,
+      kicker: 'Next Up',
+      headline: `${h.name} v ${a.name}`,
+      body: c.blurb || c.headline,
+      tags: [c.headline].filter(Boolean),
+      accent: '#1fe5c4',
+    });
+  }
+
+  return cards.filter((c) => c.body && c.body.trim().length > 0);
+}
+
 /**
  * Upgrade a structured payload to Claude-authored prose when an API key is set.
  * Returns the deterministic fallback otherwise. (Network call intentionally

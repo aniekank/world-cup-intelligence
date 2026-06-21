@@ -21,7 +21,7 @@ import {
 } from '@/data/store';
 import { engine } from '@/analytics';
 import { rankPlayers, rankTeams } from '@/ai/query/resolver';
-import { generateInsights, generateDailyBriefing, generateMatchSummary, storylines } from '@/ai/narratives';
+import { generateInsights, generateDailyBriefing, generateBriefingDeck, generateMatchSummary, storylines } from '@/ai/narratives';
 import { criticalMatches, matchPreview } from '@/ai/previews';
 import type { Team, TeamView, Match } from '@/domain/types';
 
@@ -211,6 +211,7 @@ export function homeData() {
   return {
     competition: getCompetition(),
     briefing: generateDailyBriefing(),
+    briefingDeck: generateBriefingDeck(),
     criticalMatches: criticalMatchesView(4),
     favorites,
     live,
