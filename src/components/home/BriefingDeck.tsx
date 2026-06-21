@@ -5,12 +5,12 @@ import { Brain, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import type { BriefingCard } from '@/ai/narratives';
 
-const ROTATE_MS = 15_000;
+const ROTATE_MS = 8_000;
 
 /**
  * The home hero, as a rotating deck. Cycles through deep stories — title race,
  * live recaps, recent results, golden boot, the meanest defense, marquee
- * fixtures — one every 15s, with a progress bar, dot nav, prev/next, hover-pause
+ * fixtures — one every 8s, with a progress bar, dot nav, prev/next, hover-pause
  * and a play/pause toggle. Auto-rotation is disabled under reduced-motion; the
  * controls still work. Falls back to a single static card when only one exists.
  */
