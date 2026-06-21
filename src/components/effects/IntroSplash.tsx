@@ -62,11 +62,13 @@ export function IntroSplash() {
           animation:wciFlash 2.8s ease forwards;}
         .wci-ball{position:absolute;left:50%;top:50%;width:15vmin;height:15vmin;will-change:transform,opacity;
           clip-path:circle(39% at 50% 50%);
-          animation:wciBallMove 2.8s cubic-bezier(.5,.02,.62,1) forwards, wciBallIn 2.8s ease forwards;}
-        .wci-ball.lead{z-index:9;filter:drop-shadow(0 0 34px rgba(157,61,240,.65));}
-        .wci-ball.t1{z-index:8;opacity:.55;filter:blur(5px);animation:wciBallMove 2.8s cubic-bezier(.5,.02,.62,1) 80ms both;}
-        .wci-ball.t2{z-index:7;opacity:.36;filter:blur(11px);animation:wciBallMove 2.8s cubic-bezier(.5,.02,.62,1) 175ms both;}
-        .wci-ball.t3{z-index:6;opacity:.20;filter:blur(18px);animation:wciBallMove 2.8s cubic-bezier(.5,.02,.62,1) 285ms both;}
+          animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) forwards, wciBallIn 2.8s ease forwards;}
+        .wci-ball.lead{z-index:11;filter:drop-shadow(0 0 30px rgba(157,61,240,.6));}
+        .wci-ball.t1{z-index:10;opacity:.66;filter:blur(3px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 55ms both;}
+        .wci-ball.t2{z-index:9;opacity:.54;filter:blur(5px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 120ms both;}
+        .wci-ball.t3{z-index:8;opacity:.43;filter:blur(8px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 195ms both;}
+        .wci-ball.t4{z-index:7;opacity:.32;filter:blur(11px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 280ms both;}
+        .wci-ball.t5{z-index:6;opacity:.22;filter:blur(15px);animation:wciBallMove 2.8s cubic-bezier(.42,.05,.55,1) 375ms both;}
         @keyframes wciFade{0%,93%{opacity:1}100%{opacity:0;visibility:hidden}}
         @keyframes wciShake{0%,79%{transform:translate(0,0)}
           81%{transform:translate(-15px,11px)}83%{transform:translate(14px,-13px)}85%{transform:translate(-12px,9px)}
@@ -86,7 +88,7 @@ export function IntroSplash() {
           46%{transform:translate(-50%,-50%) translate(-12vw,10vh) scale(1.2) rotate(320deg)}  /* low, off to his side */
           74%{transform:translate(-50%,-50%) translate(-7vw,2vh) scale(4.0) rotate(620deg)}     /* rising past his shoulder */
           100%{transform:translate(-50%,-50%) translate(0,-1vh) scale(17) rotate(980deg)}}      /* at the camera, fills screen */
-        @media (prefers-reduced-motion: reduce){.wci-splash{animation:wciFade .4s forwards}.wci-ball,.wci-striker,.wci-speed,.wci-flash,.wci-curtain{animation:none}.wci-ball.t1,.wci-ball.t2,.wci-ball.t3{display:none}}
+        @media (prefers-reduced-motion: reduce){.wci-splash{animation:wciFade .4s forwards}.wci-ball,.wci-striker,.wci-speed,.wci-flash,.wci-curtain{animation:none}.wci-ball.t1,.wci-ball.t2,.wci-ball.t3,.wci-ball.t4,.wci-ball.t5{display:none}}
       `}</style>
 
       <div className="wci-speed" />
@@ -106,6 +108,10 @@ export function IntroSplash() {
       <div className="wci-flash" />
 
       {/* Purple ball off the boot, straight at the camera — blurred trail ghosts behind a sharp lead */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="wci-ball t5" src="/intro/ball.webp" alt="" aria-hidden="true" decoding="async" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="wci-ball t4" src="/intro/ball.webp" alt="" aria-hidden="true" decoding="async" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className="wci-ball t3" src="/intro/ball.webp" alt="" aria-hidden="true" decoding="async" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
