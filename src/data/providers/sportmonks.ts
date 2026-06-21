@@ -138,6 +138,10 @@ async function attachTvListings(matches: Match[], apiKey: string): Promise<void>
   if (!countries.size) return;
   const byMatch = new Map(matches.map((m) => [m.id, m]));
 
+  // Pass 1: collect each fixture's per-country broadcasters, and tally how many
+  // fixtures each (country, station) pair appears on across the whole tournament.
+  const perFixture = new Map<string, Map<number, Map<string, TvBroadcaster>>>(); // matchId → cid → name → station
+  const coverage = new Map<number, Map<string, { station: TvBroadcaster; fixtures: number }>>(); // cid → name → tally
   for (let page = 1; page <= 6; page++) {
     const res = await fetch(
       `${BASE}/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=tvstations.tvstation&per_page=50&page=${page}`,
@@ -155,23 +159,58 @@ async function attachTvListings(matches: Match[], apiKey: string): Promise<void>
       for (const t of fx.tvstations) {
         const name = t.tvstation?.name?.trim();
         if (!name || t.country_id == null) continue;
+        const station: TvBroadcaster = { name, logo: t.tvstation?.image_path ?? '', url: t.tvstation?.url ?? '' };
         const g = grouped.get(t.country_id) ?? new Map<string, TvBroadcaster>();
-        if (!g.has(name)) g.set(name, { name, logo: t.tvstation?.image_path ?? '', url: t.tvstation?.url ?? '' });
+        if (!g.has(name)) g.set(name, station);
         grouped.set(t.country_id, g);
       }
-      const listings: MatchTvCountry[] = [];
+      perFixture.set(m.id, grouped);
       for (const [cid, stations] of grouped) {
-        const c = countries.get(cid);
-        if (!c?.iso2) continue;
-        listings.push({
-          code: c.iso2.toUpperCase(), country: c.name, flag: flagEmoji(c.iso2),
-          stations: [...stations.values()].sort((a, b) => a.name.localeCompare(b.name)),
-        });
+        const c = coverage.get(cid) ?? new Map();
+        for (const [name, station] of stations) {
+          const e = c.get(name) ?? { station, fixtures: 0 };
+          e.fixtures++;
+          c.set(name, e);
+        }
+        coverage.set(cid, c);
       }
-      listings.sort((a, b) => a.country.localeCompare(b.country));
-      if (listings.length) m.tvListings = listings;
     }
     if (!j.pagination?.has_more) break;
+  }
+
+  // Per country, the tournament's rights-holders: stations carrying a meaningful
+  // share of fixtures (e.g. FOX/Telemundo for the US). SportMonks only tags the
+  // full broadcast package on a subset of games, so we apply these carriers to
+  // every fixture — they hold the rights to the whole tournament, not one match.
+  const carriers = new Map<number, Map<string, TvBroadcaster>>();
+  for (const [cid, byName] of coverage) {
+    const maxFixtures = Math.max(...[...byName.values()].map((e) => e.fixtures));
+    const threshold = Math.max(2, maxFixtures * 0.25);
+    const set = new Map<string, TvBroadcaster>();
+    for (const [name, e] of byName) if (e.fixtures >= threshold) set.set(name, e.station);
+    carriers.set(cid, set);
+  }
+
+  // Pass 2: each fixture shows its confirmed broadcasters merged with the
+  // country's tournament carriers.
+  for (const m of matches) {
+    const grouped = perFixture.get(m.id);
+    if (!grouped && !carriers.size) continue;
+    const cids = new Set<number>([...(grouped?.keys() ?? []), ...carriers.keys()]);
+    const listings: MatchTvCountry[] = [];
+    for (const cid of cids) {
+      const c = countries.get(cid);
+      if (!c?.iso2) continue;
+      const merged = new Map<string, TvBroadcaster>(grouped?.get(cid) ?? []);
+      for (const [name, st] of carriers.get(cid) ?? []) if (!merged.has(name)) merged.set(name, st);
+      if (!merged.size) continue;
+      listings.push({
+        code: c.iso2.toUpperCase(), country: c.name, flag: flagEmoji(c.iso2),
+        stations: [...merged.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    }
+    listings.sort((a, b) => a.country.localeCompare(b.country));
+    if (listings.length) m.tvListings = listings;
   }
 }
 
