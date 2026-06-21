@@ -84,7 +84,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **Betting Edge guardrails** (WC-022) | Shrunk-EV + min-model-probability so longshot "troll" value bets don't top the list; imminent fixtures surfaced first. |
 | ✅ | **Track record — Phase 1** (FEAT-1) | `/track-record` grades every finished match against the model's pre-match probabilities (predictMatch runs off static ratings, so it's a fair pre-match read): hit rate, multiclass Brier vs a coin-flip baseline, Brier skill, log loss, best-call / biggest-miss highlights, and a per-match graded table. (`src/server/trackRecord.ts`) |
-| 📋 | **Track record — Phase 2: vs the bookies** (FEAT-1b) | The "did it beat the market?" half. Snapshot each fixture's model prob + de-vigged market price *before kickoff* to durable storage (Upstash/Neon, or a committed JSON snapshot via cron), then join results → closing-line value + model-vs-market Brier. Needs an infra choice; the live odds feed only carries upcoming games so it can't be reconstructed after the fact. |
+| 🔌 | **Track record — Phase 2: vs the bookies** (FEAT-1b) | Built + gated, **awaiting Upstash config**. The live refresh snapshots every upcoming fixture's model + de-vigged market price to Upstash Redis (overwriting until kickoff = the closing line); `/track-record` joins finished results → model-vs-market Brier + a "beat the market" count. No-op without `UPSTASH_REDIS_REST_URL`/`TOKEN` (verified). Set those env vars on Render → snapshots accumulate before each kickoff (CLV can't be backfilled). (`src/server/predictionLog.ts`) |
 | 🧊 | **Multi-sport betting product** | Separate odds product for bettors, off the WC critical path. |
 
 ## 8. Live data quality

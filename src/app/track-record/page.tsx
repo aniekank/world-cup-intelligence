@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { trackRecord, type TrackRow } from '@/server/trackRecord';
-import { PageHeader, Panel, Stat, Table, Th, Td } from '@/components/ui';
+import { trackRecord, marketComparison, type TrackRow } from '@/server/trackRecord';
+import { PageHeader, Panel, Stat, Table, Th, Td, Badge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { pct } from '@/lib/format';
 
@@ -18,8 +18,9 @@ function highlight(r: TrackRow, kind: 'best' | 'miss') {
     : `Model gave ${what} just ${pct(r.probs[o])} — it happened (${r.home.code} ${r.score} ${r.away.code}).`;
 }
 
-export default function TrackRecordPage() {
+export default async function TrackRecordPage() {
   const tr = trackRecord();
+  const mc = await marketComparison();
 
   if (tr.n === 0) {
     return (
@@ -58,6 +59,28 @@ export default function TrackRecordPage() {
             </Panel>
           )}
         </div>
+      )}
+
+      {mc.configured && mc.n > 0 && (
+        <Panel title="Model vs the bookies" subtitle={`Closing-line value · ${mc.n} graded fixture${mc.n === 1 ? '' : 's'}`}>
+          <div className="mb-3 grid grid-cols-3 gap-3">
+            <Stat label="Model Brier" value={mc.modelBrier.toFixed(3)} accent={mc.modelBrier < mc.marketBrier ? '#1fe5c4' : undefined} />
+            <Stat label="Market Brier" value={mc.marketBrier.toFixed(3)} />
+            <Stat label="Beat the market" value={`${mc.modelBeats}/${mc.n}`} sub={`${Math.round((mc.modelBeats / mc.n) * 100)}%`} />
+          </div>
+          <p className="text-sm leading-relaxed text-terminal-text">
+            {mc.modelBrier < mc.marketBrier
+              ? `The model is sharper than the closing line so far — a lower Brier across ${mc.n} graded ${mc.n === 1 ? 'fixture' : 'fixtures'}. Beating the closing line is the real test, so treat a small sample with caution.`
+              : `The closing line is sharper than the model so far — which is the usual outcome; the market is hard to beat. A positive model edge most often means the model is wrong.`}
+          </p>
+        </Panel>
+      )}
+      {mc.configured && mc.n === 0 && (
+        <Panel title="Model vs the bookies" subtitle="Closing-line value">
+          <p className="py-3 text-sm text-terminal-muted">
+            <Badge tone="accent">Live</Badge> Capturing pre-kickoff snapshots — the market scorecard fills in once snapshotted fixtures finish.
+          </p>
+        </Panel>
       )}
 
       <Panel title="Every result, graded" subtitle="Model probabilities vs what happened · bold = model's pick" bodyClassName="p-0">
@@ -102,9 +125,11 @@ export default function TrackRecordPage() {
         </Table>
       </Panel>
 
-      <p className="text-xs leading-relaxed text-terminal-muted">
-        This grades the model against results only. The head-to-head versus bookmaker closing lines — &ldquo;did it beat the market?&rdquo; — needs each fixture&rsquo;s pre-match price stored before kickoff (the live odds feed only carries upcoming games), which is the next phase.
-      </p>
+      {!mc.configured && (
+        <p className="text-xs leading-relaxed text-terminal-muted">
+          The head-to-head versus bookmaker closing lines (&ldquo;did it beat the market?&rdquo;) captures each fixture&rsquo;s pre-kickoff price to durable storage. Set <code className="rounded bg-terminal-panel px-1">UPSTASH_REDIS_REST_URL</code> and <code className="rounded bg-terminal-panel px-1">UPSTASH_REDIS_REST_TOKEN</code> to enable it; snapshots then accumulate before each kickoff (closing-line value can&rsquo;t be backfilled).
+        </p>
+      )}
     </div>
   );
 }

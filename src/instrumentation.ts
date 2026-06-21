@@ -36,6 +36,10 @@ export async function register() {
         try {
           const { refreshLiveScores } = await import('@/data/loadTournament');
           await refreshLiveScores();
+          // Capture closing-line snapshots for Track Record Phase 2 (self-gated:
+          // no-op unless Upstash is configured; internally throttled to ~18 min).
+          const { snapshotUpcoming } = await import('@/server/predictionLog');
+          await snapshotUpcoming();
         } catch (err) {
           console.error('[data] Live refresh failed:', err);
         }
