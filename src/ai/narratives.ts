@@ -263,13 +263,16 @@ function phaseLabel(scheduled: Match[]): string {
 export function generateDailyBriefing(): { headline: string; body: string; bullets: string[] } {
   const eng = engine();
   const all = getMatches();
+  const teamMap = new Map(getTeams().map((t) => [t.id, t]));
   const live = all.filter((m) => m.status === 'LIVE' || m.status === 'HALFTIME');
   const scheduled = all.filter((m) => m.status === 'SCHEDULED');
   const finished = all.filter((m) => m.status === 'FINISHED');
-  const fav = getTeams()
+
+  const ranked = getTeams()
     .map((t) => ({ t, f: eng.forecasts.get(t.id) }))
     .filter((x): x is { t: (typeof x)['t']; f: NonNullable<(typeof x)['f']> } => Boolean(x.f))
-    .sort((a, b) => b.f.winTitle - a.f.winTitle)[0];
+    .sort((a, b) => b.f.winTitle - a.f.winTitle);
+  const fav = ranked[0];
 
   // No forecasts yet (data still loading) — return a safe, content-free briefing.
   if (!fav) {
@@ -281,41 +284,124 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
   }
 
   const phase = phaseLabel(scheduled);
-  const top = criticalMatches(1)[0];
-  const tm = top ? getMatch(top.matchId) : null;
-  const th = tm ? getTeam(tm.homeTeamId) : null;
-  const ta = tm ? getTeam(tm.awayTeamId) : null;
-  const marquee = top && th && ta ? { teams: `${th.name} v ${ta.name}`, headline: top.headline, blurb: top.blurb } : null;
+
+  // ── Per-team tallies from finished matches (powers result-based stories) ──
+  type Tally = { gf: number; ga: number; pld: number; cs: number };
+  const tally = new Map<string, Tally>();
+  const bump = (id: string): Tally => {
+    let v = tally.get(id);
+    if (!v) { v = { gf: 0, ga: 0, pld: 0, cs: 0 }; tally.set(id, v); }
+    return v;
+  };
+  let rout: { margin: number; label: string } | null = null;
+  let goalFest: { total: number; label: string } | null = null;
+  for (const m of finished) {
+    const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
+    if (!h || !a) continue;
+    const th = bump(h.id), ta = bump(a.id);
+    th.gf += m.homeScore; th.ga += m.awayScore; th.pld++; if (m.awayScore === 0) th.cs++;
+    ta.gf += m.awayScore; ta.ga += m.homeScore; ta.pld++; if (m.homeScore === 0) ta.cs++;
+    const margin = Math.abs(m.homeScore - m.awayScore), total = m.homeScore + m.awayScore;
+    const hi = Math.max(m.homeScore, m.awayScore), lo = Math.min(m.homeScore, m.awayScore);
+    const winner = m.homeScore >= m.awayScore ? h : a, loser = m.homeScore >= m.awayScore ? a : h;
+    if (margin >= 2 && (!rout || margin > rout.margin)) rout = { margin, label: `${winner.name} ${hi}-${lo} ${loser.name}` };
+    if (total >= 4 && (!goalFest || total > goalFest.total)) goalFest = { total, label: `${h.name} ${m.homeScore}-${m.awayScore} ${a.name}` };
+  }
+
+  // ── Story pool: each candidate carries a weight, a badge tag, and an
+  // optional prose sentence for the body. The richest signals score highest. ──
+  type Story = { w: number; tag: string; sentence?: string };
+  const pool: Story[] = [];
+  const add = (w: number, tag: string, sentence?: string) => pool.push({ w, tag, sentence });
+
+  const second = ranked[1];
+  add(100, `${fav.t.name} — ${pct(fav.f.winTitle)} to win it`,
+    `${fav.t.name} remain the model's favourites at ${pct(fav.f.winTitle)} to lift the trophy${second ? `, ${pct(fav.f.winTitle - second.f.winTitle)} clear of ${second.t.name}` : ''}.`);
+
+  if (live.length) add(125, `${live.length} live now`, `${live.length} ${live.length === 1 ? 'match is' : 'matches are'} under way right now.`);
 
   const insights = generateInsights();
-  const upset = insights.find((i) => i.kind === 'upset');
-  const mover = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum)[0];
-  const moverTeam = mover ? getTeam(mover.teamId) : null;
+  insights.filter((i) => i.kind === 'upset').slice(0, 2).forEach((u, i) =>
+    add(i === 0 ? 95 : 68, u.title.replace(/^Upset:\s*/, ''), i === 0 ? `${u.title}.` : undefined));
+  const over = insights.find((i) => i.kind === 'overperformer');
+  if (over) add(72, over.title, `${over.title}, climbing the model's board against the pre-tournament market.`);
+  const breakout = insights.find((i) => i.kind === 'breakout');
+  if (breakout) add(54, breakout.title.replace(/^Breakout watch:\s*/, 'Breakout: '));
+
+  const mom = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum);
+  const riser = mom[0], faller = mom[mom.length - 1];
+  if (riser && riser.momentum > 0) {
+    const t = teamMap.get(riser.teamId);
+    if (t) add(76, `Momentum: ${t.name} surging (+${riser.momentum})`,
+      `${t.name} carry the tournament's hottest form — +${riser.momentum} momentum, #${riser.rank} in the power rankings.`);
+  }
+  if (faller && faller.momentum < 0) {
+    const t = teamMap.get(faller.teamId);
+    if (t) add(50, `${t.name} cooling off (${faller.momentum})`);
+  }
+
   const gb = eng.goldenBoot[0];
   const gbName = gb ? getPlayerViews().find((p) => p.id === gb.playerId)?.name : null;
+  if (gb && gbName) add(80, `Golden Boot: ${gbName} on ${gb.currentGoals}`,
+    `${gbName} leads the Golden Boot race on ${gb.currentGoals}, projected to finish on ${gb.projectedGoals}.`);
+  else add(38, 'Golden Boot race wide open');
 
+  if (rout) add(78, `Biggest rout: ${rout.label}`, `The most emphatic result so far: ${rout.label}.`);
+  if (goalFest && (!rout || goalFest.label !== rout.label)) add(56, `Goal fest: ${goalFest.label} (${goalFest.total})`);
+
+  const tallies = [...tally.entries()]
+    .map(([id, v]) => ({ t: teamMap.get(id), ...v }))
+    .filter((x): x is { t: NonNullable<typeof x.t> } & Tally => Boolean(x.t) && x.pld > 0);
+  const wall = [...tallies].filter((x) => x.cs > 0).sort((a, b) => b.cs - a.cs || a.ga - b.ga)[0];
+  if (wall && wall.cs >= 2) add(52, `${wall.t.name}: ${wall.cs} clean sheets`);
+  const sharp = [...tallies].sort((a, b) => b.gf - a.gf)[0];
+  if (sharp && sharp.gf >= 5) add(48, `${sharp.t.name} top the scoring (${sharp.gf} goals)`);
+
+  // A pre-tournament heavyweight now at real risk of an early exit.
+  const brink = ranked.find((x) => x.f.reachR16 < 0.5 && x.f.titleProbabilityDelta < -0.01 && x.f.winTitle > 0.01);
+  if (brink) add(70, `${brink.t.name} on the brink`,
+    `${brink.t.name} sit on a knife edge — into the last 16 in only ${pct(brink.f.reachR16)} of simulations.`);
+
+  // Marquee fixtures still to come.
+  const crit = criticalMatches(2);
+  let marqueeTeams: string | null = null;
+  crit.forEach((c, i) => {
+    const m = getMatch(c.matchId);
+    const h = m ? teamMap.get(m.homeTeamId) : null, a = m ? teamMap.get(m.awayTeamId) : null;
+    if (!h || !a) return;
+    if (i === 0) marqueeTeams = `${h.name} v ${a.name}`;
+    add(i === 0 ? 85 : 60, `Next up: ${h.name} v ${a.name}`,
+      i === 0 ? `Looking ahead, ${h.name} v ${a.name} is the pick of what's to come — ${c.headline}.` : undefined);
+  });
+
+  add(28, `${finished.length} played • ${live.length} live • ${scheduled.length} to come`);
+
+  // ── Order: anchor the top stories, rotate the rest daily so the briefing
+  // feels fresh even when results haven't changed since the last visit. ──
+  pool.sort((a, b) => b.w - a.w);
+  const daySeed = Math.floor(Date.now() / 86_400_000);
+  const anchors = pool.slice(0, 3);
+  const rest = pool.slice(3);
+  const offset = rest.length ? daySeed % rest.length : 0;
+  const rotated = [...rest.slice(offset), ...rest.slice(0, offset)];
+  const ordered = [...anchors, ...rotated];
+
+  const topUpset = insights.find((i) => i.kind === 'upset' && i.severity === 'high');
   const headline = live.length
-    ? `${live.length} live now — ${fav.t.name} lead the race through ${phase}`
-    : marquee
-      ? `${marquee.teams} headlines ${phase}`
-      : `${fav.t.name} lead the title race through ${phase}`;
+    ? `${live.length} live now — ${fav.t.name} lead through ${phase}`
+    : topUpset
+      ? topUpset.title
+      : marqueeTeams
+        ? `${marqueeTeams} headlines ${phase}`
+        : `${fav.t.name} lead the title race through ${phase}`;
 
-  const body = [
-    `${fav.t.name} remain the model's favourites at ${pct(fav.f.winTitle)} to lift the trophy.`,
-    live.length ? `${live.length} ${live.length === 1 ? 'match is' : 'matches are'} live right now.` : null,
-    marquee ? marquee.blurb : null,
-    upset ? `${upset.title}.` : null,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const body = ordered.filter((s) => s.sentence).slice(0, 4).map((s) => s.sentence).join(' ');
 
-  const bullets = [
-    `${fav.t.name} — ${pct(fav.f.winTitle)} to win it across ${(8000).toLocaleString()} simulations`,
-    gbName ? `Golden Boot: ${gbName} leads on ${gb!.currentGoals} (proj. ${gb!.projectedGoals})` : 'Golden Boot race wide open',
-    marquee ? `Biggest fixture next: ${marquee.teams} — ${marquee.headline.toLowerCase()}` : null,
-    moverTeam && mover && mover.momentum > 0 ? `Momentum: ${moverTeam.name} surging (+${mover.momentum})` : null,
-    `${finished.length} played • ${live.length} live • ${scheduled.length} to come`,
-  ].filter((b): b is string => Boolean(b));
+  const bullets: string[] = [];
+  for (const s of ordered) {
+    if (!bullets.includes(s.tag)) bullets.push(s.tag);
+    if (bullets.length >= 7) break;
+  }
 
   return { headline, body, bullets };
 }
