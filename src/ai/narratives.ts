@@ -19,12 +19,83 @@ import type { Insight } from '@/domain/types';
 
 const NOW = '2026-06-13T12:00:00.000Z';
 
+// Phrasing pools so insights of the same kind don't read identically (no more
+// three teams all "defying the odds"). Picked by index within each kind, so
+// every card on a render gets distinct wording. Numbers/claims are unchanged —
+// only the words vary.
+const pick = <T>(arr: T[], i: number): T => arr[((i % arr.length) + arr.length) % arr.length]!;
+
+const upsetTitles = (w: string, l: string) => [
+  `Upset: ${w} stun ${l}`,
+  `Shock result: ${w} topple ${l}`,
+  `Giant-killing: ${w} take down ${l}`,
+  `${w} pull off the upset against ${l}`,
+  `Against the odds: ${w} beat ${l}`,
+];
+const upsetShock = [
+  "one of the tournament's biggest shocks",
+  "a result almost no model saw coming",
+  "one of the standout upsets of the round",
+  "a genuine bracket-buster",
+];
+const overTitles = (t: string) => [
+  `${t} defying the odds`,
+  `The market underrated ${t}`,
+  `${t} are punching above their seeding`,
+  `${t} keep outrunning the forecast`,
+  `${t} are this tournament's overachievers`,
+  `${t} have outgrown their pre-tournament price`,
+];
+const overOpeners = (t: string, win: string, delta: string) => [
+  `${t}'s title probability has climbed to ${win}, up ${delta} on the pre-tournament market.`,
+  `The model now gives ${t} ${win} to win it — ${delta} above the opening line.`,
+  `Longer odds before kickoff, ${t} have surged to ${win} in the model, a ${delta} jump.`,
+  `${t} have outrun their billing: ${win} to lift the trophy, ${delta} clear of the market.`,
+];
+const overTail = (sf: string) => [
+  `They reach the semi-finals in ${sf} of simulations.`,
+  `The simulations send them to the last four ${sf} of the time.`,
+  `A semi-final place lands in ${sf} of runs.`,
+];
+const breakoutTitles = (p: string) => [
+  `Breakout watch: ${p}`,
+  `${p} is announcing himself`,
+  `Rising fast: ${p}`,
+  `${p} is breaking out`,
+  `One to watch: ${p}`,
+];
+const breakoutOpeners = (p: string, age: number) => [
+  `At ${age}, ${p}`,
+  `Still only ${age}, ${p}`,
+  `${p}, ${age},`,
+  `At just ${age}, ${p}`,
+];
+const formTitles = (t: string) => [
+  `${t} are surging`,
+  `Momentum is with ${t}`,
+  `${t} have the wind behind them`,
+  `${t} are peaking at the right time`,
+  `${t} are trending up`,
+];
+const formOpeners = (t: string, m: number) => [
+  `${t} carry the tournament's hottest momentum (+${m})`,
+  `No side is climbing faster than ${t} (+${m} momentum)`,
+  `${t} are riding a wave (+${m} momentum)`,
+  `Form is firmly with ${t} (+${m})`,
+];
+const bootTitles = (v: string) => [
+  `${v} leads the Golden Boot race`,
+  `${v} is out in front for the Golden Boot`,
+  `The Golden Boot runs through ${v}`,
+];
+
 export function generateInsights(): Insight[] {
   const eng = engine();
   const insights: Insight[] = [];
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
 
   // 1. Upset detection — finished matches where a much weaker side won
+  let upsetIdx = 0;
   for (const m of getMatches().filter((x) => x.status === 'FINISHED')) {
     const home = teamMap.get(m.homeTeamId);
     const away = teamMap.get(m.awayTeamId);
@@ -40,8 +111,8 @@ export function generateInsights(): Insight[] {
         id: `upset-${m.id}`,
         kind: 'upset',
         severity: Math.abs(eloGap) > 220 ? 'high' : 'medium',
-        title: `Upset: ${winner.name} stun ${loser.name}`,
-        body: `${winner.name} beat ${loser.name} ${m.homeScore}-${m.awayScore} despite a ${Math.abs(Math.round(eloGap))}-point ELO deficit — one of the tournament's biggest shocks. xG told a ${
+        title: pick(upsetTitles(winner.name, loser.name), upsetIdx),
+        body: `${winner.name} beat ${loser.name} ${m.homeScore}-${m.awayScore} despite a ${Math.abs(Math.round(eloGap))}-point ELO deficit — ${pick(upsetShock, upsetIdx)}. xG told a ${
           (m.teamStats[winner.id]?.xG ?? 0) > (m.teamStats[loser.id]?.xG ?? 0) ? 'deserved' : 'smash-and-grab'
         } story.`,
         entityType: 'match',
@@ -53,6 +124,7 @@ export function generateInsights(): Insight[] {
         ],
         createdAt: NOW,
       });
+      upsetIdx++;
     }
   }
 
@@ -62,13 +134,13 @@ export function generateInsights(): Insight[] {
     .filter((x) => x.f && x.f.titleProbabilityDelta > 0.01)
     .sort((a, b) => b.f.titleProbabilityDelta - a.f.titleProbabilityDelta)
     .slice(0, 3);
-  over.forEach((x) => {
+  over.forEach((x, i) => {
     insights.push({
       id: `over-${x.t.id}`,
       kind: 'overperformer',
       severity: 'medium',
-      title: `${x.t.name} defying the odds`,
-      body: `${x.t.name}'s title probability has climbed to ${pct(x.f.winTitle)}, up ${pct(x.f.titleProbabilityDelta)} on the pre-tournament market. They reach the semi-finals in ${pct(x.f.reachSF)} of simulations.`,
+      title: pick(overTitles(x.t.name), i),
+      body: `${pick(overOpeners(x.t.name, pct(x.f.winTitle), pct(x.f.titleProbabilityDelta)), i)} ${pick(overTail(pct(x.f.reachSF)), i)}`,
       entityType: 'team',
       entityId: x.t.id,
       metrics: [
@@ -86,13 +158,13 @@ export function generateInsights(): Insight[] {
     .map((p) => ({ p, score: p.stats.goals * 3 + p.stats.assists * 2 + p.stats.xG + p.stats.xA }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
-  breakout.forEach((x) => {
+  breakout.forEach((x, i) => {
     insights.push({
       id: `breakout-${x.p.id}`,
       kind: 'breakout',
       severity: 'low',
-      title: `Breakout watch: ${x.p.name}`,
-      body: `At ${x.p.age}, ${x.p.name} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name} on a €${x.p.marketValueEur}m valuation — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile of forwards for shot quality.`,
+      title: pick(breakoutTitles(x.p.name), i),
+      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name} on a €${x.p.marketValueEur}m valuation — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality.`,
       entityType: 'player',
       entityId: x.p.id,
       metrics: [
@@ -106,15 +178,15 @@ export function generateInsights(): Insight[] {
 
   // 4. Form / momentum movers
   const movers = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum).slice(0, 2);
-  movers.forEach((r) => {
+  movers.forEach((r, i) => {
     const t = getTeam(r.teamId);
     if (!t) return; // unresolved team — skip
     insights.push({
       id: `form-${r.teamId}`,
       kind: 'form',
       severity: 'low',
-      title: `${t.name} are surging`,
-      body: `${t.name} carry the tournament's hottest momentum (+${r.momentum}), powered by an offense rated ${r.offenseRating}/100. They sit #${r.rank} in the power rankings.`,
+      title: pick(formTitles(t.name), i),
+      body: `${pick(formOpeners(t.name, r.momentum), i)}, powered by an offense rated ${r.offenseRating}/100. They sit #${r.rank} in the power rankings.`,
       entityType: 'team',
       entityId: r.teamId,
       metrics: [
@@ -135,7 +207,7 @@ export function generateInsights(): Insight[] {
         id: `gb-${v.id}`,
         kind: 'milestone',
         severity: 'medium',
-        title: `${v.name} leads the Golden Boot race`,
+        title: pick(bootTitles(v.name), v.name.length),
         body: `${v.name} tops the scoring charts with ${gb.currentGoals} goals and is projected to finish on ${gb.projectedGoals}, with a ${pct(gb.winProbability)} chance of claiming the Golden Boot.`,
         entityType: 'player',
         entityId: v.id,
