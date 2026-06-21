@@ -237,8 +237,15 @@ function percentileRank(sorted: number[], value: number): number {
 export function getPlayerView(id: ID): PlayerView | undefined {
   const player = getPlayer(id);
   if (!player) return undefined;
+  // A player whose team hasn't resolved yet (snapshot mid-swap / cross-index
+  // staleness) still gets a view, with a minimal fallback team — so the list
+  // omits nobody and, crucially, the player detail page never 404s on a real
+  // player (the real team fills back in on the next render). Previously this
+  // returned undefined, which became notFound() → an empty page on /players/[id].
   const team = getTeam(player.teamId);
-  if (!team) return undefined; // team not resolved (e.g. data mid-load) — omit rather than crash
+  const teamView = team
+    ? { id: team.id, name: team.name, code: team.code, flag: team.flag }
+    : { id: player.teamId, name: player.teamId.toUpperCase(), code: player.teamId.slice(0, 3).toUpperCase(), flag: '🏳️' };
   const stats = getPlayerStats(id) ?? emptyStatsFor(id);
   const p90 = per90(stats);
   const table = percentileTables().get(player.position);
@@ -256,7 +263,7 @@ export function getPlayerView(id: ID): PlayerView | undefined {
   }
   return {
     ...player,
-    team: { id: team.id, name: team.name, code: team.code, flag: team.flag },
+    team: teamView,
     stats,
     per90: p90,
     percentiles,

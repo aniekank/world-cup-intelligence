@@ -128,9 +128,14 @@ export default function TeamPage({ params }: { params: { id: string } }) {
         </Panel>
 
         <Panel title="Fixtures" subtitle="Results & upcoming" bodyClassName="space-y-0.5">
-          {t.recentMatches.map((m) => (
-            <MiniMatchRow key={m.id} match={m} home={getTeam(m.homeTeamId)!} away={getTeam(m.awayTeamId)!} />
-          ))}
+          {t.recentMatches.map((m) => {
+            // Skip a row rather than crash if an opponent is momentarily
+            // unresolved during a live snapshot swap. (WC-025)
+            const home = getTeam(m.homeTeamId);
+            const away = getTeam(m.awayTeamId);
+            if (!home || !away) return null;
+            return <MiniMatchRow key={m.id} match={m} home={home} away={away} />;
+          })}
         </Panel>
       </div>
 

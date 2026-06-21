@@ -21,7 +21,16 @@ const POS_FULL: Record<string, string> = { GK: 'Goalkeeper', DF: 'Defender', MF:
 export default function PlayerPage({ params }: { params: { id: string } }) {
   const p = playerDetail(params.id);
   if (!p) notFound();
-  const team = getTeam(p.teamId)!;
+  // Never crash if the full team record is momentarily unresolved (snapshot
+  // mid-swap) — fall back to the lightweight team carried on the player view,
+  // plus a neutral accent. The page only needs id/name/code/color. (WC-025)
+  const fullTeam = getTeam(p.teamId);
+  const team = {
+    id: p.teamId,
+    name: fullTeam?.name ?? p.team.name,
+    code: fullTeam?.code ?? p.team.code,
+    primaryColor: fullTeam?.primaryColor ?? '#1fe5c4',
+  };
   const scouting = generateScoutingReport(p.id);
   const shots = getMatches().flatMap((m) => m.shots).filter((s) => s.playerId === p.id);
 
