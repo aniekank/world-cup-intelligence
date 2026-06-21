@@ -101,7 +101,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **Defense showcase** (`/defense`) | "The Wall" — Meanest Defenses (goals/xG conceded + clean sheets), Golden Glove (saves / clean sheets / save %), Top Ball-Winners (tackles+interceptions+duels+pressures per 90). xGA and pressures hide gracefully where the source lacks them. (`src/server/defense.ts`) |
 | ✅ | **Defensive insight + briefing beat** (DEF-1) | A `wall` insight ("X has conceded just N — the meanest defense") in AI Insights, plus a meanest-defense beat in the daily briefing. Works on every source (results-based). |
-| ✅ | **Tactical identity profiles** (TAC-1) | "Tactical Identity" panel on team pages — a derived playing-style label (Dominant high press / High press / Patient possession / Deep block / Counter / Balanced) from possession, press index (PPDA), field tilt and pass accuracy. Rich in seeded/historical; **hidden on live** (team tactical stats are empty there), no fabrication. No formations/spatial maps — the feed has no coordinates. (`src/server/tactics.ts`) |
+| ✅ | **Tactical identity profiles** (TAC-1) | "Tactical Identity" panel on team pages — a derived playing-style label from possession, press index (PPDA), field tilt and pass accuracy (seeded/historical). On **live**, a coarser **build-up read** from player passing (pass accuracy + final-third passes), honestly labelled, since the feed has no team possession/press. Plus a **"Styles" clash** line on match pages ("high press vs deep block", or "a tactical mirror"). No formations/spatial maps — the feed has no coordinates. (`src/server/tactics.ts`) |
 
 ---
 

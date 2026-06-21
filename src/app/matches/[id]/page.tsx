@@ -9,6 +9,7 @@ import { TeamCrest } from '@/components/brand/TeamCrest';
 import { stageName } from '@/lib/format';
 import { LocalTime } from '@/components/LocalTime';
 import { WhereToWatch } from '@/components/WhereToWatch';
+import { stylesClash } from '@/server/tactics';
 import type { MatchEvent } from '@/domain/types';
 
 export function generateMetadata({ params }: { params: { id: string } }): Metadata {
@@ -32,6 +33,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
   const d = matchDetail(params.id);
   if (!d) notFound();
   const { match, home, away, prediction, summary, preview } = d;
+  const clash = stylesClash(home.id, away.id);
   const tagTone: Record<string, string> = {
     hot: 'border-accent-red/40 text-accent-red',
     high: 'border-accent-amber/40 text-accent-amber',
@@ -124,6 +126,21 @@ export default function MatchPage({ params }: { params: { id: string } }) {
       ) : (
         <Panel title="Match Report" subtitle="AI-generated">
           <p className="text-sm leading-relaxed text-terminal-text">{summary}</p>
+        </Panel>
+      )}
+
+      {clash && (
+        <Panel title="Styles" subtitle="Tactical identities">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5">
+              <TeamCrest code={home.code} color={home.primaryColor} size={20} /> <Badge tone="violet">{clash.home}</Badge>
+            </span>
+            <span className="text-xs text-terminal-muted">vs</span>
+            <span className="flex items-center gap-1.5">
+              <TeamCrest code={away.code} color={away.primaryColor} size={20} /> <Badge tone="violet">{clash.away}</Badge>
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-terminal-text">{clash.line}</p>
         </Panel>
       )}
 

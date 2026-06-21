@@ -134,27 +134,35 @@ export default function TeamPage({ params }: { params: { id: string } }) {
         </Panel>
       </div>
 
-      {tactics.available && tactics.metrics && (
-        <Panel title="Tactical Identity" subtitle="Derived playing style · averaged over played matches">
+      {tactics.available && (
+        <Panel title="Tactical Identity" subtitle="Derived playing style · over played matches">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge tone="violet">{tactics.label}</Badge>
             <span className="text-xs uppercase tracking-wide text-terminal-muted">{tactics.tag}</span>
           </div>
           <p className="mb-4 max-w-2xl text-sm leading-relaxed text-terminal-text">{tactics.blurb}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              { label: 'Possession', value: tactics.metrics.possession, suffix: '%' },
-              { label: 'Press intensity', value: tactics.metrics.press, suffix: '' },
-              { label: 'Field tilt', value: tactics.metrics.fieldTilt, suffix: '%' },
-              { label: 'Pass accuracy', value: tactics.metrics.passAccuracy, suffix: '%' },
-            ].map((r) => (
-              <div key={r.label} className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-xs text-terminal-muted">{r.label}</span>
-                <div className="flex-1"><MetricBar value={r.value} /></div>
-                <span className="tnum w-10 text-right text-sm text-terminal-bright">{Math.round(r.value)}{r.suffix}</span>
-              </div>
-            ))}
-          </div>
+          {tactics.bars && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {tactics.bars.map((r) => (
+                <div key={r.label} className="flex items-center gap-3">
+                  <span className="w-28 shrink-0 text-xs text-terminal-muted">{r.label}</span>
+                  <div className="flex-1"><MetricBar value={r.value} /></div>
+                  <span className="tnum w-10 text-right text-sm text-terminal-bright">{Math.round(r.value)}{r.suffix ?? ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {tactics.stats && (
+            <div className="grid grid-cols-3 gap-3">
+              {tactics.stats.map((s) => (
+                <div key={s.label} className="rounded-lg border border-terminal-border bg-terminal-panel/40 p-3 text-center">
+                  <div className="tnum text-lg font-bold text-terminal-bright">{s.value}</div>
+                  <div className="mt-0.5 text-[11px] text-terminal-muted">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tactics.note && <p className="mt-3 text-[11px] leading-relaxed text-terminal-muted">{tactics.note}</p>}
         </Panel>
       )}
 
