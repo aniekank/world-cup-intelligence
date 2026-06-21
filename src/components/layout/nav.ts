@@ -5,6 +5,7 @@ import {
   Radio,
   CalendarDays,
   Shield,
+  ShieldHalf,
   Users,
   Layers,
   Table2,
@@ -47,6 +48,7 @@ export const NAV: NavItem[] = [
   { label: 'Predictions', href: '/predictions', icon: Sparkles, section: 'analyze' },
   { label: 'Betting Edge', href: '/betting', icon: Coins, section: 'analyze' },
   { label: 'Analytics', href: '/analytics', icon: LineChart, section: 'analyze' },
+  { label: 'Defense', href: '/defense', icon: ShieldHalf, section: 'analyze' },
   { label: 'Card Builder', href: '/compare', icon: LayoutGrid, section: 'analyze' },
   { label: 'Rankings', href: '/rankings', icon: Award, section: 'analyze' },
 

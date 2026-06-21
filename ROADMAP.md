@@ -94,6 +94,15 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Real player head-shots** (IMG-1) | SportMonks `image_path` photos render on player profile / discoveries / storylines, composited over the procedural portrait (which stays the fallback for seeded/historical or a failed load). (`src/components/brand/PlayerPortrait.tsx`) |
 | 📋 | **Advanced metrics graceful-degrade** (WC-016) | xG/xA/progressive passes/pressures read **0** across player pages, standings, analytics, golden boot on live data — the feed lacks them but the UI renders them. Hide/label like WC-023 did for attributes. **Biggest "live looks broken" gap.** See `BUGS.md`. |
 
+## 9. Defense & tactics
+*Added 2026-06-21 — the app was attack-skewed; rebalancing toward defense and style.*
+
+| Status | Feature | What it does |
+|--------|---------|--------------|
+| ✅ | **Defense showcase** (`/defense`) | "The Wall" — Meanest Defenses (goals/xG conceded + clean sheets), Golden Glove (saves / clean sheets / save %), Top Ball-Winners (tackles+interceptions+duels+pressures per 90). xGA and pressures hide gracefully where the source lacks them. (`src/server/defense.ts`) |
+| 📋 | **Defensive insight + briefing beat** (DEF-1) | A `wall` insight ("X has conceded just N — the meanest defense") so defense shows up in AI Insights + the daily briefing, not just its own page. |
+| 📋 | **Tactical identity profiles** (TAC-1) | Derive a playing-style label per team from pressing (`ppda`/press-regains), possession, directness (progressive passes/carries) and territory (`fieldTilt`) — e.g. "high press, possession" vs "deep block, counter". Rich in seeded, sparse live (team tactical stats are empty live; lean on player-aggregated pressing). **No formations or spatial maps** — the feed has no coordinates. |
+
 ---
 
 ## Suggested critical path (my read — your browse decides)
