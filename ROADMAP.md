@@ -64,7 +64,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **"Where to watch" panel** | International TV listings per match from SportMonks (`tvstations`), grouped by country, defaults to the viewer's country with a 100+ country selector; broadcaster logos + links. (`src/components/WhereToWatch.tsx`) |
 | ✅ | **Tournament rights-holder fill** | SportMonks only tags the full broadcast package on a subset of fixtures; we derive each country's rights-holders from the tagged games and apply them to every match, so upcoming games aren't fuboTV-only. |
-| 📋 | **Group channels by network + relabel** (TV-1) | Collapse FOX Network/FS1/FS2/Deportes under one "FOX Sports" group (same for Telemundo), relabel the panel "World Cup broadcasters in [country]", note the exact channel is set near kickoff. **Current live rough edge — the full channel list reads as "every game on every network".** |
+| ✅ | **Group channels by network + relabel** (TV-1) | Channels now collapse into network families (FOX Network/FS1/FS2/Deportes → one "Fox" card with the channel set as a sub-line; same for Telemundo), header relabeled "Broadcasters in [flag] [country]", with a note that the exact channel is confirmed near kickoff. Fixes the "every game on every network" read. (`groupByNetwork` in `src/components/WhereToWatch.tsx`) |
 | 📋 | **Per-game specific channel** (TV-2) | "This match is on FS1" — not in any feed we have (SportMonks attaches the same package to every game). Needs FOX's published schedule (brittle scrape, US-only) or a paid EPG provider. |
 | 🧊 | **Daily TV re-fetch** (TV-3) | Refresh listings ~1×/day so SportMonks additions appear without a redeploy. Low value — carrier-fill already covers the rights-holders. |
 
@@ -108,10 +108,10 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 
 ## Suggested critical path (my read — your browse decides)
 
-1. **TV-1** — closes the rough edge you just flagged; small, high-visibility.
-2. **WC-016** — the biggest "live looks broken" gap; fix it the WC-023 way.
-3. **PERF-1** — makes first visits reliably land on live, not the simulation window.
-4. **FEAT-1 (Phase 1)** — the differentiator this whole run was unblocking.
+1. ~~**TV-1**~~ ✅ — channel grouping shipped; the "every game on every network" read is gone.
+2. ~~**WC-016**~~ ✅ — live xG surfaces now read from player aggregates; shot/pressure-only panels hide when the feed lacks them.
+3. ~~**PERF-1**~~ ✅ — TV enrichment moved off the boot path; first visits land on live faster.
+4. **FEAT-1 (Phase 2)** — flip on once Upstash creds are in Render (Phase 1 model-vs-results scorecard already live).
 
 Everything else (TV-2, club follow-ons, ENH-1, narrative installments) is opportunistic.
 

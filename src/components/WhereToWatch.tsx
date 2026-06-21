@@ -22,10 +22,33 @@ function detectCountry(listings: MatchTvCountry[]): string {
   return listings[0]?.code ?? '';
 }
 
+type Station = MatchTvCountry['stations'][number];
+interface NetGroup { key: string; label: string; logo: string; url: string; channels: Station[] }
+
+// Collapse a country's channels into network families (FOX Network / FS1 / FS2 /
+// FOX Deportes → one "Fox" group) so the panel reads as "which networks carry
+// it", not "this game is on all of them" at once. (TV-1)
+function familyKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().split(/[\s0-9]/).filter(Boolean)[0] ?? name.toLowerCase();
+}
+function groupByNetwork(stations: Station[]): NetGroup[] {
+  const m = new Map<string, NetGroup>();
+  for (const s of stations) {
+    const key = familyKey(s.name);
+    const g = m.get(key);
+    if (g) { g.channels.push(s); if (!g.logo && s.logo) g.logo = s.logo; if (!g.url && s.url) g.url = s.url; }
+    else m.set(key, { key, label: key.charAt(0).toUpperCase() + key.slice(1), logo: s.logo, url: s.url, channels: [s] });
+  }
+  return [...m.values()]
+    .map((g) => (g.channels.length === 1 ? { ...g, label: g.channels[0]!.name } : g))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function WhereToWatch({ listings }: { listings: MatchTvCountry[] }) {
   const [code, setCode] = useState(() => detectCountry(listings));
   if (!listings.length) return null;
   const selected = listings.find((l) => l.code === code) ?? listings[0]!;
+  const groups = groupByNetwork(selected.stations);
 
   return (
     <div>
@@ -48,39 +71,47 @@ export function WhereToWatch({ listings }: { listings: MatchTvCountry[] }) {
       </div>
 
       <div className="mb-2 text-sm font-semibold text-terminal-bright">
-        {selected.flag} {selected.country}
+        Broadcasters in {selected.flag} {selected.country}
       </div>
       <div className="flex flex-wrap gap-2">
-        {selected.stations.map((s) => {
+        {groups.map((g) => {
           const inner = (
             <>
-              {s.logo ? (
+              {g.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={s.logo} alt="" width={18} height={18} className="rounded-sm bg-white/90 object-contain" />
+                <img src={g.logo} alt="" width={18} height={18} className="mt-0.5 shrink-0 rounded-sm bg-white/90 object-contain" />
               ) : null}
-              <span>{s.name}</span>
+              <span className="flex min-w-0 flex-col leading-tight">
+                <span className="font-medium text-terminal-bright">{g.label}</span>
+                {g.channels.length > 1 && (
+                  <span className="text-[11px] text-terminal-muted">{g.channels.map((c) => c.name).join(' · ')}</span>
+                )}
+              </span>
             </>
           );
-          return s.url ? (
+          return g.url ? (
             <a
-              key={s.name}
-              href={s.url}
+              key={g.key}
+              href={g.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-terminal-border bg-terminal-panel/60 px-3 py-2 text-sm text-terminal-bright hover:border-accent/40"
+              className="flex items-start gap-2 rounded-lg border border-terminal-border bg-terminal-panel/60 px-3 py-2 text-sm text-terminal-bright hover:border-accent/40"
             >
               {inner}
             </a>
           ) : (
             <span
-              key={s.name}
-              className="flex items-center gap-2 rounded-lg border border-terminal-border bg-terminal-panel/60 px-3 py-2 text-sm text-terminal-bright"
+              key={g.key}
+              className="flex items-start gap-2 rounded-lg border border-terminal-border bg-terminal-panel/60 px-3 py-2 text-sm text-terminal-bright"
             >
               {inner}
             </span>
           );
         })}
       </div>
+      <p className="mt-3 text-[11px] leading-relaxed text-terminal-muted">
+        Networks that carry the World Cup in this country — for a specific match the exact channel is confirmed closer to kickoff.
+      </p>
     </div>
   );
 }
