@@ -22,6 +22,8 @@ import type {
   PlayerStats,
   Match,
   MatchEvent,
+  MatchTvCountry,
+  TvBroadcaster,
   Group,
   Competition,
   Position,
@@ -98,6 +100,79 @@ async function smList<T>(path: string, apiKey: string, cap = 6): Promise<T[]> {
     if (!r.pagination?.has_more) break;
   }
   return out;
+}
+
+// ── International TV listings ─────────────────────────────────────────────────
+// SportMonks attaches broadcasters to a fixture as (country_id, tvstation{}) rows.
+// We resolve country_id via the core/countries resource and group per country.
+const SM_CORE = 'https://api.sportmonks.com/v3/core';
+
+/** ISO-3166 alpha-2 → flag emoji (regional indicator letters). */
+function flagEmoji(iso2?: string | null): string {
+  if (!iso2 || !/^[A-Za-z]{2}$/.test(iso2)) return '🏳️';
+  return String.fromCodePoint(...[...iso2.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+interface SMCountry { id: number; name: string; iso2: string | null }
+interface SMTvJoin { country_id: number | null; tvstation?: { name?: string; image_path?: string; url?: string } }
+
+/** country_id → { name, iso2 }, from the (cached, ~daily) core/countries list. */
+async function fetchCountryMap(apiKey: string): Promise<Map<number, SMCountry>> {
+  const map = new Map<number, SMCountry>();
+  for (let page = 1; page <= 8; page++) {
+    const res = await fetch(`${SM_CORE}/countries?per_page=50&page=${page}`, {
+      headers: { Authorization: apiKey },
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) break;
+    const j = (await res.json()) as { data?: SMCountry[]; pagination?: { has_more?: boolean } };
+    for (const c of j.data ?? []) map.set(c.id, c);
+    if (!j.pagination?.has_more) break;
+  }
+  return map;
+}
+
+/** Fetch broadcasters per fixture, resolve countries, attach grouped listings. */
+async function attachTvListings(matches: Match[], apiKey: string): Promise<void> {
+  const countries = await fetchCountryMap(apiKey);
+  if (!countries.size) return;
+  const byMatch = new Map(matches.map((m) => [m.id, m]));
+
+  for (let page = 1; page <= 6; page++) {
+    const res = await fetch(
+      `${BASE}/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=tvstations.tvstation&per_page=50&page=${page}`,
+      { headers: { Authorization: apiKey }, next: { revalidate: 86400 } },
+    );
+    if (!res.ok) break;
+    const j = (await res.json()) as {
+      data?: { id: number; tvstations?: SMTvJoin[] }[];
+      pagination?: { has_more?: boolean };
+    };
+    for (const fx of j.data ?? []) {
+      const m = byMatch.get(`m-${fx.id}`);
+      if (!m || !fx.tvstations?.length) continue;
+      const grouped = new Map<number, Map<string, TvBroadcaster>>();
+      for (const t of fx.tvstations) {
+        const name = t.tvstation?.name?.trim();
+        if (!name || t.country_id == null) continue;
+        const g = grouped.get(t.country_id) ?? new Map<string, TvBroadcaster>();
+        if (!g.has(name)) g.set(name, { name, logo: t.tvstation?.image_path ?? '', url: t.tvstation?.url ?? '' });
+        grouped.set(t.country_id, g);
+      }
+      const listings: MatchTvCountry[] = [];
+      for (const [cid, stations] of grouped) {
+        const c = countries.get(cid);
+        if (!c?.iso2) continue;
+        listings.push({
+          code: c.iso2.toUpperCase(), country: c.name, flag: flagEmoji(c.iso2),
+          stations: [...stations.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        });
+      }
+      listings.sort((a, b) => a.country.localeCompare(b.country));
+      if (listings.length) m.tvListings = listings;
+    }
+    if (!j.pagination?.has_more) break;
+  }
 }
 
 // ── SportMonks response shapes (only what we use) ────────────────────────────
@@ -348,6 +423,13 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       const pl = byId.get(pid);
       if (pl) pl.rating.overall = scaled;
     }
+  }
+
+  // International TV listings (best-effort; matches simply carry none on failure).
+  try {
+    await attachTvListings(matches, apiKey);
+  } catch {
+    /* no broadcast data available — the "Where to watch" panel stays hidden */
   }
 
   // squadIds per team.

@@ -8,6 +8,7 @@ import { TeamBadge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { stageName } from '@/lib/format';
 import { LocalTime } from '@/components/LocalTime';
+import { WhereToWatch } from '@/components/WhereToWatch';
 import type { MatchEvent } from '@/domain/types';
 
 export function generateMetadata({ params }: { params: { id: string } }): Metadata {
@@ -123,6 +124,12 @@ export default function MatchPage({ params }: { params: { id: string } }) {
       ) : (
         <Panel title="Match Report" subtitle="AI-generated">
           <p className="text-sm leading-relaxed text-terminal-text">{summary}</p>
+        </Panel>
+      )}
+
+      {match.tvListings && match.tvListings.length > 0 && (
+        <Panel title="Where to watch" subtitle="International TV listings · via SportMonks">
+          <WhereToWatch listings={match.tvListings} />
         </Panel>
       )}
 

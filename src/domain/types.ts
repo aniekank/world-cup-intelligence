@@ -254,6 +254,23 @@ export interface Match {
   shots: Shot[];
   // Bracket linkage for knockout matches
   bracketSlot: string | null; // e.g. "QF1"
+  // International broadcast listings, grouped by country (live source only).
+  tvListings?: MatchTvCountry[];
+}
+
+/** A broadcaster carrying a fixture. */
+export interface TvBroadcaster {
+  name: string;
+  logo: string;
+  url: string;
+}
+
+/** Broadcasters for one country, for the "Where to watch" panel. */
+export interface MatchTvCountry {
+  code: string; // ISO-3166 alpha-2 (uppercase)
+  country: string;
+  flag: string; // emoji
+  stations: TvBroadcaster[];
 }
 
 export interface MatchTeamStats {
