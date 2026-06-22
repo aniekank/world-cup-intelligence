@@ -42,6 +42,17 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | 📋 | **Bracket knock-on analysis** | "If Brazil win this, Argentina's path to the final hardens" — downstream effects of a result. |
 | 📋 | **Milestone / record watch** | Players within reach of tournament records (goals, assists, clean sheets). |
 
+## 1b. Clash of the Civilizations — regional lens (`/civilizations`)
+*How every part of the world is faring, aggregated by confederation.*
+
+| Status | Feature | What it does |
+|--------|---------|--------------|
+| ✅ | **Regional standings + title race** | Combined championship probability by region (stacked bar), per-region cards (record, qualified/eliminated, PPG, win %, knockout reach, avg ELO, top scorer, clean sheets, discipline), inter-confederation head-to-head matrix, and biggest cross-region results. (`src/server/civilizations.ts`) |
+| ✅ | **Goals around the world** | Diverging scored-vs-conceded bars by region, sharpest-attack / meanest-defense callouts, and a "when regions score" goal-timing heatmap (six 15-min windows from the event feed). |
+| ✅ | **Confederation filter on players** | `/api/players` tags each player with its region; the Players explorer filters by confederation. |
+| 📋 | **Regional goal-timing insight** (CIV-1) | Auto-generate a callout from the timing data ("Asia scores 40% of its goals after the 75th minute") into the daily briefing / AI Insights. |
+| 📋 | **Confederation lens elsewhere** (CIV-2) | Add the region filter to the golden-boot race and the Defense leaderboards (meanest defenses / golden glove / ball-winners). |
+
 ## 2. Search & natural-language Q&A
 
 | Status | Feature | What it does |
