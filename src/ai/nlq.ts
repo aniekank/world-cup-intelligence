@@ -270,13 +270,16 @@ function breakoutQuery(q: string): NLQueryResult {
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
   const lead = ranked[0]?.p;
+  // Market value is only populated on the seeded edition — drop the clause and
+  // the column on live/historical rather than showing "€0m". (WC-026)
+  const hasVal = ranked.some((r) => r.p.marketValueEur > 0);
   return {
     query: q,
     intent: 'breakout',
     answer: lead
-      ? `${lead.name} (${lead.team.code}, age ${lead.age}) is the standout breakout — ${lead.stats.goals}G ${lead.stats.assists}A on a €${lead.marketValueEur}m valuation with a ${lead.stats.formIndex} form index.`
+      ? `${lead.name} (${lead.team.code}, age ${lead.age}) is the standout breakout — ${lead.stats.goals}G ${lead.stats.assists}A${hasVal ? ` on a €${lead.marketValueEur}m valuation` : ''} with a ${lead.stats.formIndex} form index.`
       : 'No breakout candidates yet.',
-    columns: ['Player', 'Team', 'Age', 'G', 'A', 'xG+xA', 'Form', '€m'],
+    columns: ['Player', 'Team', 'Age', 'G', 'A', 'xG+xA', 'Form', ...(hasVal ? ['€m'] : [])],
     rows: ranked.map((r) => [
       r.p.name,
       r.p.team.code,
@@ -285,7 +288,7 @@ function breakoutQuery(q: string): NLQueryResult {
       r.p.stats.assists,
       fmt(r.p.stats.xG + r.p.stats.xA),
       r.p.stats.formIndex,
-      r.p.marketValueEur,
+      ...(hasVal ? [r.p.marketValueEur] : []),
     ]),
     entityType: 'player',
     vizHint: 'scatter',

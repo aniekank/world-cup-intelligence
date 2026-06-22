@@ -164,7 +164,9 @@ export function generateInsights(): Insight[] {
       kind: 'breakout',
       severity: 'low',
       title: pick(breakoutTitles(x.p.name), i),
-      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name} on a €${x.p.marketValueEur}m valuation — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality.`,
+      // Market value is only present on the seeded edition; omit the clause on
+      // live/historical rather than printing "€0m". (WC-026)
+      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name}${x.p.marketValueEur > 0 ? ` on a €${x.p.marketValueEur}m valuation` : ''} — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality.`,
       entityType: 'player',
       entityId: x.p.id,
       metrics: [
