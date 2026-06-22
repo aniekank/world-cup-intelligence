@@ -296,6 +296,9 @@ export interface MatchTeamStats {
   saves: number;
   yellowCards: number;
   redCards: number;
+  // Optional richer tactical axes (live source only; seeded/historical omit).
+  directness?: number; // 0..100 share of passes played long (vertical tendency)
+  counterAttacks?: number; // counter-attacks this match (transition threat)
 }
 
 export interface MatchEvent {

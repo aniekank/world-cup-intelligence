@@ -477,7 +477,10 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
           stats.find((x) => x.location === loc && x.type?.name === name)?.data?.value ?? 0;
         const build = (loc: 'home' | 'away', teamId: string): MatchTeamStats => {
           const opp = loc === 'home' ? 'away' : 'home';
-          const def = sval(loc, 'Tackles') + sval(loc, 'Interceptions');
+          // PPDA denominator = defensive actions that stop play: tackles +
+          // interceptions + fouls (the standard definition). Fouls matter — without
+          // them PPDA is inflated and the press index pins to 0 for most teams.
+          const def = sval(loc, 'Tackles') + sval(loc, 'Interceptions') + sval(loc, 'Fouls');
           const da = sval(loc, 'Dangerous Attacks'), daOpp = sval(opp, 'Dangerous Attacks');
           return {
             teamId,
@@ -498,6 +501,9 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
             saves: sval(loc, 'Saves'),
             yellowCards: sval(loc, 'Yellowcards'),
             redCards: sval(loc, 'Redcards'),
+            // richer tactical axes
+            directness: sval(loc, 'Passes') > 0 ? Math.round((sval(loc, 'Long Passes') / sval(loc, 'Passes')) * 100) : 0,
+            counterAttacks: sval(loc, 'Counter Attacks'),
           };
         };
         m.teamStats = { [m.homeTeamId]: build('home', m.homeTeamId), [m.awayTeamId]: build('away', m.awayTeamId) };

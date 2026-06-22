@@ -144,6 +144,12 @@ export default function TeamPage({ params }: { params: { id: string } }) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge tone="violet">{tactics.label}</Badge>
             <span className="text-xs uppercase tracking-wide text-terminal-muted">{tactics.tag}</span>
+            {tactics.formation && (
+              <span className="ml-auto flex items-center gap-1.5 rounded-md border border-terminal-border bg-terminal-panel/50 px-2 py-1 text-xs">
+                <span className="text-[10px] uppercase tracking-wide text-terminal-muted">Shape</span>
+                <span className="tnum font-semibold text-terminal-bright">{tactics.formation}</span>
+              </span>
+            )}
           </div>
           <p className="mb-4 max-w-2xl text-sm leading-relaxed text-terminal-text">{tactics.blurb}</p>
           {tactics.bars && (
