@@ -98,6 +98,15 @@ export default function MatchPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
+        {(match.referee || match.weather) && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-terminal-muted">
+            {match.referee && <span>🧑‍⚖️ {match.referee}</span>}
+            {match.weather && match.weather.description && (
+              <span>🌦️ {match.weather.tempC}°C · {match.weather.description}</span>
+            )}
+          </div>
+        )}
+
         {!finished && prediction && (
           <div className="mx-auto mt-6 max-w-md">
             <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />

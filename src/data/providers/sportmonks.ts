@@ -233,6 +233,8 @@ interface SMFixture {
   periods?: { ticking?: boolean; minutes?: number }[];
   venue?: { name?: string | null; city_name?: string | null } | null;
   formations?: { location?: string; formation?: string | null }[];
+  referees?: { type_id?: number; referee?: { display_name?: string | null; name?: string | null } | null }[];
+  weatherreport?: { temperature?: { current?: number | null } | null; description?: string | null } | null;
   group?: { name?: string };
   round?: { name?: string };
 }
@@ -389,7 +391,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   const played = fixtures.filter((f) => mapStatus(f.state?.developer_name) === 'FINISHED');
   for (const f of played) {
     const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[]; statistics?: SMStat[] }>(
-      `/fixtures/${f.id}?include=lineups.details;events.type;statistics.type;formations`,
+      `/fixtures/${f.id}?include=lineups.details;events.type;statistics.type;formations;referees.referee;weatherreport`,
       apiKey,
     ).catch(() => null);
     if (!detail?.data) continue;
@@ -506,6 +508,15 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       const homeFm = fm.find((x) => x.location === 'home')?.formation;
       const awayFm = fm.find((x) => x.location === 'away')?.formation;
       if (homeFm && awayFm) m.formations = { home: homeFm, away: awayFm };
+
+      // Match official (type_id 6 = main referee) + conditions.
+      const ref = (detail.data.referees ?? []).find((r) => r.type_id === 6) ?? (detail.data.referees ?? [])[0];
+      const refName = ref?.referee?.display_name ?? ref?.referee?.name;
+      if (refName) m.referee = refName.trim();
+      const wr = detail.data.weatherreport;
+      if (wr && (typeof wr.temperature?.current === 'number' || wr.description)) {
+        m.weather = { tempC: Math.round(wr.temperature?.current ?? 0), description: (wr.description ?? '').trim() };
+      }
     }
   }
 

@@ -257,6 +257,9 @@ export interface Match {
   bracketSlot: string | null; // e.g. "QF1"
   // Starting formations per side (live source only), e.g. { home: '4-3-3', away: '5-3-2' }.
   formations?: { home: string; away: string };
+  // Match officials + conditions (live source only).
+  referee?: string;
+  weather?: { tempC: number; description: string };
   // International broadcast listings, grouped by country (live source only).
   tvListings?: MatchTvCountry[];
 }
