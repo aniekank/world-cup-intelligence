@@ -95,6 +95,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Group channels by network + relabel** (TV-1) | Channels now collapse into network families (FOX Network/FS1/FS2/Deportes → one "Fox" card with the channel set as a sub-line; same for Telemundo), header relabeled "Broadcasters in [flag] [country]", with a note that the exact channel is confirmed near kickoff. Fixes the "every game on every network" read. (`groupByNetwork` in `src/components/WhereToWatch.tsx`) |
 | 📋 | **Per-game specific channel** (TV-2) | "This match is on FS1" — not in any feed we have (SportMonks attaches the same package to every game). Needs FOX's published schedule (brittle scrape, US-only) or a paid EPG provider. |
 | 🧊 | **Daily TV re-fetch** (TV-3) | Refresh listings ~1×/day so SportMonks additions appear without a redeploy. Low value — carrier-fill already covers the rights-holders. |
+| 🧊 | **Match buzz — Reddit (SOC-1)** | A per-match panel from the r/soccer match thread: comment count + velocity, upvote ratio, and top up-voted reactions (filtered for NSFW), cached off the boot path. Design mocked + validated; **blocked on access** — X's API is paid ($100–200/mo, not worth it), and Reddit OAuth needs a registered app we couldn't create (Reddit IP-blocks the dev's network; unauthenticated `.json` returns 403). Revisit if app creation succeeds on a clean network. |
 
 ## 6. Club connections
 *Added 2026-06-20.*
