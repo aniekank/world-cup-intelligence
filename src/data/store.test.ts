@@ -1,0 +1,38 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { generateDataset } from '@/data/generate';
+import { setDataset, getPlayerView, getPlayers } from '@/data/store';
+
+describe('getPlayerView', () => {
+  beforeEach(() => setDataset(generateDataset(), 'simulation', 'simulation'));
+
+  it('returns a populated view for every player in the store', () => {
+    for (const p of getPlayers().slice(0, 60)) {
+      const v = getPlayerView(p.id);
+      expect(v).toBeDefined();
+      expect(v!.team.code).toBeTruthy();
+      expect(v!.name).toBe(p.name);
+    }
+  });
+
+  it('returns undefined for an unknown player id', () => {
+    expect(getPlayerView('no-such-player-xyz')).toBeUndefined();
+  });
+
+  // WC-025 regression: a real player whose team is momentarily unresolved (a
+  // snapshot mid-swap, or a cross-index gap) must still return a view with a
+  // fallback team — NOT undefined, which on /players/[id] became notFound() and
+  // rendered an empty page. Reproduced here by dropping the player's team from
+  // the snapshot while keeping the player.
+  it('still returns a view when the player exists but its team is unresolved', () => {
+    const ds = generateDataset();
+    const victimTeam = ds.teams[0]!.id;
+    const orphan = ds.players.find((p) => p.teamId === victimTeam)!;
+    setDataset({ ...ds, teams: ds.teams.filter((t) => t.id !== victimTeam) }, 'simulation', 'simulation');
+
+    const v = getPlayerView(orphan.id);
+    expect(v).toBeDefined();
+    expect(v!.name).toBe(orphan.name);
+    expect(v!.team.id).toBe(victimTeam); // fallback team derived from the player's teamId
+    expect(v!.team.code).toBeTruthy();
+  });
+});

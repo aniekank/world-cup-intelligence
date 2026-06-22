@@ -129,8 +129,14 @@ export function standardizeColumns(rows: number[][]): { z: number[][]; means: nu
 
 /** Pearson correlation matrix (d×d) of the columns of `rows`. */
 export function correlationMatrix(rows: number[][]): number[][] {
+  // standardizeColumns divides by n (population), so (1/n)·ZᵀZ is exactly the
+  // Pearson correlation — diagonal 1, off-diagonals in [-1,1]. (Not covariance(),
+  // which uses n-1 and would inflate the diagonal to n/(n-1).)
   const { z } = standardizeColumns(rows);
-  return covariance(z); // covariance of standardized columns == correlation
+  const n = z.length, d = z[0]?.length ?? 0;
+  const C = Array.from({ length: d }, () => Array(d).fill(0));
+  for (const r of z) for (let i = 0; i < d; i++) for (let j = 0; j < d; j++) C[i]![j]! += (r[i]! * r[j]!) / (n || 1);
+  return C;
 }
 
 function covariance(z: number[][]): number[][] {
