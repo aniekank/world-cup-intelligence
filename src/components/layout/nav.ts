@@ -25,6 +25,7 @@ import {
   LayoutGrid,
   LifeBuoy,
   FlaskConical,
+  Swords,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -56,6 +57,7 @@ export const NAV: NavItem[] = [
   { label: 'Card Builder', href: '/compare', icon: LayoutGrid, section: 'analyze' },
   { label: 'Rankings', href: '/rankings', icon: Award, section: 'analyze' },
 
+  { label: 'Clash of Civilizations', href: '/civilizations', icon: Swords, section: 'discover' },
   { label: 'Discoveries', href: '/discoveries', icon: Gem, section: 'discover' },
   { label: 'Club Connections', href: '/clubs', icon: Shirt, section: 'discover' },
   { label: 'Through the Years', href: '/history', icon: History, section: 'discover' },
