@@ -1,5 +1,5 @@
 import 'server-only';
-import { getTeams, getMatches } from '@/data/store';
+import { getTeams, getMatches, getPlayerViews } from '@/data/store';
 import { engine } from '@/analytics';
 import type { Confederation, Team } from '@/domain/types';
 
@@ -22,13 +22,27 @@ export const CONF_META: Record<Confederation, Meta> = {
 const CONF_ORDER: Confederation[] = ['UEFA', 'CONMEBOL', 'CAF', 'AFC', 'CONCACAF', 'OFC'];
 
 export interface RegionTeam { id: string; name: string; code: string; flag: string; winTitle: number; points: number; played: number; status: 'Q' | 'E' | 'T' | null }
+export interface RegionScorer { id: string; name: string; code: string; flag: string; goals: number }
 export interface RegionStat {
   conf: Confederation; name: string; emoji: string; color: string;
   teamCount: number; qualified: number; eliminated: number;
   played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number;
   points: number; ppg: number; winRate: number;
   titleProb: number; knockoutProb: number; avgElo: number;
+  // Goal-rich aggregates
+  goalsPerMatch: number; concededPerMatch: number; xgFor: number; finishing: number;
+  cleanSheets: number; yellow: number; red: number; topScorer: RegionScorer | null;
   teams: RegionTeam[];
+}
+export interface RegionTiming { conf: Confederation; name: string; emoji: string; color: string; buckets: number[]; total: number }
+export const GOAL_INTERVALS = ['1-15', '16-30', '31-45', '46-60', '61-75', '76+'];
+function timingBucket(minute: number): number {
+  if (minute <= 15) return 0;
+  if (minute <= 30) return 1;
+  if (minute <= 45) return 2;
+  if (minute <= 60) return 3;
+  if (minute <= 75) return 4;
+  return 5;
 }
 export interface H2H { w: number; d: number; l: number; gf: number; ga: number; played: number }
 export interface ClashResult {
@@ -42,6 +56,33 @@ export function civilizationsView() {
   for (const t of teams) {
     const arr = byConf.get(t.confederation) ?? [];
     arr.push(t); byConf.set(t.confederation, arr);
+  }
+
+  const confOf = new Map(teams.map((t) => [t.id, t.confederation]));
+
+  // ── Per-region player aggregates (xG, top scorer, discipline) ──
+  interface PAgg { xg: number; yellow: number; red: number; topScorer: RegionScorer | null }
+  const pAgg = new Map<Confederation, PAgg>();
+  for (const conf of CONF_ORDER) pAgg.set(conf, { xg: 0, yellow: 0, red: 0, topScorer: null });
+  for (const p of getPlayerViews()) {
+    const conf = confOf.get(p.teamId);
+    if (!conf) continue;
+    const agg = pAgg.get(conf)!;
+    agg.xg += p.stats.xG;
+    agg.yellow += p.stats.yellowCards;
+    agg.red += p.stats.redCards;
+    if (p.stats.goals > 0 && (!agg.topScorer || p.stats.goals > agg.topScorer.goals)) {
+      agg.topScorer = { id: p.id, name: p.name, code: p.team.code, flag: p.team.flag, goals: p.stats.goals };
+    }
+  }
+
+  // ── Clean sheets per region (from finished matches) ──
+  const csByConf = new Map<Confederation, number>();
+  for (const m of getMatches()) {
+    if (m.status !== 'FINISHED') continue;
+    const ch = confOf.get(m.homeTeamId), ca = confOf.get(m.awayTeamId);
+    if (ch && m.awayScore === 0) csByConf.set(ch, (csByConf.get(ch) ?? 0) + 1);
+    if (ca && m.homeScore === 0) csByConf.set(ca, (csByConf.get(ca) ?? 0) + 1);
   }
 
   // ── Per-region aggregate ──
@@ -67,20 +108,41 @@ export function civilizationsView() {
       teamRows.push({ id: t.id, name: t.name, code: t.code, flag: t.flag, winTitle: f?.winTitle ?? 0, points: s?.points ?? 0, played: s?.played ?? 0, status: s?.status ?? null });
     }
     teamRows.sort((a, b) => b.winTitle - a.winTitle || b.points - a.points);
+    const agg = pAgg.get(conf)!;
     regions.push({
       conf, name: meta.name, emoji: meta.emoji, color: meta.color,
       teamCount: members.length, qualified, eliminated,
       played, won, drawn, lost, goalsFor: gf, goalsAgainst: ga, points,
       ppg: played ? points / played : 0, winRate: played ? won / played : 0,
       titleProb, knockoutProb, avgElo: Math.round(eloSum / members.length),
+      goalsPerMatch: played ? gf / played : 0, concededPerMatch: played ? ga / played : 0,
+      xgFor: agg.xg, finishing: gf - agg.xg, cleanSheets: csByConf.get(conf) ?? 0,
+      yellow: agg.yellow, red: agg.red, topScorer: agg.topScorer,
       teams: teamRows,
     });
   }
+
+  // ── Goal timing by region (from match events, GOAL + PENALTY_GOAL) ──
+  const timingMap = new Map<Confederation, number[]>();
+  for (const conf of CONF_ORDER) timingMap.set(conf, [0, 0, 0, 0, 0, 0]);
+  for (const m of getMatches()) {
+    for (const ev of m.events) {
+      if (ev.type !== 'GOAL' && ev.type !== 'PENALTY_GOAL') continue;
+      const conf = confOf.get(ev.teamId);
+      if (!conf) continue;
+      timingMap.get(conf)![timingBucket(ev.minute)]! += 1;
+    }
+  }
+  const goalTiming: RegionTiming[] = CONF_ORDER
+    .filter((c) => byConf.get(c)?.length)
+    .map((c) => {
+      const buckets = timingMap.get(c)!;
+      return { conf: c, name: CONF_META[c].name, emoji: CONF_META[c].emoji, color: CONF_META[c].color, buckets, total: buckets.reduce((a, b) => a + b, 0) };
+    });
   // Rank by title probability, then knockout reach, then ELO.
   regions.sort((a, b) => b.titleProb - a.titleProb || b.knockoutProb - a.knockoutProb || b.avgElo - a.avgElo);
 
   // ── Inter-confederation head-to-head ──
-  const confOf = new Map(teams.map((t) => [t.id, t.confederation]));
   const blank = (): H2H => ({ w: 0, d: 0, l: 0, gf: 0, ga: 0, played: 0 });
   const matrix: Record<string, Record<string, H2H>> = {};
   for (const a of CONF_ORDER) { matrix[a] = {}; for (const b of CONF_ORDER) matrix[a]![b] = blank(); }
@@ -119,7 +181,7 @@ export function civilizationsView() {
   const totalTitle = regions.reduce((s, r) => s + r.titleProb, 0) || 1;
   const presentConfs = CONF_ORDER.filter((c) => regions.some((r) => r.conf === c));
 
-  return { regions, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta: CONF_META };
+  return { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta: CONF_META };
 }
 
 export type CivilizationsData = ReturnType<typeof civilizationsView>;

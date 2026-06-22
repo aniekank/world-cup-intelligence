@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { civilizationsView, CONF_META } from '@/server/civilizations';
+import { civilizationsView, CONF_META, GOAL_INTERVALS } from '@/server/civilizations';
 import type { Confederation } from '@/domain/types';
 import { PageHeader, Panel } from '@/components/ui';
 
@@ -10,8 +10,19 @@ const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 const pct0 = (v: number) => `${Math.round(v * 100)}%`;
 
 export default function CivilizationsPage() {
-  const { regions, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta } = civilizationsView();
+  const { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta } = civilizationsView();
   const leader = regions[0];
+
+  // Goals-graphic derivations
+  const byGoals = [...regions].sort((a, b) => b.goalsFor - a.goalsFor);
+  const maxGoals = Math.max(1, ...regions.map((r) => Math.max(r.goalsFor, r.goalsAgainst)));
+  const totalGoals = regions.reduce((s, r) => s + r.goalsFor, 0);
+  const totalMatchTeamGames = regions.reduce((s, r) => s + r.played, 0);
+  const goalsPerMatch = totalMatchTeamGames ? totalGoals / totalMatchTeamGames : 0;
+  const hasXg = regions.some((r) => r.xgFor > 0.5);
+  const sharpest = [...byGoals].sort((a, b) => b.goalsPerMatch - a.goalsPerMatch)[0];
+  const meanest = [...regions].filter((r) => r.played > 0).sort((a, b) => a.concededPerMatch - b.concededPerMatch)[0];
+  const maxTimingShare = Math.max(0.01, ...goalTiming.flatMap((r) => r.buckets.map((b) => (r.total ? b / r.total : 0))));
 
   return (
     <div className="space-y-6">
@@ -51,6 +62,62 @@ export default function CivilizationsPage() {
         )}
       </Panel>
 
+      {/* Goals around the world */}
+      <Panel title="Goals around the world" subtitle={`${totalGoals} goals · ${goalsPerMatch.toFixed(2)} per match · scored vs conceded by region`}>
+        {/* headline stat strip */}
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <GoalStat label="Goals scored" value={String(totalGoals)} sub="all regions" />
+          <GoalStat label="Per match" value={goalsPerMatch.toFixed(2)} sub="tournament-wide" />
+          <GoalStat label="Sharpest attack" value={sharpest ? `${sharpest.emoji} ${sharpest.goalsPerMatch.toFixed(2)}` : '—'} sub={sharpest ? `${sharpest.name} / game` : ''} accent={sharpest?.color} />
+          <GoalStat label="Meanest defense" value={meanest ? `${meanest.emoji} ${meanest.concededPerMatch.toFixed(2)}` : '—'} sub={meanest ? `${meanest.name} conceded` : ''} accent={meanest?.color} />
+        </div>
+
+        {/* diverging scored-vs-conceded bars */}
+        <div className="mb-2 flex items-center text-[10px] font-semibold uppercase tracking-widest text-terminal-muted">
+          <span className="flex-1 text-right">← Conceded</span>
+          <span className="w-32 shrink-0" />
+          <span className="flex-1">Scored →</span>
+        </div>
+        <div className="space-y-1.5">
+          {byGoals.map((r) => (
+            <div key={r.conf} className="flex items-center gap-2 text-sm">
+              <div className="flex flex-1 items-center justify-end">
+                <span className="tnum mr-2 text-xs text-terminal-muted">{r.goalsAgainst}</span>
+                <div className="h-5 rounded-l" style={{ width: `${(r.goalsAgainst / maxGoals) * 100}%`, background: 'rgba(139,139,158,0.45)', minWidth: r.goalsAgainst ? 2 : 0 }} />
+              </div>
+              <span className="flex w-32 shrink-0 items-center justify-center gap-1 text-center text-xs text-terminal-bright">
+                <span>{r.emoji}</span><span className="truncate">{r.name}</span>
+              </span>
+              <div className="flex flex-1 items-center">
+                <div className="h-5 rounded-r" style={{ width: `${(r.goalsFor / maxGoals) * 100}%`, background: r.color, minWidth: r.goalsFor ? 2 : 0 }} />
+                <span className="tnum ml-2 text-xs font-semibold text-terminal-bright">{r.goalsFor}</span>
+                <span className="tnum ml-2 hidden text-[10px] text-terminal-muted sm:inline">{r.goalsPerMatch.toFixed(2)}/g{hasXg ? ` · ${r.finishing >= 0 ? '+' : ''}${r.finishing.toFixed(1)} vs xG` : ''}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* When regions score — goal-timing heatmap */}
+        {goalTiming.some((r) => r.total > 0) && (
+          <div className="mt-6">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-terminal-muted">When regions score · share of goals by match minute</p>
+            <div className="overflow-x-auto">
+              <div className="min-w-[460px]">
+                <div className="grid items-center gap-1" style={{ gridTemplateColumns: '7rem repeat(6, minmax(0,1fr)) 3rem' }}>
+                  <span />
+                  {GOAL_INTERVALS.map((iv) => <span key={iv} className="pb-1 text-center text-[10px] tnum text-terminal-muted">{iv}</span>)}
+                  <span className="pb-1 text-center text-[10px] uppercase tracking-wide text-terminal-muted">Σ</span>
+                  {goalTiming.map((r) => (
+                    <TimingRow key={r.conf} r={r} maxShare={maxTimingShare} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-terminal-muted">Each cell is the share of a region&rsquo;s goals scored in that 15-minute window — darker means more goals come in that phase. Built from {goalTiming.reduce((s, r) => s + r.total, 0)} timed goals.</p>
+          </div>
+        )}
+      </Panel>
+
       {/* Region cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {regions.map((r, i) => (
@@ -83,6 +150,21 @@ export default function CivilizationsPage() {
               {r.eliminated > 0 && <span className="flex items-center gap-1 text-accent-red"><span className="h-1.5 w-1.5 rounded-full bg-accent-red" />{r.eliminated} out</span>}
               <span className="ml-auto text-terminal-muted">knockout reach {pct0(r.knockoutProb / r.teamCount)}</span>
             </div>
+
+            {(r.topScorer || r.cleanSheets > 0 || r.yellow > 0) && (
+              <div className="flex items-center gap-x-3 gap-y-1 border-t border-terminal-border/60 px-4 py-2 text-[11px] text-terminal-muted">
+                {r.topScorer && (
+                  <Link href={`/players/${r.topScorer.id}`} className="flex min-w-0 items-center gap-1 hover:text-accent">
+                    <span>⚽</span><span className="truncate text-terminal-text">{r.topScorer.name}</span><span className="tnum">{r.topScorer.goals}</span>
+                  </Link>
+                )}
+                <span className="ml-auto flex items-center gap-2.5">
+                  {r.cleanSheets > 0 && <span title="clean sheets">🧤 {r.cleanSheets}</span>}
+                  {r.yellow > 0 && <span title="yellow cards"><span className="inline-block h-2.5 w-1.5 translate-y-px rounded-[1px] bg-accent-amber align-middle" /> {r.yellow}</span>}
+                  {r.red > 0 && <span title="red cards"><span className="inline-block h-2.5 w-1.5 translate-y-px rounded-[1px] bg-accent-red align-middle" /> {r.red}</span>}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-0.5 px-3 pb-3">
               {r.teams.slice(0, 5).map((t) => (
@@ -176,6 +258,35 @@ function Cell({ label, value }: { label: string; value: string }) {
       <div className="tnum text-sm font-bold text-terminal-bright">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-terminal-muted">{label}</div>
     </div>
+  );
+}
+
+function GoalStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-lg border border-terminal-border bg-terminal-panel/40 px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-terminal-muted">{label}</div>
+      <div className="tnum text-lg font-bold" style={{ color: accent ?? undefined }}>{value}</div>
+      {sub && <div className="text-[10px] text-terminal-muted">{sub}</div>}
+    </div>
+  );
+}
+
+function TimingRow({ r, maxShare }: { r: { name: string; emoji: string; color: string; buckets: number[]; total: number }; maxShare: number }) {
+  return (
+    <>
+      <span className="flex items-center gap-1.5 pr-1 text-xs text-terminal-text"><span>{r.emoji}</span><span className="truncate">{r.name}</span></span>
+      {r.buckets.map((b, i) => {
+        const share = r.total ? b / r.total : 0;
+        const op = maxShare ? Math.min(1, (share / maxShare) * 0.92 + 0.06) : 0;
+        return (
+          <div key={i} className="flex aspect-[2/1] items-center justify-center rounded-[3px]" style={{ background: r.total ? r.color : 'transparent', opacity: r.total ? op : 1, border: r.total ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
+            title={`${r.name} ${GOAL_INTERVALS[i]}': ${b} goals (${(share * 100).toFixed(0)}%)`}>
+            {b > 0 && <span className="text-[10px] font-semibold text-black/75">{b}</span>}
+          </div>
+        );
+      })}
+      <span className="tnum text-center text-xs font-semibold text-terminal-bright">{r.total}</span>
+    </>
   );
 }
 

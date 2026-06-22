@@ -12,6 +12,7 @@ interface PV {
   age: number;
   marketValueEur: number;
   team: { code: string; flag: string };
+  confederation: string | null;
   stats: Record<string, number>;
   per90: Record<string, number>;
 }
@@ -22,6 +23,16 @@ const POSITIONS = [
   { key: 'DF', label: 'Defenders' },
   { key: 'MF', label: 'Midfielders' },
   { key: 'FW', label: 'Forwards' },
+];
+
+const REGIONS = [
+  { key: '', label: 'All regions' },
+  { key: 'UEFA', label: '🇪🇺 Europe' },
+  { key: 'CONMEBOL', label: '🌎 South America' },
+  { key: 'CAF', label: '🌍 Africa' },
+  { key: 'AFC', label: '🌏 Asia' },
+  { key: 'CONCACAF', label: '🗺️ N. & C. America' },
+  { key: 'OFC', label: '🌊 Oceania' },
 ];
 
 const SORTS = [
@@ -38,6 +49,7 @@ const SORTS = [
 
 export function PlayersExplorer() {
   const [position, setPosition] = useState('');
+  const [region, setRegion] = useState('');
   const [sort, setSort] = useState('goals');
   const [query, setQuery] = useState('');
   const [data, setData] = useState<PV[] | null>(null);
@@ -55,9 +67,11 @@ export function PlayersExplorer() {
   }, [position, sort]);
 
   // Reset the visible window whenever the filters change
-  useEffect(() => setVisible(80), [position, sort, query]);
+  useEffect(() => setVisible(80), [position, region, sort, query]);
 
-  const filtered = (data ?? []).filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
+  const filtered = (data ?? []).filter(
+    (p) => p.name.toLowerCase().includes(query.toLowerCase()) && (!region || p.confederation === region),
+  );
   const shown = filtered.slice(0, visible);
 
   return (
@@ -77,6 +91,18 @@ export function PlayersExplorer() {
             </button>
           ))}
         </div>
+
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded-md border border-terminal-border bg-terminal-panel px-3 py-2 text-xs text-terminal-bright focus:border-accent focus:outline-none"
+        >
+          {REGIONS.map((r) => (
+            <option key={r.key} value={r.key}>
+              {r.key ? r.label : 'Region: All'}
+            </option>
+          ))}
+        </select>
 
         <select
           value={sort}
