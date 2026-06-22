@@ -31,6 +31,7 @@ import type {
   EventType,
   Foot,
   MatchTeamStats,
+  H2HMeeting,
 } from '@/domain/types';
 
 const BASE = 'https://api.sportmonks.com/v3/football';
@@ -216,6 +217,54 @@ export async function attachTvListings(matches: Match[], apiKey: string): Promis
   }
 }
 
+/**
+ * Recent head-to-head meetings for upcoming fixtures. Uses the stored SportMonks
+ * team ids (smHomeId/smAwayId) so it can run OFF the boot path (best-effort, like
+ * TV listings). Capped to the soonest scheduled games to bound API calls.
+ */
+export async function attachHeadToHead(matches: Match[], apiKey: string): Promise<void> {
+  const smToCode = new Map<number, string>();
+  for (const m of matches) {
+    if (m.smHomeId) smToCode.set(m.smHomeId, m.homeTeamId);
+    if (m.smAwayId) smToCode.set(m.smAwayId, m.awayTeamId);
+  }
+  const upcoming = matches
+    .filter((m) => m.status === 'SCHEDULED' && m.smHomeId && m.smAwayId && !m.h2h)
+    .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+    .slice(0, 32);
+
+  const BATCH = 6;
+  for (let i = 0; i < upcoming.length; i += BATCH) {
+    await Promise.all(
+      upcoming.slice(i, i + BATCH).map(async (m) => {
+        try {
+          const res = await fetch(
+            `${BASE}/fixtures/head-to-head/${m.smHomeId}/${m.smAwayId}?include=participants;scores`,
+            { headers: { Authorization: apiKey }, next: { revalidate: 86400 } },
+          );
+          if (!res.ok) return;
+          const j = (await res.json()) as { data?: SMFixture[] };
+          const meetings: H2HMeeting[] = [];
+          for (const fx of j.data ?? []) {
+            const parts = fx.participants ?? [];
+            const fh = parts.find((p) => p.meta?.location === 'home') ?? parts[0];
+            const fa = parts.find((p) => p.meta?.location === 'away') ?? parts[1];
+            if (!fh || !fa) continue;
+            const hc = smToCode.get(fh.id), ac = smToCode.get(fa.id);
+            if (!hc || !ac) continue; // a meeting involving a non-WC opponent — skip
+            const cur = (fx.scores ?? []).filter((s) => s.description === 'CURRENT');
+            const gf = (pid: number) => cur.find((s) => s.participant_id === pid)?.score.goals ?? 0;
+            meetings.push({ date: (fx.starting_at ?? '').slice(0, 10), homeCode: hc, awayCode: ac, homeScore: gf(fh.id), awayScore: gf(fa.id) });
+          }
+          if (meetings.length) m.h2h = meetings.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+        } catch {
+          /* non-fatal — h2h stays absent */
+        }
+      }),
+    );
+  }
+}
+
 // ── SportMonks response shapes (only what we use) ────────────────────────────
 interface SMParticipant { id: number; name: string; short_code?: string | null; meta?: { location?: 'home' | 'away' } }
 interface SMScore { participant_id: number; score: { goals: number; participant: string }; description: string }
@@ -336,6 +385,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         homeScore: goalsFor(home.id, cur), awayScore: goalsFor(away.id, cur),
         homeScoreHT: goalsFor(home.id, ht), awayScoreHT: goalsFor(away.id, ht),
         penalties: null, teamStats: {}, events: [], shots: [], bracketSlot: null,
+        smHomeId: home.id, smAwayId: away.id,
       };
     })
     .filter((m): m is Match => m !== null);

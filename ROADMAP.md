@@ -38,7 +38,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | 🔨 | **Manager stories** | Tactical identity from the team's offense/defense/possession profile + over/under-achievement vs the pre-tournament market. *Installment 2.* |
 | 🔨 | **Elite player form arcs** | Scoring streaks, involvement trending up/down, over/under-xG, milestone watches — built on the live event timelines. *Installment 2.* |
 | 📋 | **Claude-authored prose** | Wire the existing `narrate()` hook across briefing, previews, and stories so grounded structured output becomes genuinely editorial prose. Activates by setting `ANTHROPIC_API_KEY` in Render; deterministic stays the fallback. *Installment 3.* |
-| 📋 | **Qualification scenarios** | "A draw sends them through; a loss and they're out" — turn standings math into plain-English stakes. |
+| ✅ | **Match-preview enrichment** (PREV-1) | Upcoming-match previews now fold in three layers: **qualification scenarios** ("X must win to survive; Y are through with a draw or better" — sound final-round group maths), the **tactical matchup** (styles contrast + real formations, e.g. "4-4-2 v 4-2-3-1"), and **head-to-head** history (real cross-tournament meetings via the SportMonks H2H endpoint, fetched off the boot path). Surfaced on the home "matches that matter" cards and the match page. (`src/ai/previews.ts` · `sportmonks.ts` attachHeadToHead) |
 | 📋 | **Bracket knock-on analysis** | "If Brazil win this, Argentina's path to the final hardens" — downstream effects of a result. |
 | 📋 | **Milestone / record watch** | Players within reach of tournament records (goals, assists, clean sheets). |
 

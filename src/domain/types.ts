@@ -257,11 +257,24 @@ export interface Match {
   bracketSlot: string | null; // e.g. "QF1"
   // Starting formations per side (live source only), e.g. { home: '4-3-3', away: '5-3-2' }.
   formations?: { home: string; away: string };
+  // Recent head-to-head meetings (live source only; most recent first).
+  h2h?: H2HMeeting[];
   // Match officials + conditions (live source only).
   referee?: string;
   weather?: { tempC: number; description: string };
+  // Provider team ids (live source only) — used to fetch head-to-head off the boot path.
+  smHomeId?: number;
+  smAwayId?: number;
   // International broadcast listings, grouped by country (live source only).
   tvListings?: MatchTvCountry[];
+}
+
+export interface H2HMeeting {
+  date: string;       // ISO date of the meeting
+  homeCode: string;   // FIFA code of the home side in that meeting
+  awayCode: string;
+  homeScore: number;
+  awayScore: number;
 }
 
 /** A broadcaster carrying a fixture. */

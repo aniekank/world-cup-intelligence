@@ -10,7 +10,8 @@
 
 import { getTeam, getMatches, getMatch, getPlayerViews } from '@/data/store';
 import { engine } from '@/analytics';
-import type { Match, PlayerView } from '@/domain/types';
+import { stylesClash } from '@/server/tactics';
+import type { Match, PlayerView, StandingRow, H2HMeeting } from '@/domain/types';
 
 export interface PreviewTag {
   label: string;
@@ -29,6 +30,55 @@ export interface MatchPreview {
   edge: { side: 'home' | 'away' | 'even'; prob: number };
   keyHome: { id: string; name: string } | null;
   keyAway: { id: string; name: string } | null;
+  qualification?: string;                 // group-stage "what each result means"
+  tactical?: string;                      // styles contrast (+ shapes when known)
+  h2h?: { line: string; meetings: H2HMeeting[] }; // recent head-to-head
+}
+
+/**
+ * Group-stage qualification scenarios for the FINAL round (1 game left each),
+ * where the maths is crisp. Sound + conservative: it never claims "through" or
+ * "out" unless it's mathematically guaranteed (others' max / current points).
+ */
+function qualScenario(group: StandingRow[], homeId: string, awayId: string): string | null {
+  const GP = 3; // group games per team
+  const sh = group.find((r) => r.teamId === homeId);
+  const sa = group.find((r) => r.teamId === awayId);
+  if (!sh || !sa) return null;
+  if (sh.played !== GP - 1 || sa.played !== GP - 1) return null; // only the decisive round
+
+  const lineFor = (s: StandingRow): string | null => {
+    const nm = getTeam(s.teamId)?.name ?? 'They';
+    if (s.status === 'Q') return `${nm} are already through`;
+    if (s.status === 'E') return `${nm} are out`;
+    const others = group.filter((r) => r.teamId !== s.teamId);
+    const securedAt = (fp: number) => others.filter((r) => r.points + 3 * (GP - r.played) >= fp).length <= 1;
+    const eliminatedAt = (fp: number) => others.filter((r) => r.points > fp).length >= 2;
+    const win = s.points + 3, draw = s.points + 1, loss = s.points;
+    if (securedAt(draw)) return `${nm} are through with a draw or better`;
+    if (securedAt(win)) return `a win sends ${nm} through`;
+    if (eliminatedAt(draw)) return `${nm} must win to survive`;
+    if (eliminatedAt(loss)) return `${nm} need at least a draw`;
+    return `${nm} hold their own fate`;
+  };
+  const parts = [lineFor(sh), lineFor(sa)].filter(Boolean);
+  return parts.length ? parts.join('; ') + '.' : null;
+}
+
+/** Recent head-to-head record, framed for the two sides meeting now. */
+function h2hSummary(m: Match): { line: string; meetings: H2HMeeting[] } | null {
+  if (!m.h2h?.length) return null;
+  const A = m.homeTeamId, B = m.awayTeamId;
+  let aw = 0, d = 0, bw = 0;
+  for (const g of m.h2h) {
+    const winner = g.homeScore > g.awayScore ? g.homeCode : g.awayScore > g.homeScore ? g.awayCode : null;
+    if (winner === null) d++; else if (winner === A) aw++; else if (winner === B) bw++;
+  }
+  const aN = getTeam(A)?.name ?? A.toUpperCase();
+  const bN = getTeam(B)?.name ?? B.toUpperCase();
+  const n = m.h2h.length;
+  const lead = aw > bw ? `${aN} lead ${aw}-${d}-${bw}` : bw > aw ? `${bN} lead ${bw}-${d}-${aw}` : `honours even (${aw}-${d}-${bw})`;
+  return { line: `Last ${n} meeting${n === 1 ? '' : 's'}: ${lead}.`, meetings: m.h2h };
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -150,6 +200,17 @@ function buildPreview(m: Match): MatchPreview {
 
   const headline = tags[0]?.label ?? (knockout ? 'Knockout tie' : 'Group match');
 
+  // ── Enriched context: tactical contrast, qualification, head-to-head ──────
+  const clash = stylesClash(m.homeTeamId, m.awayTeamId);
+  if (clash && clash.home !== clash.away) {
+    tags.push({ label: 'Styles clash', tone: 'mid' });
+    score += 8;
+  }
+  const tactical = clash?.line;
+  const groupRows = eng.standingsByGroup.find((g) => g.some((r) => r.teamId === m.homeTeamId));
+  const qualification = m.stage === 'GROUP' && groupRows ? qualScenario(groupRows, m.homeTeamId, m.awayTeamId) ?? undefined : undefined;
+  const h2h = h2hSummary(m) ?? undefined;
+
   // ── Deterministic blurb (Claude-upgradable) ─────────────────────────────
   const pctTxt = (v: number) => `${Math.round(v * 100)}%`;
   const parts: string[] = [];
@@ -161,6 +222,8 @@ function buildPreview(m: Match): MatchPreview {
   } else {
     parts.push(`${hName} take on ${aName}.`);
   }
+
+  if (qualification) parts.push(qualification);
 
   if (pred) {
     if (edgeSide === 'even') {
@@ -197,6 +260,9 @@ function buildPreview(m: Match): MatchPreview {
     edge: { side: edgeSide, prob: edgeProb },
     keyHome: kpH ? { id: kpH.id, name: kpH.name } : null,
     keyAway: kpA ? { id: kpA.id, name: kpA.name } : null,
+    qualification,
+    tactical,
+    h2h,
   };
 }
 

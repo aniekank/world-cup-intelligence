@@ -51,6 +51,7 @@ export function CriticalMatchCard({
         ))}
       </div>
       <p className="mt-2 text-xs leading-relaxed text-terminal-muted">{p.blurb}</p>
+      {p.h2h && <p className="mt-1.5 text-[11px] text-terminal-muted/80">↔ {p.h2h.line}</p>}
     </Link>
   );
 }

@@ -107,6 +107,9 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   if (id === 'live-2026' && !snap.matches.some((m) => m.tvListings?.length)) {
     void enrichLiveTvListings().catch(() => {});
   }
+  if (id === 'live-2026' && !snap.matches.some((m) => m.h2h?.length)) {
+    void enrichLiveH2H().catch(() => {});
+  }
   return snap;
 }
 
@@ -282,5 +285,17 @@ export async function enrichLiveTvListings(): Promise<void> {
     await attachTvListings(getMatches(), key);
   } catch {
     /* listings stay empty — non-fatal */
+  }
+}
+
+export async function enrichLiveH2H(): Promise<void> {
+  if (getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+  if (!key) return;
+  try {
+    const { attachHeadToHead } = await import('./providers/sportmonks');
+    await attachHeadToHead(getMatches(), key);
+  } catch {
+    /* h2h stays absent — non-fatal */
   }
 }

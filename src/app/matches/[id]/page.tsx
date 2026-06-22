@@ -161,6 +161,24 @@ export default function MatchPage({ params }: { params: { id: string } }) {
         </Panel>
       )}
 
+      {preview?.h2h && preview.h2h.meetings.length > 0 && (
+        <Panel title="Head to head" subtitle={preview.h2h.line}>
+          <div className="space-y-1">
+            {preview.h2h.meetings.map((g, i) => {
+              const homeWon = g.homeScore > g.awayScore, awayWon = g.awayScore > g.homeScore;
+              return (
+                <div key={i} className="flex items-center gap-3 border-b border-terminal-border/50 py-1.5 text-sm last:border-0">
+                  <span className="w-10 shrink-0 tnum text-xs text-terminal-muted">{g.date.slice(0, 4)}</span>
+                  <span className={`flex-1 text-right ${homeWon ? 'font-semibold text-terminal-bright' : 'text-terminal-text'}`}>{g.homeCode.toUpperCase()}</span>
+                  <span className="tnum shrink-0 rounded bg-terminal-elevated px-2 py-0.5 text-xs font-semibold text-terminal-bright">{g.homeScore}–{g.awayScore}</span>
+                  <span className={`flex-1 ${awayWon ? 'font-semibold text-terminal-bright' : 'text-terminal-text'}`}>{g.awayCode.toUpperCase()}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
       {match.tvListings && match.tvListings.length > 0 && (
         <Panel title="Where to watch" subtitle="International TV listings · via SportMonks">
           <WhereToWatch listings={match.tvListings} />
