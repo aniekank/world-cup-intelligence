@@ -3,7 +3,10 @@ import { labData } from '@/server/lab';
 import { PageHeader, Panel } from '@/components/ui';
 import { PoissonHeatmap } from '@/components/lab/PoissonHeatmap';
 import { MonteCarloSimulator } from '@/components/lab/MonteCarloSimulator';
+import { MonteCarloConvergence } from '@/components/lab/MonteCarloConvergence';
+import { WinProbabilityTimeline } from '@/components/lab/WinProbabilityTimeline';
 import { TeamEmbedding } from '@/components/lab/TeamEmbedding';
+import { FeatureRelationships } from '@/components/lab/FeatureRelationships';
 import { CalibrationLab } from '@/components/lab/CalibrationLab';
 import { PredictionExplainer } from '@/components/lab/PredictionExplainer';
 
@@ -41,6 +44,26 @@ export default function LabPage() {
       </Panel>
 
       <Panel
+        title="Monte Carlo Convergence"
+        subtitle="The law of large numbers, watched live"
+      >
+        <p className="mb-5 max-w-3xl text-sm text-terminal-muted">
+          The same bivariate-Poisson model, two ways. We sample random scorelines one batch at a time and tally win/draw/loss — the solid lines are that running estimate, the dashed lines the model&rsquo;s exact answer. The estimate wobbles wildly at first, then homes in: the error shrinks with 1/√n. This is exactly how the tournament simulator works, just on one match.
+        </p>
+        <MonteCarloConvergence matches={data.matches} />
+      </Panel>
+
+      <Panel
+        title="Live Win-Probability Timeline"
+        subtitle="The model re-read minute-by-minute from the event feed"
+      >
+        <p className="mb-5 max-w-3xl text-sm text-terminal-muted">
+          For any played match, the win probability is rebuilt at every minute from the score so far and the goals still expected in the time remaining — so each goal visibly swings it, and a sending-off bends the curve. Pre-match prediction at kickoff, the actual result by full time.
+        </p>
+        <WinProbabilityTimeline matches={data.matches} />
+      </Panel>
+
+      <Panel
         title="Team Embedding — PCA + k-means"
         subtitle="48 teams, 8 style dimensions, projected to 2D"
       >
@@ -48,6 +71,16 @@ export default function LabPage() {
           Every team is a vector of playing-style metrics. Principal Component Analysis (computed in-browser via a covariance eigendecomposition) collapses that to two axes that capture the most variance, and k-means groups teams into stylistic clusters. Toggle which metrics feed the projection and it recomputes instantly.
         </p>
         <TeamEmbedding dims={data.embedding.dims} teams={data.embedding.teams} />
+      </Panel>
+
+      <Panel
+        title="Feature Relationships & Model Fit"
+        subtitle="How the metrics move together, and where the goals model misses"
+      >
+        <p className="mb-5 max-w-3xl text-sm text-terminal-muted">
+          Left: the Pearson correlation matrix across the team-style metrics — which qualities travel together (attack and xG) and which trade off. Right: a residual plot of predicted (xG-rate) goals versus what teams actually scored, with the mean absolute error and bias — the honest view of how well the model tracks reality.
+        </p>
+        <FeatureRelationships dims={data.embedding.dims} teams={data.embedding.teams} residuals={data.residuals} />
       </Panel>
 
       <Panel

@@ -19,9 +19,9 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Team embedding (PCA + k-means)** | 48 teams × 8 style metrics → 2D via in-browser covariance eigendecomposition (power iteration); k-means clusters; toggle metrics / k and it re-projects live. Shows explained variance + loadings. (`TeamEmbedding`, `pca`/`kmeans` in labMath) |
 | ✅ | **Calibration lab** | Reliability diagram + Murphy Brier decomposition (reliability − resolution + uncertainty) over every finished match; adjustable bins + one-vs-rest class filter. (`CalibrationLab`) |
 | ✅ | **Prediction explainer (Shapley)** | Exact Shapley attribution of a single match's P(home win) across home advantage + both sides' attack/defense, as a waterfall from neutral baseline to model output. (`PredictionExplainer`, `shapleyContributions`) |
-| 📋 | **Animated Monte Carlo convergence** (LAB-1) | Stream the 3,000 sims in batches and watch the survival-funnel bars + title odds converge in real time (law of large numbers, visualised). |
-| 📋 | **Feature-correlation / residual matrix** (LAB-2) | Interactive correlation heatmap across the team/player metrics, plus a model residual plot (predicted vs actual goals) to show where the model misses. |
-| 📋 | **Live win-probability timeline** (LAB-3) | Per-match win-prob over time (538-style), rebuilt from the event feed with a scrubber — the model updating on each goal/red card. |
+| ✅ | **Monte Carlo convergence** (LAB-1) | Samples scorelines batch-by-batch and animates the running win/draw/loss estimate converging to the exact bivariate-Poisson answer, with a ±2 s.e. band (∝ 1/√n) — the law of large numbers, watched live. (`MonteCarloConvergence`) |
+| ✅ | **Feature-correlation + residual matrix** (LAB-2) | In-browser Pearson correlation matrix across the team-style metrics, plus a predicted-vs-actual goals residual scatter with MAE + bias. (`FeatureRelationships`, `correlationMatrix`) |
+| ✅ | **Live win-probability timeline** (LAB-3) | Per-match win-prob rebuilt minute-by-minute from the event feed (538-style stacked bands), goals swinging it and red cards bending it, hover to scrub. (`WinProbabilityTimeline`, `winProbFromState`) |
 
 ---
 

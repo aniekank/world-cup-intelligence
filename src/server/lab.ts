@@ -1,6 +1,7 @@
 import 'server-only';
 import { getTeams, getMatches, getPlayerViews } from '@/data/store';
 import { engine } from '@/analytics';
+import { expectedGoals } from '@/analytics/poisson';
 import { trackRecord } from '@/server/trackRecord';
 import type { Team } from '@/domain/types';
 
@@ -16,10 +17,13 @@ export interface LabTeam {
   id: string; name: string; code: string; flag: string; color: string;
   confederation: string; attack: number; defense: number; elo: number; fifaRanking: number;
 }
+export interface LabEvent { minute: number; kind: 'goal' | 'red'; side: 'home' | 'away' }
 export interface LabMatch {
   id: string; label: string; stage: string; kickoff: string; status: string;
   home: LabTeam; away: LabTeam;
+  homeScore: number; awayScore: number; events: LabEvent[];
 }
+export interface Residual { pred: number; actual: number; label: string; side: 'home' | 'away' }
 export interface EmbeddingDim { key: string; label: string }
 export interface EmbeddingTeam { id: string; name: string; code: string; flag: string; color: string; confederation: string; elo: number; vector: number[] }
 export interface CalPair { p: number; y: number; cls: 'H' | 'D' | 'A' }
@@ -79,7 +83,17 @@ export function labData() {
   const mkMatch = (m: ReturnType<typeof getMatches>[number]): LabMatch | null => {
     const h = refT.get(m.homeTeamId), a = refT.get(m.awayTeamId);
     if (!h || !a) return null;
-    return { id: m.id, label: `${h.name} v ${a.name}`, stage: m.stage, kickoff: m.kickoff, status: m.status, home: toLabTeam(h), away: toLabTeam(a) };
+    const events: LabEvent[] = m.events
+      .flatMap((e): LabEvent[] => {
+        const homeSide = e.teamId === m.homeTeamId;
+        const min = Math.min(120, e.minute + (e.addedTime ?? 0));
+        if (e.type === 'GOAL' || e.type === 'PENALTY_GOAL') return [{ minute: min, kind: 'goal', side: homeSide ? 'home' : 'away' }];
+        if (e.type === 'OWN_GOAL') return [{ minute: min, kind: 'goal', side: homeSide ? 'away' : 'home' }]; // benefits the opponent
+        if (e.type === 'RED_CARD' || e.type === 'SECOND_YELLOW') return [{ minute: min, kind: 'red', side: homeSide ? 'home' : 'away' }];
+        return [];
+      })
+      .sort((x, y) => x.minute - y.minute);
+    return { id: m.id, label: `${h.name} v ${a.name}`, stage: m.stage, kickoff: m.kickoff, status: m.status, home: toLabTeam(h), away: toLabTeam(a), homeScore: m.homeScore, awayScore: m.awayScore, events };
   };
   const upcoming = getMatches().filter((m) => m.status === 'SCHEDULED').sort((a, b) => a.kickoff.localeCompare(b.kickoff)).slice(0, 8);
   const recent = getMatches().filter((m) => m.status === 'FINISHED').sort((a, b) => b.kickoff.localeCompare(a.kickoff)).slice(0, 6);
@@ -96,6 +110,21 @@ export function labData() {
     (['H', 'D', 'A'] as const).forEach((cls) => calPairs.push({ p: r.probs[cls], y: r.actual === cls ? 1 : 0, cls }));
   }
 
+  // ── Model residuals: predicted (expected) goals vs actual, per side, for
+  // every finished match — shows where the goals model over/under-shoots. ──
+  const residuals: Residual[] = [];
+  for (const m of getMatches()) {
+    if (m.status !== 'FINISHED') continue;
+    const h = refT.get(m.homeTeamId), a = refT.get(m.awayTeamId);
+    if (!h || !a) continue;
+    const lh = expectedGoals(h, a, true), la = expectedGoals(a, h, false);
+    residuals.push({ pred: Math.round(lh * 100) / 100, actual: m.homeScore, label: `${h.code} v ${a.code}`, side: 'home' });
+    residuals.push({ pred: Math.round(la * 100) / 100, actual: m.awayScore, label: `${h.code} v ${a.code}`, side: 'away' });
+  }
+  const resN = residuals.length;
+  const mae = resN ? residuals.reduce((s, r) => s + Math.abs(r.pred - r.actual), 0) / resN : 0;
+  const bias = resN ? residuals.reduce((s, r) => s + (r.actual - r.pred), 0) / resN : 0;
+
   // Default team for the MC simulator: the top contender by title odds.
   const ranked = [...teams].sort((a, b) => (eng.forecasts.get(b.id)?.winTitle ?? 0) - (eng.forecasts.get(a.id)?.winTitle ?? 0));
   const defaultTeamId = ranked[0]?.id ?? labTeams[0]?.id ?? '';
@@ -105,6 +134,7 @@ export function labData() {
     matches,
     embedding: { dims: EMBED_DIMS, teams: embeddingTeams },
     calibration: { pairs: calPairs, n: tr.n, brier: tr.brier, baselineBrier: tr.baselineBrier, skill: tr.skill, hitRate: tr.hitRate },
+    residuals: { points: residuals, mae: Math.round(mae * 100) / 100, bias: Math.round(bias * 100) / 100, n: resN },
     defaultTeamId,
   };
 }

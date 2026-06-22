@@ -85,6 +85,34 @@ export function bivariatePoissonGrid(lambdaHome: number, lambdaAway: number, cov
   return { grid, homeWin, draw, awayWin, btts, over25, topScores: flat.slice(0, 5), lambdaHome, lambdaAway };
 }
 
+/** Sample a Poisson(λ) via Knuth's algorithm using the supplied uniform RNG. */
+export function samplePoisson(rng: () => number, lambda: number): number {
+  if (lambda <= 0) return 0;
+  const L = Math.exp(-lambda);
+  let k = 0, p = 1;
+  do { k++; p *= rng(); } while (p > L);
+  return k - 1;
+}
+
+/** Draw one scoreline from the bivariate Poisson: X=U1+U3, Y=U2+U3. */
+export function sampleBivariatePoisson(rng: () => number, lambdaHome: number, lambdaAway: number, cov = 0.12): { home: number; away: number } {
+  const l3 = cov * Math.min(lambdaHome, lambdaAway);
+  const u3 = samplePoisson(rng, l3);
+  return { home: samplePoisson(rng, Math.max(0.05, lambdaHome - l3)) + u3, away: samplePoisson(rng, Math.max(0.05, lambdaAway - l3)) + u3 };
+}
+
+/** Win/draw/loss probabilities for the REMAINING match: current score + bivariate-Poisson tail. */
+export function winProbFromState(scoreHome: number, scoreAway: number, lambdaHome: number, lambdaAway: number, cov = 0.12): { home: number; draw: number; away: number } {
+  const g = bivariatePoissonGrid(lambdaHome, lambdaAway, cov, 8);
+  let home = 0, draw = 0, away = 0;
+  for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) {
+    const p = g.grid[i]![j]!;
+    const fh = scoreHome + i, fa = scoreAway + j;
+    if (fh > fa) home += p; else if (fh === fa) draw += p; else away += p;
+  }
+  return { home, draw, away };
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Standardization + PCA (covariance → power-iteration eigendecomposition)
 // ────────────────────────────────────────────────────────────────────────────
@@ -97,6 +125,12 @@ export function standardizeColumns(rows: number[][]): { z: number[][]; means: nu
   for (let j = 0; j < d; j++) stds[j] = Math.sqrt(stds[j]) || 1;
   const z = rows.map((r) => r.map((v, j) => (v - means[j]!) / stds[j]!));
   return { z, means, stds };
+}
+
+/** Pearson correlation matrix (d×d) of the columns of `rows`. */
+export function correlationMatrix(rows: number[][]): number[][] {
+  const { z } = standardizeColumns(rows);
+  return covariance(z); // covariance of standardized columns == correlation
 }
 
 function covariance(z: number[][]): number[][] {
