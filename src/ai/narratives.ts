@@ -362,14 +362,15 @@ export function generateMatchSummary(matchId: string): string {
 
   const result = m.homeScore > m.awayScore ? `${home.name} won` : m.homeScore < m.awayScore ? `${away.name} won` : 'It finished level';
   const xgLine =
-    hStat && aStat
+    hStat && aStat && (hStat.xG > 0 || aStat.xG > 0)
       ? ` Underlying numbers: ${home.code} ${fmt(hStat.xG)} xG, ${away.code} ${fmt(aStat.xG)} xG${
           (hStat.xG > aStat.xG) === m.homeScore > m.awayScore ? ' — the better side won' : ', against the run of expected goals'
         }.`
       : '';
-  // WC-023: omit possession / field tilt when the live source doesn't provide
-  // them, rather than fabricating a flat 50/50. Only seeded and historical
-  // editions populate teamStats; SportMonks live data leaves it empty.
+  // WC-023/WC-027: SportMonks DOES provide team match stats (possession, shots,
+  // etc.) via the `statistics` include — the adapter now maps them, so this line
+  // lights up on live. Still gate on presence so unplayed/feed-gap matches don't
+  // fabricate a flat 50/50.
   const possLine =
     typeof hStat?.possession === 'number'
       ? ` ${home.code} held ${fmt(hStat.possession)}% possession${

@@ -29,6 +29,8 @@ import type {
   Position,
   DetailedPosition,
   EventType,
+  Foot,
+  MatchTeamStats,
 } from '@/domain/types';
 
 const BASE = 'https://api.sportmonks.com/v3/football';
@@ -235,11 +237,20 @@ interface SMFixture {
 interface SMDetail { type_id: number; data?: { value?: number } }
 interface SMLineup { player_id: number; team_id: number; position_id: number | null; jersey_number: number | null; player_name: string; details?: SMDetail[] }
 interface SMEvent { type?: { name?: string }; minute?: number; player_id?: number | null; participant_id?: number | null }
+interface SMMeta { type_id: number; values?: unknown }
 interface SMSquadEntry {
   player_id: number;
   position_id: number | null;
   jersey_number: number | null;
-  player?: { display_name?: string; name?: string; date_of_birth?: string | null; height?: number | null; position_id?: number | null; image_path?: string | null };
+  player?: { display_name?: string; name?: string; date_of_birth?: string | null; height?: number | null; position_id?: number | null; image_path?: string | null; metadata?: SMMeta[] };
+}
+interface SMStat { location?: string; type_id: number; type?: { name?: string }; data?: { value?: number } }
+
+// SportMonks player metadata type_id 229 = preferred foot ('left'|'right'|'both').
+const FOOT_TYPE_ID = 229;
+function footOf(metadata?: SMMeta[]): Foot {
+  const v = (metadata ?? []).find((m) => m.type_id === FOOT_TYPE_ID)?.values;
+  return v === 'left' || v === 'right' || v === 'both' ? v : 'right';
 }
 interface SMTeamDetail {
   players?: SMSquadEntry[];
@@ -338,7 +349,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   for (let i = 0; i < teamEntries.length; i += SQUAD_BATCH) {
     const batch = teamEntries.slice(i, i + SQUAD_BATCH);
     const results = await Promise.all(
-      batch.map(([smId]) => smGet<SMTeamDetail>(`/teams/${smId}?include=players.player;coaches.coach`, apiKey).catch(() => null)),
+      batch.map(([smId]) => smGet<SMTeamDetail>(`/teams/${smId}?include=players.player.metadata;coaches.coach`, apiKey).catch(() => null)),
     );
     results.forEach((res, b) => {
       const team = batch[b]![1];
@@ -357,7 +368,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         const p: Player = {
           id: pid, name: (pl.display_name || pl.name || 'Unknown').trim(), teamId: team.id,
           shirtNumber: sp.jersey_number ?? 0, position: pos, detailedPosition: DETAIL[pos],
-          age, birthDate: dob ?? undefined, photo: pl.image_path ?? undefined, heightCm: pl.height ?? 182, foot: 'right', club: '—', marketValueEur: 0,
+          age, birthDate: dob ?? undefined, photo: pl.image_path ?? undefined, heightCm: pl.height ?? 182, foot: footOf(pl.metadata), club: '—', marketValueEur: 0,
           // WC-023: SportMonks has no FIFA-style attributes. Seed `overall` from a
           // team-strength prior (used only for sorting/roster ordering until the
           // player's real match rating is aggregated below) and omit the per-
@@ -375,12 +386,13 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   const teamByCode = new Map([...teamById.values()].map((t) => [t.id, t]));
   const played = fixtures.filter((f) => mapStatus(f.state?.developer_name) === 'FINISHED');
   for (const f of played) {
-    const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[] }>(
-      `/fixtures/${f.id}?include=lineups.details;events.type`,
+    const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[]; statistics?: SMStat[] }>(
+      `/fixtures/${f.id}?include=lineups.details;events.type;statistics.type`,
       apiKey,
     ).catch(() => null);
     if (!detail?.data) continue;
     const m = matches.find((x) => x.id === `m-${f.id}`);
+    const fxXgByCode: Record<string, number> = {}; // per-team xG for THIS fixture (real, from lineups)
 
     for (const lp of detail.data.lineups ?? []) {
       const code = codeByApiId.get(lp.team_id);
@@ -405,6 +417,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       s.goals += v(T.goals);
       s.assists += v(T.assists);
       s.xG += v(T.xG);
+      fxXgByCode[code] = (fxXgByCode[code] ?? 0) + v(T.xG);
       s.shots += v(T.shots);
       s.shotsOnTarget += v(T.sot);
       s.bigChancesCreated += v(T.bigChancesCreated);
@@ -449,6 +462,42 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         });
       });
       m.events = evs;
+
+      // Team match statistics — SportMonks provides 40+ per fixture; map them into
+      // MatchTeamStats so possession, the recap "underlying numbers" line and the
+      // analytics surfaces stop degrading. (WC-027 — supersedes the WC-023 omission,
+      // which wrongly assumed live had no team stats.)
+      const stats = detail.data.statistics ?? [];
+      if (stats.length) {
+        const sval = (loc: 'home' | 'away', name: string) =>
+          stats.find((x) => x.location === loc && x.type?.name === name)?.data?.value ?? 0;
+        const build = (loc: 'home' | 'away', teamId: string): MatchTeamStats => {
+          const opp = loc === 'home' ? 'away' : 'home';
+          const def = sval(loc, 'Tackles') + sval(loc, 'Interceptions');
+          const da = sval(loc, 'Dangerous Attacks'), daOpp = sval(opp, 'Dangerous Attacks');
+          return {
+            teamId,
+            possession: sval(loc, 'Ball Possession %'),
+            shots: sval(loc, 'Shots Total'),
+            shotsOnTarget: sval(loc, 'Shots On Target'),
+            xG: Math.round((fxXgByCode[teamId] ?? 0) * 10) / 10,
+            corners: sval(loc, 'Corners'),
+            fouls: sval(loc, 'Fouls'),
+            offsides: sval(loc, 'Offsides'),
+            passes: sval(loc, 'Passes'),
+            passAccuracy: sval(loc, 'Successful Passes Percentage'),
+            // field tilt ≈ share of the game's dangerous attacks (final-third pressure)
+            fieldTilt: da + daOpp > 0 ? Math.round((da / (da + daOpp)) * 100) : 50,
+            // PPDA ≈ opponent passes allowed per our defensive action (press intensity)
+            ppda: def > 0 ? Math.round((sval(opp, 'Passes') / def) * 10) / 10 : 0,
+            bigChances: sval(loc, 'Big Chances Created'),
+            saves: sval(loc, 'Saves'),
+            yellowCards: sval(loc, 'Yellowcards'),
+            redCards: sval(loc, 'Redcards'),
+          };
+        };
+        m.teamStats = { [m.homeTeamId]: build('home', m.homeTeamId), [m.awayTeamId]: build('away', m.awayTeamId) };
+      }
     }
   }
 
