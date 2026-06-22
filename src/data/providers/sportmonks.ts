@@ -32,6 +32,8 @@ import type {
   Foot,
   MatchTeamStats,
   H2HMeeting,
+  Coach,
+  CoachCareer,
 } from '@/domain/types';
 
 const BASE = 'https://api.sportmonks.com/v3/football';
@@ -265,6 +267,38 @@ export async function attachHeadToHead(matches: Match[], apiKey: string): Promis
   }
 }
 
+/**
+ * Coach career history (clubs/national teams coached, with date ranges). One
+ * call per coach via the `/coaches/{id}?include=teams.team` endpoint — run OFF
+ * the boot path (best-effort), since the nested include isn't allowed on the
+ * team call. Photo + age already come free on the team fetch.
+ */
+export async function attachCoachCareers(teams: Team[], apiKey: string): Promise<void> {
+  const withCoach = teams.filter((t) => t.coach && !t.coach.career);
+  const BATCH = 6;
+  for (let i = 0; i < withCoach.length; i += BATCH) {
+    await Promise.all(
+      withCoach.slice(i, i + BATCH).map(async (t) => {
+        try {
+          const res = await fetch(`${BASE}/coaches/${t.coach!.id}?include=teams.team`, { headers: { Authorization: apiKey }, next: { revalidate: 86400 } });
+          if (!res.ok) return;
+          const j = (await res.json()) as { data?: { teams?: { team?: { name?: string }; start?: string | null; end?: string | null }[] } };
+          const career: CoachCareer[] = (j.data?.teams ?? [])
+            .map((e) => ({ team: e.team?.name ?? '', start: e.start ?? null, end: e.end ?? null }))
+            .filter((e) => e.team)
+            .sort((a, b) => (b.start ?? '').localeCompare(a.start ?? ''));
+          // De-dup consecutive spells at the same club (SportMonks splits caretaker stints).
+          const dedup: CoachCareer[] = [];
+          for (const c of career) if (dedup[dedup.length - 1]?.team !== c.team) dedup.push(c);
+          if (t.coach) t.coach.career = dedup;
+        } catch {
+          /* career stays absent — non-fatal */
+        }
+      }),
+    );
+  }
+}
+
 // ── SportMonks response shapes (only what we use) ────────────────────────────
 interface SMParticipant { id: number; name: string; short_code?: string | null; meta?: { location?: 'home' | 'away' } }
 interface SMScore { participant_id: number; score: { goals: number; participant: string }; description: string }
@@ -288,7 +322,7 @@ interface SMFixture {
   round?: { name?: string };
 }
 interface SMDetail { type_id: number; data?: { value?: number } }
-interface SMLineup { player_id: number; team_id: number; position_id: number | null; jersey_number: number | null; player_name: string; details?: SMDetail[] }
+interface SMLineup { player_id: number; team_id: number; position_id: number | null; jersey_number: number | null; player_name: string; type_id?: number; details?: SMDetail[] }
 interface SMEvent { type?: { name?: string }; minute?: number; player_id?: number | null; participant_id?: number | null }
 interface SMMeta { type_id: number; values?: unknown }
 interface SMSquadEntry {
@@ -305,9 +339,10 @@ function footOf(metadata?: SMMeta[]): Foot {
   const v = (metadata ?? []).find((m) => m.type_id === FOOT_TYPE_ID)?.values;
   return v === 'left' || v === 'right' || v === 'both' ? v : 'right';
 }
+interface SMCoach { id: number; display_name?: string; name?: string; image_path?: string | null; date_of_birth?: string | null }
 interface SMTeamDetail {
   players?: SMSquadEntry[];
-  coaches?: { active?: boolean; coach?: { display_name?: string; name?: string } }[];
+  coaches?: { active?: boolean; coach?: SMCoach }[];
 }
 
 const emptyStats = (id: string): PlayerStats => ({
@@ -409,9 +444,17 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       const team = batch[b]![1];
       const data = res?.data;
       if (!data) return;
-      const coach = (data.coaches ?? []).find((c) => c.active) ?? (data.coaches ?? [])[0];
-      const mgr = coach?.coach?.display_name ?? coach?.coach?.name;
-      if (mgr) team.manager = mgr.trim();
+      const coach = ((data.coaches ?? []).find((c) => c.active) ?? (data.coaches ?? [])[0])?.coach;
+      if (coach) {
+        const nm = (coach.display_name || coach.name || '').trim();
+        const dob = coach.date_of_birth;
+        const c: Coach = {
+          id: coach.id, name: nm, photo: coach.image_path ?? undefined,
+          age: dob ? Math.max(0, Math.floor((Date.now() - Date.parse(dob)) / 31_557_600_000)) : undefined,
+        };
+        team.coach = c;
+        if (nm) team.manager = nm;
+      }
       for (const sp of data.players ?? []) {
         const pl = sp.player ?? {};
         const pid = `${team.id}-${sp.player_id}`;
@@ -447,6 +490,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
     if (!detail?.data) continue;
     const m = matches.find((x) => x.id === `m-${f.id}`);
     const fxXgByCode: Record<string, number> = {}; // per-team xG for THIS fixture (real, from lineups)
+    const xi: Record<string, { id: string; name: string; pos: Position }[]> = {}; // starting XI per team
 
     for (const lp of detail.data.lineups ?? []) {
       const code = codeByApiId.get(lp.team_id);
@@ -464,6 +508,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         byId.set(pid, p);
         playerStats[pid] = emptyStats(pid);
       }
+      if (lp.type_id === 11) (xi[code] ??= []).push({ id: pid, name: lp.player_name, pos: mapPosition(lp.position_id) }); // 11 = starter
       const s = playerStats[pid]!;
       const v = (id: number) => (lp.details ?? []).find((d) => d.type_id === id)?.data?.value ?? 0;
       s.appearances += 1;
@@ -558,6 +603,8 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         };
         m.teamStats = { [m.homeTeamId]: build('home', m.homeTeamId), [m.awayTeamId]: build('away', m.awayTeamId) };
       }
+
+      if (Object.keys(xi).length) m.lineups = xi; // starting XIs → line-up-change view
 
       // Starting formations (e.g. 4-3-3 vs 5-3-2).
       const fm = detail.data.formations ?? [];

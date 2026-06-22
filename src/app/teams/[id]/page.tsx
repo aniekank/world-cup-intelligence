@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { teamView, squadViews } from '@/server/queries';
 import { tacticalProfile } from '@/server/tactics';
+import { lineupView } from '@/server/lineups';
 import { getTeam } from '@/data/store';
 import { Panel, Stat, Badge, FormString, Table, Th, Td, MetricBar } from '@/components/ui';
 import { MiniMatchRow } from '@/components/MatchCard';
@@ -22,6 +23,8 @@ export default function TeamPage({ params }: { params: { id: string } }) {
   const pr = t.powerRanking;
   const tactics = tacticalProfile(params.id);
   const s = t.standing;
+  const coach = t.coach;
+  const lineup = lineupView(params.id);
 
   const positions = ['GK', 'DF', 'MF', 'FW'] as const;
 
@@ -175,6 +178,77 @@ export default function TeamPage({ params }: { params: { id: string } }) {
           )}
           {tactics.note && <p className="mt-3 text-[11px] leading-relaxed text-terminal-muted">{tactics.note}</p>}
         </Panel>
+      )}
+
+      {/* Manager + line-up changes */}
+      {(coach || lineup) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {coach && (
+            <Panel title="Manager" subtitle="Head coach">
+              <div className="flex items-start gap-4">
+                {coach.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={coach.photo} alt="" width={72} height={72} className="h-18 w-18 shrink-0 rounded-xl bg-terminal-panel object-cover" style={{ width: 72, height: 72 }} />
+                ) : (
+                  <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-terminal-panel text-2xl">👔</div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-lg font-bold text-terminal-bright">{coach.name}</div>
+                  {coach.age != null && <div className="text-xs text-terminal-muted">Age {coach.age}</div>}
+                  {coach.career && coach.career.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-terminal-muted">Coaching career</p>
+                      <ul className="space-y-1">
+                        {coach.career.slice(0, 6).map((c, i) => (
+                          <li key={i} className="flex items-center gap-2 text-xs">
+                            <span className="tnum w-20 shrink-0 text-terminal-muted">{c.start ? c.start.slice(0, 4) : '—'}{c.end ? `–${c.end.slice(0, 4)}` : c.start ? '–now' : ''}</span>
+                            <span className="truncate text-terminal-text">{c.team}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-terminal-muted">Career history loads from the live feed.</p>
+                  )}
+                </div>
+              </div>
+            </Panel>
+          )}
+
+          {lineup && (
+            <Panel
+              title="Line-up & changes"
+              subtitle={`Last XI${lineup.opponent ? ` · vs ${lineup.opponent.name}` : ''}${lineup.formation ? ` · ${lineup.formation}` : ''}`}
+            >
+              <div className="flex flex-wrap gap-1.5">
+                {lineup.xi.map((p) => {
+                  const isNew = lineup.changes?.in.some((x) => x.id === p.id);
+                  return (
+                    <Link key={p.id} href={`/players/${p.id}`}
+                      className={`rounded-md border px-2 py-1 text-xs hover:border-accent/40 ${isNew ? 'border-accent/50 bg-accent/10 text-accent' : 'border-terminal-border text-terminal-text'}`}>
+                      {p.name.split(' ').slice(-1)[0]}{isNew && ' •'}
+                    </Link>
+                  );
+                })}
+              </div>
+              {lineup.changes && (lineup.changes.in.length > 0 || lineup.changes.out.length > 0) ? (
+                <div className="mt-3 border-t border-terminal-border pt-3 text-xs">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-terminal-muted">Changes from the {lineup.changes.vsOpponent} game</p>
+                  <div className="space-y-1">
+                    {lineup.changes.in.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2"><span className="text-accent">▲ in</span><span className="text-terminal-text">{p.name} <span className="text-terminal-muted">({p.pos})</span></span></div>
+                    ))}
+                    {lineup.changes.out.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2"><span className="text-accent-red">▼ out</span><span className="text-terminal-muted">{p.name} ({p.pos})</span></div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-[11px] text-terminal-muted">{lineup.changes ? 'Unchanged XI from the previous match.' : 'First XI of the tournament.'}</p>
+              )}
+            </Panel>
+          )}
+        </div>
       )}
 
       <Panel title="Squad" subtitle={`${squad.length} players`} bodyClassName="p-0">

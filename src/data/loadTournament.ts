@@ -1,7 +1,7 @@
 import 'server-only';
 import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
-import { getCachedTournament, setDataset, getActiveTournamentId, getMatches } from './store';
+import { getCachedTournament, setDataset, getActiveTournamentId, getMatches, getTeams } from './store';
 import type { FixtureUpdate, RawFixtureEvent } from './providers/apiFootball';
 import type { DatasetSnapshot, Match, MatchEvent, EventType, Team } from '@/domain/types';
 
@@ -109,6 +109,9 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   }
   if (id === 'live-2026' && !snap.matches.some((m) => m.h2h?.length)) {
     void enrichLiveH2H().catch(() => {});
+  }
+  if (id === 'live-2026' && !snap.teams.some((t) => t.coach?.career)) {
+    void enrichLiveCoaches().catch(() => {});
   }
   return snap;
 }
@@ -297,5 +300,17 @@ export async function enrichLiveH2H(): Promise<void> {
     await attachHeadToHead(getMatches(), key);
   } catch {
     /* h2h stays absent — non-fatal */
+  }
+}
+
+export async function enrichLiveCoaches(): Promise<void> {
+  if (getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+  if (!key) return;
+  try {
+    const { attachCoachCareers } = await import('./providers/sportmonks');
+    await attachCoachCareers(getTeams(), key);
+  } catch {
+    /* coach careers stay absent — non-fatal */
   }
 }

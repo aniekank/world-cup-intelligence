@@ -132,12 +132,22 @@ export type MatchResultLetter = 'W' | 'D' | 'L';
 // Teams
 // ─────────────────────────────────────────────────────────────
 
+export interface CoachCareer { team: string; start: string | null; end: string | null }
+export interface Coach {
+  id: number;
+  name: string;
+  photo?: string;
+  age?: number;
+  career?: CoachCareer[]; // clubs/teams coached, most recent first (live source)
+}
+
 export interface Team {
   id: ID;
   name: string;
   code: string; // FIFA 3-letter, e.g. "BRA"
   flag: string; // emoji
   confederation: Confederation;
+  coach?: Coach; // live source only; `manager` keeps the name for back-compat
   groupId: ID | null;
   fifaRanking: number;
   elo: number; // pre-tournament ELO, updated live by the engine
@@ -265,6 +275,8 @@ export interface Match {
   // Provider team ids (live source only) — used to fetch head-to-head off the boot path.
   smHomeId?: number;
   smAwayId?: number;
+  // Starting XI per team (live source only) — powers the line-up-change view.
+  lineups?: Record<string, { id: string; name: string; pos: Position }[]>;
   // International broadcast listings, grouped by country (live source only).
   tvListings?: MatchTvCountry[];
 }
