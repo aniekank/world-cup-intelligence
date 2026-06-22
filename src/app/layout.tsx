@@ -6,16 +6,33 @@ import { Topbar } from '@/components/layout/Topbar';
 import { ManifestoBackdrop } from '@/components/effects/ManifestoBackdrop';
 import { IntroSplash } from '@/components/effects/IntroSplash';
 
+// Default to the production origin (not localhost) so social share cards —
+// og:image, twitter:image — resolve to a reachable URL even when
+// NEXT_PUBLIC_SITE_URL isn't set. Override the env var for a custom domain.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://world-cup-intelligence.onrender.com';
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'World Cup Intelligence — TASK Enterprises',
     template: '%s · World Cup Intelligence',
   },
   description:
-    'TASK Enterprises presents World Cup Intelligence: a live analytics platform with a Monte Carlo forecasting engine, advanced metrics, AI insights, and natural-language search.',
+    'World Cup Intelligence: a live FIFA World Cup 2026 analytics platform — a Monte Carlo forecasting engine, an interactive data-science Model Lab, advanced metrics, and AI insights.',
   applicationName: 'World Cup Intelligence',
-  keywords: ['World Cup 2026', 'football analytics', 'xG', 'predictions', 'Opta', 'soccer'],
+  keywords: ['World Cup 2026', 'football analytics', 'xG', 'predictions', 'Monte Carlo', 'soccer', 'data science'],
+  openGraph: {
+    type: 'website',
+    siteName: 'World Cup Intelligence',
+    title: 'World Cup Intelligence — live World Cup 2026 analytics',
+    description: 'A Monte Carlo forecasting engine, an interactive data-science Model Lab, advanced metrics, and AI insights — for the FIFA World Cup 2026.',
+    url: SITE_URL,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'World Cup Intelligence — live World Cup 2026 analytics',
+    description: 'Monte Carlo forecasts, an interactive Model Lab, advanced metrics, and AI insights for the 2026 World Cup.',
+  },
 };
 
 export const viewport: Viewport = {
