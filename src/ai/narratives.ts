@@ -261,8 +261,57 @@ export function generateInsights(): Insight[] {
   const timing = regionalTimingInsight();
   if (timing) insights.push(timing);
 
+  // Hot scoring streak — record watch
+  const streak = scoringStreakInsight();
+  if (streak) insights.push(streak);
+
   const order = { high: 0, medium: 1, low: 2 };
   return insights.sort((a, b) => order[a.severity] - order[b.severity]);
+}
+
+/** The longest active "scored in consecutive matches" run at the tournament. */
+function scoringStreakInsight(): Insight | null {
+  const finished = getMatches().filter((m) => m.status === 'FINISHED');
+  if (finished.length < 2) return null;
+  const pv = new Map(getPlayerViews().map((p) => [p.id, p]));
+  const scoredIn = new Map<string, Set<string>>();
+  for (const m of finished) {
+    for (const e of m.events) {
+      if ((e.type === 'GOAL' || e.type === 'PENALTY_GOAL') && e.playerId) {
+        let s = scoredIn.get(e.playerId);
+        if (!s) { s = new Set(); scoredIn.set(e.playerId, s); }
+        s.add(m.id);
+      }
+    }
+  }
+  let best: { id: string; name: string; team: string; streak: number; goals: number } | null = null;
+  for (const [pid, scored] of scoredIn) {
+    const p = pv.get(pid);
+    if (!p) continue;
+    const teamMatches = finished
+      .filter((m) => m.homeTeamId === p.teamId || m.awayTeamId === p.teamId)
+      .sort((a, b) => b.kickoff.localeCompare(a.kickoff));
+    let streak = 0;
+    for (const m of teamMatches) { if (scored.has(m.id)) streak++; else break; } // consecutive from the most recent game
+    if (streak >= 2 && (!best || streak > best.streak || (streak === best.streak && p.stats.goals > best.goals))) {
+      best = { id: pid, name: p.name, team: p.team.name, streak, goals: p.stats.goals };
+    }
+  }
+  if (!best) return null;
+  return {
+    id: `streak-${best.id}`,
+    kind: 'milestone',
+    severity: 'low',
+    title: `${best.name} can't stop scoring`,
+    body: `${best.name} has found the net in ${best.streak} straight matches for ${best.team} — the hottest scoring run at the tournament, ${best.goals} goals and counting.`,
+    entityType: 'player',
+    entityId: best.id,
+    metrics: [
+      { label: 'Scoring streak', value: `${best.streak} games` },
+      { label: 'Goals', value: String(best.goals) },
+    ],
+    createdAt: NOW,
+  };
 }
 
 // ── Regional goal-timing insight (CIV-1) ─────────────────────────────────────
