@@ -255,8 +255,75 @@ export function generateInsights(): Insight[] {
     }
   }
 
+  // Regional goal-timing pattern (CIV-1)
+  const timing = regionalTimingInsight();
+  if (timing) insights.push(timing);
+
   const order = { high: 0, medium: 1, low: 2 };
   return insights.sort((a, b) => order[a.severity] - order[b.severity]);
+}
+
+// ── Regional goal-timing insight (CIV-1) ─────────────────────────────────────
+// Finds the region with the most concentrated scoring window (which 15-minute
+// phase it scores the biggest share of its goals in) — "African sides are
+// scoring in the final 15 minutes." Drawn from the match event feed.
+const REGION_ADJ: Record<string, string> = {
+  UEFA: 'European', CONMEBOL: 'South American', CAF: 'African', AFC: 'Asian', CONCACAF: 'North American', OFC: 'Oceanian',
+};
+const TIMING_PHASES = [
+  'the opening 15 minutes', 'minutes 16–30', 'the run-up to half-time',
+  'the hour right after the break', 'minutes 61–75', 'the final 15 minutes',
+];
+function timingPhase(min: number): number {
+  if (min <= 15) return 0; if (min <= 30) return 1; if (min <= 45) return 2;
+  if (min <= 60) return 3; if (min <= 75) return 4; return 5;
+}
+
+export function regionalTimingInsight(): Insight | null {
+  const teamConf = new Map(getTeams().map((t) => [t.id, t.confederation]));
+  const byConf = new Map<string, number[]>();
+  let totalGoals = 0;
+  for (const m of getMatches()) {
+    for (const ev of m.events) {
+      if (ev.type !== 'GOAL' && ev.type !== 'PENALTY_GOAL') continue;
+      const conf = teamConf.get(ev.teamId);
+      if (!conf) continue;
+      let b = byConf.get(conf);
+      if (!b) { b = [0, 0, 0, 0, 0, 0]; byConf.set(conf, b); }
+      b[timingPhase(ev.minute)]! += 1;
+      totalGoals++;
+    }
+  }
+  if (totalGoals < 20) return null;
+  let best: { conf: string; phase: number; share: number; total: number; n: number } | null = null;
+  for (const [conf, b] of byConf) {
+    const total = b.reduce((a, c) => a + c, 0);
+    if (total < 8) continue; // need a real sample to claim a pattern
+    for (let p = 0; p < 6; p++) {
+      const share = b[p]! / total;
+      // Surface the single most concentrated (region, window) — needs a real
+      // sample and to sit meaningfully above the 1/6 ≈ 17% uniform baseline.
+      if (b[p]! >= 3 && share >= 0.24 && (!best || share > best.share)) best = { conf, phase: p, share, total, n: b[p]! };
+    }
+  }
+  if (!best) return null;
+  const adj = REGION_ADJ[best.conf] ?? best.conf;
+  const phase = TIMING_PHASES[best.phase]!;
+  return {
+    id: `region-timing-${best.conf}-${best.phase}`,
+    kind: 'tactical',
+    severity: 'low',
+    title: `${adj} sides come alive in ${phase}`,
+    body: `${adj} teams have scored ${best.n} of their ${best.total} goals (${Math.round(best.share * 100)}%) in ${phase} — the most concentrated scoring window of any region at this World Cup.`,
+    entityType: 'tournament',
+    entityId: null,
+    metrics: [
+      { label: 'Share in window', value: `${Math.round(best.share * 100)}%` },
+      { label: 'Goals in window', value: `${best.n}` },
+      { label: 'Region goals', value: `${best.total}` },
+    ],
+    createdAt: NOW,
+  };
 }
 
 export function generateMatchSummary(matchId: string): string {
@@ -676,6 +743,8 @@ export function generateBriefingDeck(): BriefingCard[] {
   if (upset) cards.push({ id: 'upset', kicker: 'Upset', headline: upset.title.replace(/^Upset:\s*/, ''), body: upset.body, tags: [`${upset.severity} signal`], accent: '#ff2e9a' });
   const breakout = ins.find((i) => i.kind === 'breakout');
   if (breakout) cards.push({ id: 'breakout', kicker: 'Breakout', headline: breakout.title.replace(/^Breakout watch:\s*/, ''), body: breakout.body, tags: [], accent: '#22e0d0' });
+  const timing = ins.find((i) => i.id.startsWith('region-timing-'));
+  if (timing) cards.push({ id: 'region-timing', kicker: 'Around the World', headline: timing.title, body: timing.body, tags: timing.metrics.slice(0, 2).map((m) => `${m.label} ${m.value}`), accent: '#8b5cf6' });
 
   // 9) Marquee fixtures still to come.
   for (const c of criticalMatches(2)) {

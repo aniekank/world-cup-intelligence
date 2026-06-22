@@ -169,7 +169,8 @@ export function predictionsView() {
       .map((t) => ({ team: t, forecast: eng.forecasts.get(t.id)! }))
       .filter((x) => x.forecast)
       .sort((a, b) => b.forecast.winTitle - a.forecast.winTitle),
-    goldenBoot: eng.goldenBoot.slice(0, 20).map((g) => {
+    // Deeper list so the region filter on the golden-boot board has enough names.
+    goldenBoot: eng.goldenBoot.slice(0, 80).map((g) => {
       const v = getPlayerViews().find((p) => p.id === g.playerId);
       return { ...g, player: v ?? null, team: v ? teamMap.get(v.teamId) ?? null : null };
     }),

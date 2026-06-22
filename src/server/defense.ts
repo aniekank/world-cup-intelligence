@@ -109,3 +109,5 @@ export function defenseView() {
     hasResults: meanest.length > 0,
   };
 }
+
+export type DefenseData = ReturnType<typeof defenseView>;

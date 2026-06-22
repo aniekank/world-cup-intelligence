@@ -467,7 +467,7 @@ export interface Notification {
 // ─────────────────────────────────────────────────────────────
 
 export interface PlayerView extends Player {
-  team: Pick<Team, 'id' | 'name' | 'code' | 'flag'>;
+  team: Pick<Team, 'id' | 'name' | 'code' | 'flag'> & { confederation?: Confederation };
   stats: PlayerStats;
   per90: Record<string, number>;
   percentiles: Record<string, number>; // 0..100 vs positional peers

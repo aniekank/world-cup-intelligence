@@ -50,8 +50,8 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Regional standings + title race** | Combined championship probability by region (stacked bar), per-region cards (record, qualified/eliminated, PPG, win %, knockout reach, avg ELO, top scorer, clean sheets, discipline), inter-confederation head-to-head matrix, and biggest cross-region results. (`src/server/civilizations.ts`) |
 | ✅ | **Goals around the world** | Diverging scored-vs-conceded bars by region, sharpest-attack / meanest-defense callouts, and a "when regions score" goal-timing heatmap (six 15-min windows from the event feed). |
 | ✅ | **Confederation filter on players** | `/api/players` tags each player with its region; the Players explorer filters by confederation. |
-| 📋 | **Regional goal-timing insight** (CIV-1) | Auto-generate a callout from the timing data ("Asia scores 40% of its goals after the 75th minute") into the daily briefing / AI Insights. |
-| 📋 | **Confederation lens elsewhere** (CIV-2) | Add the region filter to the golden-boot race and the Defense leaderboards (meanest defenses / golden glove / ball-winners). |
+| ✅ | **Regional goal-timing insight** (CIV-1) | `regionalTimingInsight()` surfaces the region with the most concentrated scoring window ("South American sides come alive in the run-up to half-time — 40% of their goals") into AI Insights + the rotating briefing deck. (`src/ai/narratives.ts`) |
+| ✅ | **Confederation lens elsewhere** (CIV-2) | A shared `RegionFilter` powers a region lens on the Defense leaderboards (meanest defenses / golden glove / ball-winners) and the golden-boot projection; players carry `team.confederation` so the boards filter client-side. (`RegionalDefense`, `RegionalGoldenBoot`, `RegionFilter`) |
 
 ## 2. Search & natural-language Q&A
 

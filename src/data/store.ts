@@ -244,7 +244,7 @@ export function getPlayerView(id: ID): PlayerView | undefined {
   // returned undefined, which became notFound() → an empty page on /players/[id].
   const team = getTeam(player.teamId);
   const teamView = team
-    ? { id: team.id, name: team.name, code: team.code, flag: team.flag }
+    ? { id: team.id, name: team.name, code: team.code, flag: team.flag, confederation: team.confederation }
     : { id: player.teamId, name: player.teamId.toUpperCase(), code: player.teamId.slice(0, 3).toUpperCase(), flag: '🏳️' };
   const stats = getPlayerStats(id) ?? emptyStatsFor(id);
   const p90 = per90(stats);

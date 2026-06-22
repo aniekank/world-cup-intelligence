@@ -7,6 +7,7 @@ import { SimulationBanner } from '@/components/SimulationBanner';
 import { HBar } from '@/components/charts/Recharts';
 import { pct } from '@/lib/format';
 import { TrackActivation } from '@/components/TrackActivation';
+import { RegionalGoldenBoot } from '@/components/predictions/RegionalGoldenBoot';
 
 export const metadata: Metadata = { title: 'Predictions' };
 
@@ -126,38 +127,10 @@ export default function PredictionsPage() {
               </InfoTip>
             </span>
           }
-          subtitle="Finishing-adjusted xG model"
+          subtitle="Finishing-adjusted xG model · by region"
           bodyClassName="p-0"
         >
-          <Table>
-            <thead>
-              <tr>
-                <Th>#</Th>
-                <Th>Player</Th>
-                <Th align="right">G</Th>
-                <Th align="right">xG</Th>
-                <Th align="right">Proj.</Th>
-                <Th align="right">Win Boot</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {goldenBoot.slice(0, 12).map((g, i) => (
-                <tr key={g.playerId}>
-                  <Td className="tnum text-terminal-muted">{i + 1}</Td>
-                  <Td>
-                    <Link href={`/players/${g.playerId}`} className="flex items-center gap-2 hover:text-accent">
-                      <span>{g.team?.flag}</span>
-                      <span className="truncate text-terminal-bright">{g.player?.name ?? g.playerId}</span>
-                    </Link>
-                  </Td>
-                  <Td align="right" className="font-semibold">{g.currentGoals}</Td>
-                  <Td align="right" className="text-terminal-muted">{g.currentXG}</Td>
-                  <Td align="right" className="text-accent">{g.projectedGoals}</Td>
-                  <Td align="right">{pct(g.winProbability, 0)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <RegionalGoldenBoot rows={goldenBoot} />
         </Panel>
       </div>
     </div>
