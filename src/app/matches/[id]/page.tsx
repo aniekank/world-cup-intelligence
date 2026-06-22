@@ -90,6 +90,14 @@ export default function MatchPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
+        {match.formations && (
+          <div className="mx-auto mt-5 flex max-w-md items-center justify-center gap-3 text-xs text-terminal-muted">
+            <span className="tnum font-semibold text-terminal-bright">{match.formations.home}</span>
+            <span className="uppercase tracking-widest text-[10px]">formations</span>
+            <span className="tnum font-semibold text-terminal-bright">{match.formations.away}</span>
+          </div>
+        )}
+
         {!finished && prediction && (
           <div className="mx-auto mt-6 max-w-md">
             <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />

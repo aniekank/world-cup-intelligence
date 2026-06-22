@@ -231,6 +231,8 @@ interface SMFixture {
   scores?: SMScore[];
   state?: { developer_name?: string };
   periods?: { ticking?: boolean; minutes?: number }[];
+  venue?: { name?: string | null; city_name?: string | null } | null;
+  formations?: { location?: string; formation?: string | null }[];
   group?: { name?: string };
   round?: { name?: string };
 }
@@ -270,7 +272,7 @@ const emptyStats = (id: string): PlayerStats => ({
 export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSnapshot> {
   // 1) All WC2026 fixtures with teams, scores, state, group/round.
   const fixturesRaw = await smList<SMFixture>(
-    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state;group;round&per_page=50`,
+    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state;group;round;venue&per_page=50`,
     apiKey,
   );
 
@@ -326,7 +328,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       return {
         id: `m-${f.id}`, competitionId: 'wc-2026', stage: 'GROUP', groupId: groupLetter,
         matchday: 1, kickoff: f.starting_at ? `${f.starting_at.replace(' ', 'T')}Z` : new Date().toISOString(),
-        venue: 'TBD', city: '',
+        venue: f.venue?.name ?? 'TBD', city: f.venue?.city_name ?? '',
         status, minute: status === 'FINISHED' ? 90 : 0,
         homeTeamId: homeId, awayTeamId: awayId,
         homeScore: goalsFor(home.id, cur), awayScore: goalsFor(away.id, cur),
@@ -387,7 +389,7 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
   const played = fixtures.filter((f) => mapStatus(f.state?.developer_name) === 'FINISHED');
   for (const f of played) {
     const detail = await smGet<SMFixture & { lineups?: SMLineup[]; events?: SMEvent[]; statistics?: SMStat[] }>(
-      `/fixtures/${f.id}?include=lineups.details;events.type;statistics.type`,
+      `/fixtures/${f.id}?include=lineups.details;events.type;statistics.type;formations`,
       apiKey,
     ).catch(() => null);
     if (!detail?.data) continue;
@@ -498,6 +500,12 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         };
         m.teamStats = { [m.homeTeamId]: build('home', m.homeTeamId), [m.awayTeamId]: build('away', m.awayTeamId) };
       }
+
+      // Starting formations (e.g. 4-3-3 vs 5-3-2).
+      const fm = detail.data.formations ?? [];
+      const homeFm = fm.find((x) => x.location === 'home')?.formation;
+      const awayFm = fm.find((x) => x.location === 'away')?.formation;
+      if (homeFm && awayFm) m.formations = { home: homeFm, away: awayFm };
     }
   }
 
