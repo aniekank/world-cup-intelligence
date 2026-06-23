@@ -14,6 +14,7 @@ import {
 } from '@/data/store';
 import { computeGroupStandings, rankBestThirds } from './standings';
 import { runSimulation } from './simulate';
+import { reconcileForecastsWithResults } from './knockoutResults';
 import { buildPowerRankings } from './power';
 import { buildBracket } from './bracket';
 import { projectGoldenBoot } from './goldenboot';
@@ -52,8 +53,11 @@ export function engine(): EngineSnapshot {
   const groups = getGroups();
   const matches = getMatches();
 
-  // 1. Monte Carlo forecasts
+  // 1. Monte Carlo forecasts, then reconcile with any real knockout results so a
+  //    team that's already been eliminated can't still show a reach probability
+  //    (no-op until real knockout fixtures exist).
   const { forecasts } = runSimulation(teams, groups, matches);
+  reconcileForecastsWithResults(forecasts, matches, teams);
 
   // 2. Standings (inject qualification probability from the simulation)
   const matchMap = matches;

@@ -71,6 +71,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Viewer-local kickoff times** | Kickoffs render in the viewer's own timezone (no more "tomorrow 1pm"). |
 | ✅ | **Client-side live auto-tick** (ENH-1) | Global `<LiveRefresh>` polls `/api/live-status` and calls `router.refresh()` on a snapshot-generation change, so every page updates in place without a reload (15s live / 60s idle, pauses on hidden tab). Freshness pill in the Topbar. Server poll made adaptive + env-tunable. |
 | 📋 | **Full-history event backfill** | Fetch timelines for all finished matches (currently capped to recent + on-demand), so older match pages show their full timeline. |
+| 🟡 | **Knockout forecast — reality reconcile (done) + full re-sim (deferred)** | `reconcileForecastsWithResults` already pins known facts (eliminated → 0, confirmed advancers → reached) once real ties resolve. The remaining piece is a full real-bracket *re-simulation* — propagate still-alive teams through the **actual** draw (FIFA bracket tree reconstructed from SportMonks' "Winner Match N" linkage + best-third routing) instead of the seeded approximation, so deeper-run odds are computed on the true bracket. Fragile + unverifiable until the draw lands (2 Jul 2026); revisit then. |
 
 ## 4. Data pipeline & resilience
 *Lessons from the live-feed incidents (see `BUGS.md` INC-1/INC-2).*
