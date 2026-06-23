@@ -36,12 +36,16 @@ import type { Team, TeamView, Match } from '@/domain/types';
  */
 export function liveStatus() {
   const live = getLiveMatches();
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean };
   return {
     generatedAt: dataset().generatedAt,
     tournamentId: getActiveTournamentId(),
     source: getActiveSource(),
     isLive: live.length > 0,
     liveCount: live.length,
+    // True while the live snapshot is still loading at boot (the app is serving
+    // the placeholder simulation until it swaps in).
+    loading: !!g.__wcLiveLoading,
   };
 }
 

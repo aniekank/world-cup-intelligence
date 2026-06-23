@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
 /**
  * Keeps every page current without a manual reload. Polls a tiny no-store
@@ -18,10 +19,12 @@ interface Status {
   source: string;
   isLive: boolean;
   liveCount: number;
+  loading?: boolean; // live snapshot still loading at boot (serving the placeholder sim)
 }
 
 const LIVE_MS = 15_000; // poll cadence while a match is in play
 const IDLE_MS = 60_000; // poll cadence otherwise (catches a kickoff flipping live)
+const BOOT_MS = 2_500; // poll cadence while the live snapshot loads at boot
 
 export function LiveRefresh() {
   const router = useRouter();
@@ -31,6 +34,11 @@ export function LiveRefresh() {
   // The snapshot generation we've already pulled into the current page, so we
   // only re-render when the server genuinely has newer data.
   const renderedGen = useRef<string | null>(null);
+  // Whether the *previous* poll already saw the live edition. Starts true so a
+  // normal first load (page server-rendered with live data) doesn't refresh
+  // redundantly — but a boot that starts on the sim placeholder flips this to
+  // false, so when live swaps in we force one refresh to replace the placeholder.
+  const prevLive2026 = useRef(true);
 
   const tick = useCallback(async () => {
     let nextDelay = IDLE_MS;
@@ -39,17 +47,24 @@ export function LiveRefresh() {
       if (res.ok) {
         const s: Status = await res.json();
         setStatus(s);
-        nextDelay = s.isLive ? LIVE_MS : IDLE_MS;
-        if (s.tournamentId === 'live-2026') {
-          if (renderedGen.current === null) {
-            // First observation: the page was just server-rendered, so adopt the
-            // current generation without a redundant immediate refresh.
+        const isLive2026 = s.tournamentId === 'live-2026';
+        if (isLive2026) {
+          nextDelay = s.isLive ? LIVE_MS : IDLE_MS;
+          if (!prevLive2026.current) {
+            // Just swapped from the boot/sim placeholder to live → replace the
+            // page's stale (simulation) content.
             renderedGen.current = s.generatedAt;
+            router.refresh();
+          } else if (renderedGen.current === null) {
+            renderedGen.current = s.generatedAt; // adopt on first load, no refresh
           } else if (s.generatedAt !== renderedGen.current) {
             renderedGen.current = s.generatedAt;
             router.refresh(); // free: re-renders from the in-memory snapshot
           }
+        } else if (s.loading) {
+          nextDelay = BOOT_MS; // live snapshot still loading → poll fast until it swaps
         }
+        prevLive2026.current = isLive2026;
       }
     } catch {
       // Network hiccup — keep the last status and try again next tick.
@@ -80,7 +95,23 @@ export function LiveRefresh() {
     return () => clearInterval(id);
   }, []);
 
-  if (!status || status.tournamentId !== 'live-2026') return null;
+  if (!status) return null;
+
+  // Boot window: the live snapshot is still loading, so the app is serving the
+  // placeholder simulation. Tell the user rather than passing it off as live.
+  if (status.tournamentId !== 'live-2026') {
+    if (status.loading) {
+      return (
+        <span
+          title="Connecting to the live data feed — showing a placeholder until it loads."
+          className="hidden items-center gap-1.5 rounded-full border border-terminal-border px-2 py-1 text-[11px] text-terminal-muted sm:inline-flex"
+        >
+          <Loader2 className="h-3 w-3 animate-spin text-accent" /> Loading live data…
+        </span>
+      );
+    }
+    return null;
+  }
 
   const ageMs = Math.max(0, now - new Date(status.generatedAt).getTime());
   // When live, show the ticking age — it reassures users the scores are moving.

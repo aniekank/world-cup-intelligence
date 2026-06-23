@@ -16,6 +16,12 @@ export async function register() {
 
   // Load in the BACKGROUND so the server starts serving immediately. Early
   // requests see the simulation until the real data swaps in (seconds later).
+  // A loading flag (only for the live edition) lets the client show a "Loading
+  // live data…" indicator during that window instead of silently rendering the
+  // placeholder simulation.
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean };
+  const trackLoading = id === 'live-2026';
+  if (trackLoading) g.__wcLiveLoading = true;
   void (async () => {
     try {
       const { activateTournament } = await import('@/data/loadTournament');
@@ -23,6 +29,8 @@ export async function register() {
       console.log(`[data] Active tournament: ${snap.competition.name} [src=${snap.meta?.source ?? '?'}] — ${snap.teams.length} teams, ${snap.players.length} players, ${snap.matches.length} matches.`);
     } catch (err) {
       console.error('[data] Tournament load failed — staying on simulation:', err);
+    } finally {
+      if (trackLoading) g.__wcLiveLoading = false;
     }
   })();
 
