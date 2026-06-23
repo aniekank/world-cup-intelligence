@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { tournamentSummaries } from '@/server/history';
 import { PageHeader, Panel, Stat } from '@/components/ui';
-import { HBar, AreaTrend } from '@/components/charts/Recharts';
+import { AreaTrend } from '@/components/charts/Recharts';
 import { ExploreTournamentButton } from '@/components/history/ExploreTournamentButton';
 
 export const metadata: Metadata = { title: 'Through the Years' };
@@ -22,11 +22,12 @@ export default async function HistoryPage() {
   const menGpg = men.map((t) => ({ year: t.short, gpg: Math.round(t.goalsPerGame * 100) / 100 }));
   const womenGpg = women.map((t) => ({ year: t.short, gpg: Math.round(t.goalsPerGame * 100) / 100 }));
 
-  // xG only exists for the shot-level (StatsBomb) editions — never fabricate a
-  // zero for the archive; show only the editions we actually have shots for.
-  const xgData = all
-    .filter((t) => t.hasShots)
-    .map((t) => ({ label: t.short, value: Math.round(t.xgPerShot * 100) / 100, color: t.gender === 'women' ? '#ff2e9a' : '#22e0d0' }));
+  // Field size per edition — the tournament's expansion (13 → 16 → 24 → 32) is
+  // one of the clearest "through the years" stories, and we have it for every
+  // edition. xG/shot is omitted here (it exists only for the 4 modern StatsBomb
+  // editions, so it can't show an era trend); it still appears on those cards.
+  const menTeams = men.map((t) => ({ year: t.short, teams: t.teams }));
+  const womenTeams = women.map((t) => ({ year: t.short, teams: t.teams }));
 
   return (
     <div className="space-y-6">
@@ -56,11 +57,18 @@ export default async function HistoryPage() {
         )}
       </div>
 
-      {xgData.length > 0 && (
-        <Panel title="Shot Quality (xG per shot)" subtitle="Shot-level editions only · StatsBomb">
-          <HBar data={xgData} unit="" color="#22e0d0" height={Math.max(180, xgData.length * 46)} />
-        </Panel>
-      )}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {menTeams.length > 0 && (
+          <Panel title="Field Size · Men's" subtitle="Teams per tournament, 1930 onward">
+            <AreaTrend data={menTeams} dataKey="teams" xKey="year" color="#a8e020" height={220} />
+          </Panel>
+        )}
+        {womenTeams.length > 0 && (
+          <Panel title="Field Size · Women's" subtitle="Teams per tournament, 1991 onward">
+            <AreaTrend data={womenTeams} dataKey="teams" xKey="year" color="#a8e020" height={220} />
+          </Panel>
+        )}
+      </div>
 
       {[
         // Cards list most-recent-first; the trend charts above stay chronological
