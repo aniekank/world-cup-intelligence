@@ -103,10 +103,10 @@ describe('analytics engine', () => {
     expect(eng.powerRankings[0]!.rank).toBe(1);
   });
 
-  it('golden boot leader has the most projected goals', () => {
+  it('golden boot race ranks by goals actually scored (projection rides alongside)', () => {
     const gb = eng.goldenBoot;
     expect(gb.length).toBeGreaterThan(0);
-    expect(gb[0]!.projectedGoals).toBeGreaterThanOrEqual(gb[1]!.projectedGoals);
+    expect(gb[0]!.currentGoals).toBeGreaterThanOrEqual(gb[1]!.currentGoals);
   });
 });
 

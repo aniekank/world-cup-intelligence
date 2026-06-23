@@ -127,7 +127,7 @@ export default function PredictionsPage() {
               </InfoTip>
             </span>
           }
-          subtitle="Finishing-adjusted xG model · by region"
+          subtitle="Live standings + finishing-adjusted projection · by region"
           bodyClassName="p-0"
         >
           <RegionalGoldenBoot rows={goldenBoot} />

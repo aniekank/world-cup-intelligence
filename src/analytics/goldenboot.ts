@@ -30,8 +30,11 @@ export function projectGoldenBoot(
       const f = forecasts.get(p.teamId);
       const remainGames = expectedRemainingGames(f, groupGamesLeftByTeam.get(p.teamId) ?? 0);
       const mins = Math.max(p.stats.minutes, 1);
-      // Finishing-adjusted goal rate per 90: blend actual & expected
-      const goalRate90 = ((p.stats.goals * 0.55 + p.stats.xG * 0.45) / mins) * 90;
+      // Finishing-adjusted goal rate per 90: blend actual & expected. Regress the
+      // denominator to a ~2-game sample (180') so a one-off burst — a sub who
+      // scored in 30' — can't project a wild rate and leapfrog established
+      // scorers. (WC-029)
+      const goalRate90 = ((p.stats.goals * 0.55 + p.stats.xG * 0.45) / Math.max(mins, 180)) * 90;
       const projMinutesEach = Math.min(90, mins / Math.max(p.stats.appearances, 1));
       const futureGoals = goalRate90 * (remainGames * projMinutesEach) / 90;
       const projected = p.stats.goals + futureGoals;
@@ -82,6 +85,16 @@ export function projectGoldenBoot(
       projectedFinishRank: 0,
       winProbability: Math.round(((winProbs.get(c.playerId) ?? 0) / total) * 1000) / 1000,
     }))
-    .sort((a, b) => b.projectedGoals - a.projectedGoals || b.winProbability - a.winProbability)
+    // Rank the race by goals actually scored (the real Golden Boot standings);
+    // the projection and win probability ride alongside as the forecast, not the
+    // sort key — so a low-minute player can never outrank the current leader.
+    // Tie-break on projection, then xG, then win probability. (WC-029)
+    .sort(
+      (a, b) =>
+        b.currentGoals - a.currentGoals ||
+        b.projectedGoals - a.projectedGoals ||
+        b.currentXG - a.currentXG ||
+        b.winProbability - a.winProbability,
+    )
     .map((c, i) => ({ ...c, projectedFinishRank: i + 1 }));
 }
