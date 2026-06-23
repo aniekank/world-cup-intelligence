@@ -29,21 +29,31 @@ export async function register() {
   // For the live edition, poll the fixtures feed so in-play games flip to LIVE
   // and scores update mid-tournament. The refresh itself no-ops (no API call)
   // unless a match is actually in its play window, so this is quota-cheap.
+  //
+  // Adaptive cadence: poll faster while a match is actually in play (tight,
+  // up-to-the-minute scores) and slower otherwise (quota-cheap). Both are
+  // env-tunable so the cadence can be changed without a redeploy. Floored at
+  // 15s to stay well inside provider rate limits.
   if (id === 'live-2026') {
-    const REFRESH_MS = 60_000;
-    setInterval(() => {
-      void (async () => {
-        try {
-          const { refreshLiveScores } = await import('@/data/loadTournament');
-          await refreshLiveScores();
-          // Capture closing-line snapshots for Track Record Phase 2 (self-gated:
-          // no-op unless Upstash is configured; internally throttled to ~18 min).
-          const { snapshotUpcoming } = await import('@/server/predictionLog');
-          await snapshotUpcoming();
-        } catch (err) {
-          console.error('[data] Live refresh failed:', err);
-        }
-      })();
-    }, REFRESH_MS);
+    const IDLE_MS = Math.max(15_000, Number(process.env.LIVE_REFRESH_MS ?? 60_000));
+    const LIVE_MS = Math.max(15_000, Number(process.env.LIVE_REFRESH_LIVE_MS ?? 30_000));
+    const loop = async () => {
+      let live = false;
+      try {
+        const { refreshLiveScores } = await import('@/data/loadTournament');
+        await refreshLiveScores();
+        const { getLiveMatches } = await import('@/data/store');
+        live = getLiveMatches().length > 0;
+        // Capture closing-line snapshots for Track Record Phase 2 (self-gated:
+        // no-op unless Upstash is configured; internally throttled to ~18 min).
+        const { snapshotUpcoming } = await import('@/server/predictionLog');
+        await snapshotUpcoming();
+      } catch (err) {
+        console.error('[data] Live refresh failed:', err);
+      } finally {
+        setTimeout(() => void loop(), live ? LIVE_MS : IDLE_MS);
+      }
+    };
+    setTimeout(() => void loop(), IDLE_MS);
   }
 }

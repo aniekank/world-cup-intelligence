@@ -48,7 +48,7 @@ differently between the two.
 - **Expected:** Score/minute tick without a manual reload.
 - **Actual:** Server data refreshes every 60s, but the browser only shows it after a page reload.
 - **Notes:** Agreed as the next task — add a client-side poll (every ~30–60s) on the match/live pages. Not a defect, a missing feature.
-- **Status:** 🔴 Open (planned)
+- **Status:** 🟢 Resolved — a global `<LiveRefresh>` (mounted in the Topbar) polls a no-store `/api/live-status` probe (cached snapshot only, no provider call) and calls `router.refresh()` whenever the snapshot generation changes, so every page re-renders in place without a manual reload. Polls 15s while a match is live, 60s idle; pauses on a hidden tab; catches up on refocus. A freshness pill shows "N live · updated Ns ago" (live) / "Live" (idle). Server poll also made adaptive + env-tunable (`LIVE_REFRESH_MS` / `LIVE_REFRESH_LIVE_MS`, 30s while live). · LiveRefresh.tsx · api/live-status · instrumentation.ts
 
 ---
 
@@ -129,8 +129,6 @@ These are the classes of bug this codebase is prone to. Test these deliberately:
 
 ## Known limitations (by design — not bugs)
 
-- **No live browser auto-update** — server data is fresh within 60s, but the page needs a reload to
-  show it (tracked as ENH-1).
 - **Abbreviated player names** (`L. Messi`) come from the squad feed and upgrade to full names as
   players accrue match stats.
 - **Live data depends on API-Football** coverage and the daily request quota.

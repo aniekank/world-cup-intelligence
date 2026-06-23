@@ -18,12 +18,32 @@ import {
   getPlayerView,
   getSquad,
   getLiveMatches,
+  dataset,
+  getActiveTournamentId,
+  getActiveSource,
 } from '@/data/store';
 import { engine } from '@/analytics';
 import { rankPlayers, rankTeams } from '@/ai/query/resolver';
 import { generateInsights, generateDailyBriefing, generateBriefingDeck, generateMatchSummary, storylines } from '@/ai/narratives';
 import { criticalMatches, matchPreview } from '@/ai/previews';
 import type { Team, TeamView, Match } from '@/domain/types';
+
+/**
+ * Lightweight freshness probe for the client auto-refresher + freshness pill.
+ * Reads only the cached in-memory snapshot (no provider call), so it's cheap to
+ * poll. `generatedAt` is bumped on every live refresh, so the client can show
+ * "updated Ns ago" and decide how often to pull fresh page content.
+ */
+export function liveStatus() {
+  const live = getLiveMatches();
+  return {
+    generatedAt: dataset().generatedAt,
+    tournamentId: getActiveTournamentId(),
+    source: getActiveSource(),
+    isLive: live.length > 0,
+    liveCount: live.length,
+  };
+}
 
 export function competition() {
   return getCompetition();

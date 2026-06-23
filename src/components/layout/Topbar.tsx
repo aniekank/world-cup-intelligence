@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, CornerDownLeft } from 'lucide-react';
 import { TournamentSwitcher } from './TournamentSwitcher';
+import { LiveRefresh } from './LiveRefresh';
 
 interface SearchResult {
   teams: { id: string; name: string; flag: string; code: string }[];
@@ -112,6 +113,7 @@ export function Topbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-3 text-xs text-terminal-muted">
+        <LiveRefresh />
         <TournamentSwitcher />
         <Link href="/settings" className="hidden hover:text-terminal-bright sm:inline">
           Settings

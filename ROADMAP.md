@@ -69,7 +69,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Live fixtures refresh** | Polls the feed every 60s during match windows; games flip to LIVE and scores update server-side. |
 | ✅ | **Match event timelines** | Goals, cards, subs, VAR/offside — fetched per fixture and surfaced on the match page; backfilled for finished matches. |
 | ✅ | **Viewer-local kickoff times** | Kickoffs render in the viewer's own timezone (no more "tomorrow 1pm"). |
-| 📋 | **Client-side live auto-tick** (ENH-1) | Scoreboard + timeline update in the browser without a manual reload (~30–60s client poll). **The natural finishing touch on "live."** |
+| ✅ | **Client-side live auto-tick** (ENH-1) | Global `<LiveRefresh>` polls `/api/live-status` and calls `router.refresh()` on a snapshot-generation change, so every page updates in place without a reload (15s live / 60s idle, pauses on hidden tab). Freshness pill in the Topbar. Server poll made adaptive + env-tunable. |
 | 📋 | **Full-history event backfill** | Fetch timelines for all finished matches (currently capped to recent + on-demand), so older match pages show their full timeline. |
 
 ## 4. Data pipeline & resilience
