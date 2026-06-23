@@ -63,8 +63,10 @@ export default async function HistoryPage() {
       )}
 
       {[
-        { title: "Men's World Cups", items: men },
-        { title: "Women's World Cups", items: women },
+        // Cards list most-recent-first; the trend charts above stay chronological
+        // (copies, so this doesn't disturb their ascending order).
+        { title: "Men's World Cups", items: [...men].reverse() },
+        { title: "Women's World Cups", items: [...women].reverse() },
       ].map((grp) => (
         grp.items.length > 0 && (
           <div key={grp.title}>
