@@ -21,6 +21,7 @@ import type {
   Player,
   PlayerStats,
   Match,
+  MatchStage,
   MatchEvent,
   MatchTvCountry,
   TvBroadcaster,
@@ -320,6 +321,7 @@ interface SMFixture {
   weatherreport?: { temperature?: { current?: number | null } | null; description?: string | null } | null;
   group?: { name?: string };
   round?: { name?: string };
+  stage?: { name?: string };
 }
 interface SMDetail { type_id: number; data?: { value?: number } }
 interface SMLineup { player_id: number; team_id: number; position_id: number | null; jersey_number: number | null; player_name: string; type_id?: number; details?: SMDetail[] }
@@ -338,6 +340,23 @@ const FOOT_TYPE_ID = 229;
 function footOf(metadata?: SMMeta[]): Foot {
   const v = (metadata ?? []).find((m) => m.type_id === FOOT_TYPE_ID)?.values;
   return v === 'left' || v === 'right' || v === 'both' ? v : 'right';
+}
+
+/**
+ * Map SportMonks' stage name to our MatchStage. Order matters: "Quarter-finals"
+ * and "Semi-finals" both contain "final", so the specific rounds are tested
+ * before the bare-"final" fallback. Anything unrecognised (incl. "Group Stage")
+ * is treated as the group phase.
+ */
+export function mapStage(name?: string): MatchStage {
+  const n = (name ?? '').toLowerCase();
+  if (/round of 32|1\/16/.test(n)) return 'R32';
+  if (/round of 16|1\/8/.test(n)) return 'R16';
+  if (/quarter|1\/4/.test(n)) return 'QF';
+  if (/semi|1\/2/.test(n)) return 'SF';
+  if (/3rd|third/.test(n)) return 'THIRD_PLACE';
+  if (/\bfinal\b/.test(n)) return 'FINAL';
+  return 'GROUP';
 }
 interface SMCoach { id: number; display_name?: string; name?: string; image_path?: string | null; date_of_birth?: string | null }
 interface SMTeamDetail {
@@ -358,7 +377,7 @@ const emptyStats = (id: string): PlayerStats => ({
 export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSnapshot> {
   // 1) All WC2026 fixtures with teams, scores, state, group/round.
   const fixturesRaw = await smList<SMFixture>(
-    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state;group;round;venue&per_page=50`,
+    `/fixtures?filters=fixtureSeasons:${WC_SEASON}&include=participants;scores;state;group;round;stage;venue&per_page=50`,
     apiKey,
   );
 
@@ -410,14 +429,23 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       const ht = (f.scores ?? []).filter((s) => s.description === '1ST_HALF');
       const goalsFor = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
       const status = mapStatus(f.state?.developer_name);
-      const groupLetter = f.group?.name?.match(/Group\s+([A-L])/i)?.[1]?.toUpperCase() ?? groupByCode.get(homeId) ?? null;
+      // Real stage from SportMonks (was hardcoded 'GROUP', which mislabelled
+      // knockout fixtures once their teams were assigned). (WC-032)
+      const stage = mapStage(f.stage?.name);
+      // Only group fixtures carry a group letter. The fallback to the home team's
+      // group must NOT apply to knockouts, or a R16 tie would be counted into a
+      // group's standings (which filter by groupId). (WC-032)
+      const groupLetter =
+        stage === 'GROUP'
+          ? f.group?.name?.match(/Group\s+([A-L])/i)?.[1]?.toUpperCase() ?? groupByCode.get(homeId) ?? null
+          : null;
       // SportMonks carries the group-stage matchday in `round.name` ("1".."3").
       // Without this every group match defaulted to matchday 1, so the "current
       // matchday" read wrong all tournament. (WC-031)
       const roundMd = Number(f.round?.name);
       const matchday = Number.isFinite(roundMd) && roundMd > 0 ? roundMd : 1;
       return {
-        id: `m-${f.id}`, competitionId: 'wc-2026', stage: 'GROUP', groupId: groupLetter,
+        id: `m-${f.id}`, competitionId: 'wc-2026', stage, groupId: groupLetter,
         matchday, kickoff: f.starting_at ? `${f.starting_at.replace(' ', 'T')}Z` : new Date().toISOString(),
         venue: f.venue?.name ?? 'TBD', city: f.venue?.city_name ?? '',
         status, minute: status === 'FINISHED' ? 90 : 0,
