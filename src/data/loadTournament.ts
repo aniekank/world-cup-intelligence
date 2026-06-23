@@ -199,12 +199,14 @@ export async function refreshLiveScores(): Promise<boolean> {
 
   let changed = 0;
   let statusChanged = false;
+  let newlyFinished = false;
   const matches = cur.matches.map((m) => {
     const u = byId.get(m.id);
     const ev = eventsByMatch.get(m.id);
     const scoreChanged =
       !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute);
     if (u && u.status !== m.status) statusChanged = true; // kickoff / full-time → forecasts worth rebuilding
+    if (u && u.status === 'FINISHED' && m.status !== 'FINISHED') newlyFinished = true; // → re-aggregate player stats
     const eventsChanged = !!ev && ev.length !== m.events.length;
     if (!scoreChanged && !eventsChanged) return m;
     changed++;
@@ -232,7 +234,45 @@ export async function refreshLiveScores(): Promise<boolean> {
   // routine score/minute ticks reuse the cached engine so renders stay fast.
   setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId(), { rebuildEngine: statusChanged });
   console.log(`[data] Live refresh: ${changed} fixture(s) updated.`);
+
+  // When a match has just FINISHED, the score/timeline updated above but the
+  // per-player stat aggregates (goals, apps, xG…) are still frozen at the last
+  // full fetch — so scorers' tallies and the golden boot would go stale until a
+  // redeploy. Trigger a full background re-fetch to recompute them. Idempotent
+  // and guarded against concurrent rebuilds; runs a few times a day at most.
+  if (newlyFinished) void rebuildLiveSnapshot();
+
   return true;
+}
+
+let rebuilding = false;
+/**
+ * Re-fetch the full live snapshot and swap it in — recomputing every player's
+ * stats from all finished matches. Used after a match finishes (refreshLiveScores
+ * only patches scores/timelines, not the aggregates). Best-effort: on any failure
+ * the current snapshot is kept.
+ */
+export async function rebuildLiveSnapshot(): Promise<void> {
+  if (rebuilding || getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+  if (!key) return;
+  rebuilding = true;
+  try {
+    const { fetchSportMonksSnapshot } = await import('./providers/sportmonks');
+    const snap = await fetchSportMonksSnapshot(key);
+    if (isHealthyLive(snap) && getActiveTournamentId() === 'live-2026') {
+      const t = getTournament('live-2026');
+      setDataset(snap, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
+      void enrichLiveTvListings().catch(() => {});
+      void enrichLiveH2H().catch(() => {});
+      void enrichLiveCoaches().catch(() => {});
+      console.log('[data] Live snapshot rebuilt — player stats re-aggregated.');
+    }
+  } catch (e) {
+    console.warn('[data] Live snapshot rebuild failed; keeping current snapshot.', e);
+  } finally {
+    rebuilding = false;
+  }
 }
 
 /**
