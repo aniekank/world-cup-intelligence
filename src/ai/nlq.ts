@@ -97,6 +97,27 @@ function lookupResidual(q: string, name: string): number {
     .filter((w) => !nameTokens.has(w) && !LOOKUP_FILLER.has(w)).length;
 }
 
+function playerStatQuery(q: string, p: PlayerView, metric: { key: string; label: string; source: 'stat' | 'per90' }): NLQueryResult {
+  const lower = q.toLowerCase();
+  const per90 = metric.source === 'per90' || lower.includes('per 90') || lower.includes('per90');
+  const minMinutes = per90 ? 180 : 1;
+  const val = metricValue(p, metric, per90);
+  const pool = getPlayerViews().filter((x) => x.stats.minutes >= minMinutes);
+  const ranked = [...pool].sort((a, b) => metricValue(b, metric, per90) - metricValue(a, metric, per90));
+  const rank = ranked.findIndex((x) => x.id === p.id) + 1;
+  const suffix = per90 ? ' per 90' : '';
+  const rankClause = rank > 0 ? ` — ${rank === 1 ? 'the most' : `#${rank} of ${pool.length}`} at the tournament` : '';
+  const cmp = ranked[0]?.id === p.id ? ranked[1] : ranked[0];
+  return {
+    query: q, intent: 'player-stat',
+    answer: `${p.name} (${p.team.code}) has ${fmt(val)} ${metric.label}${suffix}${rankClause}.`,
+    columns: ['Player', 'Team', metric.label + suffix, 'Rank', 'Mins'],
+    rows: [[p.name, p.team.code, fmt(val), rank > 0 ? `#${rank}` : '—', p.stats.minutes]],
+    entityType: 'player', vizHint: 'table',
+    followUps: [`Highest ${metric.label}${suffix}`, cmp ? `Compare ${p.name} and ${cmp.name}` : `${p.name} stats`, `${p.name} stats`].filter((v, i, a) => a.indexOf(v) === i),
+  };
+}
+
 function teamCompareQuery(q: string, a: { id: string; name: string }, b: { id: string; name: string }): NLQueryResult {
   const eng = engine();
   const pa = eng.powerRankings.find((r) => r.teamId === a.id);
@@ -298,9 +319,12 @@ export function answerQuery(rawQuery: string): NLQueryResult {
   if (lower.includes('tallest')) return extremeQuery(q, 'heightCm', 'max');
   if (lower.includes('shortest')) return extremeQuery(q, 'heightCm', 'min');
 
-  // ── Metric leaderboard (default for "highest/most X") ──
+  // ── Metric for a specific named player ("how many goals has Mbappe scored",
+  //    "Messi xG") → that player's value + rank, not a leaderboard. ──
   const metric = findMetric(lower);
   if (metric) {
+    const namedPlayer = bestPlayer(q);
+    if (namedPlayer) return playerStatQuery(q, namedPlayer, metric);
     return leaderboardQuery(q, metric);
   }
 
