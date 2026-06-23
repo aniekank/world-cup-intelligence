@@ -149,6 +149,33 @@ describe('AI layer', () => {
     expect(r.answer.length).toBeGreaterThan(20);
   });
 
+  it('answers a group-standings query', () => {
+    const r = answerQuery('who tops group B');
+    expect(r.intent).toBe('group-standings');
+    expect(r.rows.length).toBeGreaterThan(0);
+  });
+
+  it('answers a coach query', () => {
+    const name = getTeams().find((t) => t.id === engine().powerRankings[0]!.teamId)!.name;
+    expect(answerQuery(`who is ${name}'s coach`).intent).toBe('coach');
+  });
+
+  it('answers a team comparison', () => {
+    const [a, b] = engine().powerRankings.slice(0, 2).map((p) => getTeams().find((t) => t.id === p.teamId)!.name);
+    const r = answerQuery(`is ${a} better than ${b}`);
+    expect(r.intent).toBe('team-comparison');
+    expect(r.rows.length).toBeGreaterThan(0);
+  });
+
+  it('answers a discipline leaderboard and a youngest-player query', () => {
+    expect(answerQuery('most yellow cards').intent).toBe('leaderboard');
+    expect(answerQuery('youngest player at the tournament').intent).toBe('age');
+  });
+
+  it('routes a topic it has no data for to a help message, not a wrong page', () => {
+    expect(answerQuery('is Mbappe injured').intent).toBe('unsupported');
+  });
+
   it('generates insights, a match summary and a scouting report', () => {
     expect(generateInsights().length).toBeGreaterThan(0);
     const m = dataset().matches.find((x) => x.status === 'FINISHED')!;

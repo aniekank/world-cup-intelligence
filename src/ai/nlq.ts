@@ -11,7 +11,7 @@
  * narration when ANTHROPIC_API_KEY is configured (see ai/narratives.ts).
  */
 
-import { getPlayerViews, getTeams, getTeam } from '@/data/store';
+import { getPlayerViews, getTeams, getTeam, getGroups, getMatches, getTeamMatches } from '@/data/store';
 import { engine } from '@/analytics';
 import { extractPlayers, extractTeam } from '@/ai/query/resolver';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
@@ -34,6 +34,13 @@ const METRICS: Record<string, { key: string; label: string; per90?: boolean; sou
   'big chances created': { key: 'bigChancesCreated', label: 'Big chances created', source: 'stat' },
   minutes: { key: 'minutes', label: 'Minutes', source: 'stat' },
   saves: { key: 'saves', label: 'Saves', source: 'stat' },
+  'clean sheets': { key: 'cleanSheets', label: 'Clean sheets', source: 'stat' },
+  'yellow cards': { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  yellows: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  'red cards': { key: 'redCards', label: 'Red cards', source: 'stat' },
+  bookings: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  cards: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  fouls: { key: 'foulsCommitted', label: 'Fouls', source: 'stat' },
   'pass accuracy': { key: 'passAccuracy', label: 'Pass %', source: 'per90' },
   'shot conversion': { key: 'shotConversion', label: 'Conversion %', source: 'per90' },
 };
@@ -64,6 +71,144 @@ function detectPlayers(q: string): PlayerView[] {
   return extractPlayers(q, 4);
 }
 
+/** All teams named in the query, in order of first appearance (de-duped). */
+function detectTeams(q: string): { id: string; name: string }[] {
+  const lower = q.toLowerCase();
+  const found = getTeams()
+    .filter((t) => lower.includes(t.name.toLowerCase()))
+    .map((t) => ({ id: t.id, name: t.name }));
+  const uniq = [...new Map(found.map((f) => [f.id, f])).values()];
+  uniq.sort((a, b) => lower.indexOf(a.name.toLowerCase()) - lower.indexOf(b.name.toLowerCase()));
+  return uniq;
+}
+
+// Words that don't change a query from being an entity *lookup* ("Messi stats",
+// "how is Spain doing"). If, after removing the entity name and these, more than
+// one meaningful word remains, the query is really a question we didn't map — so
+// fall through to the helpful fallback rather than return the entity's page.
+const LOOKUP_FILLER = new Set(['stats', 'statistics', 'stat', 'info', 'information', 'about', 'tell', 'me', 'show', 'give', 'the', 'a', 'an', 'how', 'is', 'are', 'was', 'were', 'doing', 'playing', 'play', 'form', 'profile', 'player', 'team', 'overview', 'on', 'of', 'for', 's', 'this', 'tournament', 'wc', 'world', 'cup', 'please', 'rating', 'ratings', 'numbers', 'number', 'data', 'do', 'does', 'look', 'like', 'whats', 'what']);
+function lookupResidual(q: string, name: string): number {
+  const nameTokens = new Set(name.toLowerCase().split(/\s+/));
+  return q
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !nameTokens.has(w) && !LOOKUP_FILLER.has(w)).length;
+}
+
+function teamCompareQuery(q: string, a: { id: string; name: string }, b: { id: string; name: string }): NLQueryResult {
+  const eng = engine();
+  const pa = eng.powerRankings.find((r) => r.teamId === a.id);
+  const pb = eng.powerRankings.find((r) => r.teamId === b.id);
+  const fa = eng.forecasts.get(a.id);
+  const fb = eng.forecasts.get(b.id);
+  if (!pa || !pb || !fa || !fb) {
+    return { query: q, intent: 'team-comparison', answer: `I can't compare ${a.name} and ${b.name} yet — one has no model rating.`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps: ['Who is most likely to win the tournament?'] };
+  }
+  const pctf = (n: number) => `${Math.round(n * 100)}%`;
+  const edge = pa.powerRating >= pb.powerRating ? a : b;
+  return {
+    query: q, intent: 'team-comparison',
+    answer: `${edge.name} grade higher on the model — power ${pa.powerRating} vs ${pb.powerRating}, title ${pctf(fa.winTitle)} vs ${pctf(fb.winTitle)}.`,
+    columns: ['Metric', a.name, b.name],
+    rows: [
+      ['Power rating', pa.powerRating, pb.powerRating],
+      ['Win title', pctf(fa.winTitle), pctf(fb.winTitle)],
+      ['Reach final', pctf(fa.reachFinal), pctf(fb.reachFinal)],
+      ['Offense', pa.offenseRating, pb.offenseRating],
+      ['Defense', pa.defenseRating, pb.defenseRating],
+      ['Momentum', signed(pa.momentum), signed(pb.momentum)],
+    ],
+    entityType: 'team', vizHint: 'table',
+    followUps: [`${a.name}'s playing style`, `${b.name}'s playing style`, 'Who is most likely to win the tournament?'],
+  };
+}
+
+function coachQuery(q: string, team: { id: string; name: string }): NLQueryResult {
+  const t = getTeam(team.id);
+  const name = t?.coach?.name ?? (t?.manager && t.manager !== '—' ? t.manager : null);
+  const followUps = [`${team.name}'s playing style`, 'Who is most likely to win the tournament?'];
+  if (!name) {
+    return { query: q, intent: 'coach', answer: `The manager for ${team.name} isn't recorded in this edition's data.`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps };
+  }
+  const age = t?.coach?.age && t.coach.age > 0 ? `, age ${t.coach.age}` : '';
+  return { query: q, intent: 'coach', answer: `${team.name} are managed by ${name}${age}.`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps };
+}
+
+function groupStandingsQuery(q: string): NLQueryResult {
+  const lower = q.toLowerCase();
+  const groups = getGroups();
+  const m = lower.match(/group\s+([a-l])\b/);
+  let group = m ? groups.find((g) => g.id.toLowerCase() === m[1]) : undefined;
+  if (!group) { const tm = detectTeam(q); if (tm) group = groups.find((g) => g.teamIds.includes(tm.id)); }
+  if (!group) {
+    const last = groups.length ? groups[groups.length - 1]!.id : 'L';
+    return { query: q, intent: 'group-standings', answer: `Which group? Try "Group B standings" — the field runs Groups A–${last}.`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps: ['Group A standings', 'Group B standings', 'Group C standings'] };
+  }
+  const rows = engine().standingsByGroup.find((rs) => rs[0]?.groupId === group!.id) ?? [];
+  const top = rows[0] ? getTeam(rows[0].teamId) : undefined;
+  return {
+    query: q, intent: 'group-standings',
+    answer: top && rows[0] ? `${top.name} top ${group.name} with ${rows[0].points} pts from ${rows[0].played}.` : `${group.name} hasn't kicked off yet.`,
+    columns: ['#', 'Team', 'P', 'W', 'D', 'L', 'GD', 'Pts', ''],
+    rows: rows.map((r) => { const t = getTeam(r.teamId); return [r.rank, t ? `${t.flag} ${t.name}` : r.teamId, r.played, r.won, r.drawn, r.lost, signed(r.goalDifference), r.points, r.status ?? '']; }),
+    entityType: 'team', vizHint: 'table',
+    followUps: ['Who is most likely to win the tournament?', 'Which teams are outperforming expectations?'],
+  };
+}
+
+function fixtureKick(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+}
+function fixtureQuery(q: string): NLQueryResult {
+  const team = detectTeam(q);
+  if (team) {
+    const next = getTeamMatches(team.id).filter((mm) => mm.status === 'SCHEDULED').sort((a, b) => a.kickoff.localeCompare(b.kickoff))[0];
+    if (!next) {
+      return { query: q, intent: 'fixture', answer: `${team.name} have no upcoming fixtures in the data — their group games are done (knockout ties are drawn once the group stage finishes).`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps: [`${team.name}'s playing style`, 'Who is most likely to win the tournament?'] };
+    }
+    const opp = getTeam(next.homeTeamId === team.id ? next.awayTeamId : next.homeTeamId);
+    const venue = next.venue && next.venue !== 'TBD' ? ` at ${next.venue}` : '';
+    return { query: q, intent: 'fixture', answer: `${team.name} next play ${opp?.name ?? '?'} on ${fixtureKick(next.kickoff)}${venue}.`, columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: [`${team.name}'s playing style`, opp ? `${opp.name}'s playing style` : 'Who is most likely to win the tournament?'] };
+  }
+  const upcoming = getMatches().filter((mm) => mm.status === 'SCHEDULED').sort((a, b) => a.kickoff.localeCompare(b.kickoff)).slice(0, 8);
+  if (upcoming.length === 0) {
+    return { query: q, intent: 'fixture', answer: 'No upcoming fixtures are scheduled in the data right now.', columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: ['Who is most likely to win the tournament?'] };
+  }
+  return {
+    query: q, intent: 'fixture', answer: `The next ${upcoming.length} fixtures:`,
+    columns: ['Match', 'Kickoff', 'Stage'],
+    rows: upcoming.map((mm) => { const h = getTeam(mm.homeTeamId), a = getTeam(mm.awayTeamId); return [`${h?.flag ?? ''} ${h?.name ?? '?'} v ${a?.name ?? '?'} ${a?.flag ?? ''}`.trim(), fixtureKick(mm.kickoff), mm.stage === 'GROUP' ? `MD${mm.matchday}` : mm.stage]; }),
+    entityType: 'match', vizHint: 'table',
+    followUps: ['When does Brazil play next?', 'Who is most likely to win the tournament?'],
+  };
+}
+
+function extremeQuery(q: string, field: 'age' | 'heightCm', dir: 'min' | 'max'): NLQueryResult {
+  const pos = findPosition(q.toLowerCase());
+  const valOf = (p: PlayerView) => (field === 'age' ? p.age : p.heightCm);
+  const valid = (p: PlayerView) => (field === 'age' ? p.age >= 14 && p.age <= 55 : p.heightCm >= 140 && p.heightCm <= 220);
+  let pool = getPlayerViews().filter((p) => valid(p) && p.stats.minutes >= 1);
+  if (pos) pool = pool.filter((p) => p.position === pos);
+  const intent = field === 'age' ? 'age' : 'height';
+  if (pool.length === 0) {
+    return { query: q, intent, answer: `Player ${field === 'age' ? 'ages' : 'heights'} aren't available for this edition.`, columns: [], rows: [], entityType: 'player', vizHint: 'none', followUps: ['Who has the most goals?', 'Show under-the-radar breakout players'] };
+  }
+  const sorted = [...pool].sort((a, b) => (dir === 'min' ? valOf(a) - valOf(b) : valOf(b) - valOf(a))).slice(0, 10);
+  const lead = sorted[0]!;
+  const word = field === 'age' ? (dir === 'min' ? 'youngest' : 'oldest') : (dir === 'min' ? 'shortest' : 'tallest');
+  const show = (p: PlayerView) => (field === 'age' ? `${p.age}` : `${p.heightCm}cm`);
+  return {
+    query: q, intent,
+    answer: `${lead.name} (${lead.team.code}) is the ${word}${pos ? ` ${posName(pos)}` : ''} on the pitch at ${show(lead)}.`,
+    columns: ['#', 'Player', 'Team', field === 'age' ? 'Age' : 'Height'],
+    rows: sorted.map((p, i) => [i + 1, p.name, p.team.code, show(p)]),
+    entityType: 'player', vizHint: 'table',
+    followUps: ['Who has the most goals?', 'Show under-the-radar breakout players'],
+  };
+}
+
 export function answerQuery(rawQuery: string): NLQueryResult {
   const q = rawQuery.trim();
   const lower = q.toLowerCase();
@@ -72,6 +217,12 @@ export function answerQuery(rawQuery: string): NLQueryResult {
   const players = detectPlayers(q);
   if ((lower.includes('compare') || lower.includes(' vs ') || lower.includes(' versus ')) && players.length >= 2) {
     return comparePlayers(q, players.slice(0, 2));
+  }
+
+  // ── Team comparison: "Spain vs France", "is Brazil better than Argentina" ──
+  if (lower.includes('compare') || lower.includes(' vs ') || lower.includes(' versus ') || lower.includes('better than') || lower.includes('stronger than') || lower.includes(' or ')) {
+    const teams = detectTeams(q);
+    if (teams.length >= 2) return teamCompareQuery(q, teams[0]!, teams[1]!);
   }
 
   // ── Team over/under-performance ──
@@ -98,8 +249,12 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return pathQuery(q, 'hard');
   }
 
-  // ── Title / who will win ──
-  if ((lower.includes('win') && (lower.includes('tournament') || lower.includes('world cup') || lower.includes('title') || lower.includes('trophy'))) || lower.includes('favourite') || lower.includes('favorite') || lower.includes('most likely to win')) {
+  // ── Title / who will win (incl. "odds"/"chances to win") ──
+  if (
+    (lower.includes('win') && (lower.includes('tournament') || lower.includes('world cup') || lower.includes('title') || lower.includes('trophy'))) ||
+    lower.includes('favourite') || lower.includes('favorite') || lower.includes('most likely to win') ||
+    ((lower.includes('odds') || lower.includes('chance')) && (lower.includes('win') || lower.includes('title') || lower.includes('trophy') || !!detectTeam(q)))
+  ) {
     return titleQuery(q);
   }
 
@@ -116,10 +271,32 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return goldenBootQuery(q);
   }
 
-  // ── Tactics / playing style / coaching ──
+  // ── Group standings: "who tops group B", "Group A table" ──
+  if ((/group\s+[a-l]\b/.test(lower)) || ((lower.includes('standing') || lower.includes('table') || lower.includes('group')) && (lower.includes('top') || lower.includes('lead') || lower.includes('standing') || lower.includes('table')))) {
+    return groupStandingsQuery(q);
+  }
+
+  // ── Fixtures / schedule: "when does X play next", "next fixtures" ──
+  if (lower.includes('next match') || lower.includes('next game') || lower.includes('next fixture') || lower.includes('fixtures') || lower.includes('schedule') || ((lower.includes('when') || lower.includes('next')) && lower.includes('play')) || (lower.includes('who plays') && lower.includes('today'))) {
+    return fixtureQuery(q);
+  }
+
+  // ── Coach / manager of a team (before tactics, which owns the 'coach' word) ──
+  if ((lower.includes('coach') || lower.includes('manager') || lower.includes('manages') || lower.includes('in charge')) ) {
+    const team = detectTeam(q);
+    if (team) return coachQuery(q, team);
+  }
+
+  // ── Tactics / playing style ──
   if (/tactic|playing style|style of play|\bstyle\b|\bpress\b|pressing|possession|formation|build-?up|counter-?attack|coach|manager/.test(lower)) {
     return tacticsQuery(q);
   }
+
+  // ── Player extremes: youngest / oldest / tallest / shortest ──
+  if (lower.includes('youngest')) return extremeQuery(q, 'age', 'min');
+  if (lower.includes('oldest')) return extremeQuery(q, 'age', 'max');
+  if (lower.includes('tallest')) return extremeQuery(q, 'heightCm', 'max');
+  if (lower.includes('shortest')) return extremeQuery(q, 'heightCm', 'min');
 
   // ── Metric leaderboard (default for "highest/most X") ──
   const metric = findMetric(lower);
@@ -127,10 +304,22 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return leaderboardQuery(q, metric);
   }
 
-  // ── Entity lookups ──
-  if (players.length === 1) return playerLookup(q, players[0]!);
+  // ── Topics we genuinely don't hold data for → say so, don't mis-route ──
+  if (/injur|fitness|suspend|\bbanned\b|transfer|\bsigning\b|\bsold\b|salary|wage|contract|ticket|broadcast|kit\b|jersey/.test(lower)) {
+    return {
+      query: q, intent: 'unsupported',
+      answer: "I don't track that here. I can answer analytics questions — metric leaderboards, team/player comparisons, forecasts and title odds, group standings, fixtures, tactical styles, and breakout players.",
+      columns: [], rows: [], entityType: 'tournament', vizHint: 'none',
+      followUps: ['Who is most likely to win the tournament?', 'Which teams press the highest?', 'Show under-the-radar breakout players'],
+    };
+  }
+
+  // ── Entity lookups — only when the query is actually *about* that entity
+  //    (mostly just the name), so an unhandled question that merely mentions a
+  //    team/player falls through to the helpful fallback instead of a wrong page. ──
+  if (players.length === 1 && lookupResidual(q, players[0]!.name) <= 1) return playerLookup(q, players[0]!);
   const team = detectTeam(q);
-  if (team) return teamLookup(q, team.id);
+  if (team && lookupResidual(q, team.name) <= 1) return teamLookup(q, team.id);
 
   // ── Fallback ──
   return {
