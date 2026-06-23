@@ -12,6 +12,8 @@ const EXAMPLES = [
   'Which team has the easiest path to the final?',
   'Who is most likely to win the tournament?',
   'Strongest defense in the tournament',
+  'Which teams press the highest?',
+  "Spain's playing style",
   'Golden Boot projection',
   'Highest progressive passes per 90 among defenders',
 ];

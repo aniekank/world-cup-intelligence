@@ -14,6 +14,7 @@
 import { getPlayerViews, getTeams, getTeam } from '@/data/store';
 import { engine } from '@/analytics';
 import { extractPlayers, extractTeam } from '@/ai/query/resolver';
+import { tacticalProfile, tacticalBoard } from '@/server/tactics';
 import type { NLQueryResult, PlayerView, Position } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
@@ -115,6 +116,11 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return goldenBootQuery(q);
   }
 
+  // ── Tactics / playing style / coaching ──
+  if (/tactic|playing style|style of play|\bstyle\b|\bpress\b|pressing|possession|formation|build-?up|counter-?attack|coach|manager/.test(lower)) {
+    return tacticsQuery(q);
+  }
+
   // ── Metric leaderboard (default for "highest/most X") ──
   const metric = findMetric(lower);
   if (metric) {
@@ -197,6 +203,83 @@ function leaderboardQuery(q: string, metric: { key: string; label: string; sourc
       `Highest ${metric.label} per 90${pos ? ' among ' + posName(pos) + 's' : ''}`,
       'Show under-the-radar breakout players',
     ],
+  };
+}
+
+function tacticsQuery(q: string): NLQueryResult {
+  const lower = q.toLowerCase();
+  const team = detectTeam(q);
+  const followUps = ['Which teams press the highest?', 'Most possession-dominant teams', "Spain's playing style"];
+
+  // ── A named team → that team's tactical identity ──
+  if (team) {
+    const p = tacticalProfile(team.id);
+    const t = getTeam(team.id);
+    const coach = t?.coach?.name ?? (t?.manager && t.manager !== '—' ? t.manager : undefined);
+    if (!p.available || !p.label) {
+      return {
+        query: q, intent: 'tactics',
+        answer: `No tactical read for ${team.name} yet — it needs a finished match carrying the underlying possession/passing data.`,
+        columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps,
+      };
+    }
+    const shape = p.formation ? ` Most-used shape: ${p.formation}.` : '';
+    const who = coach ? `${team.name} (coach ${coach})` : team.name;
+    const rows = (p.bars ?? []).map((b) => [b.label, `${Math.round(b.value)}${b.suffix ?? ''}`]);
+    return {
+      query: q, intent: 'tactics',
+      answer: `${who}: ${p.label}. ${p.blurb}${shape}`,
+      columns: rows.length ? ['Metric', 'Value'] : [],
+      rows,
+      entityType: 'team', vizHint: rows.length ? 'table' : 'none',
+      followUps: [`How ${team.name} compare on pressing`, 'Tactical styles across the tournament', 'Most possession-dominant teams'],
+    };
+  }
+
+  // ── Otherwise → a tactical-styles board across the field ──
+  const board = tacticalBoard().filter((r) => r.possession !== null || r.press !== null);
+  if (board.length === 0) {
+    return {
+      query: q, intent: 'tactics',
+      answer: 'No team-level tactical data yet — playing styles surface once teams have finished matches with possession and pressing data.',
+      columns: [], rows: [], entityType: 'team', vizHint: 'none',
+      followUps: ['Who is most likely to win the tournament?', 'Strongest defense in the tournament'],
+    };
+  }
+  const byPress = /\bpress\b|pressing/.test(lower);
+  const byPoss = /possession|control the ball|dominant/.test(lower);
+  let sorted = board;
+  let lead: 'press' | 'possession' | 'mixed' = 'mixed';
+  if (byPress) { sorted = board.filter((r) => r.press !== null).sort((a, b) => b.press! - a.press!); lead = 'press'; }
+  else if (byPoss) { sorted = board.filter((r) => r.possession !== null).sort((a, b) => b.possession! - a.possession!); lead = 'possession'; }
+  else { sorted = [...board].sort((a, b) => (b.press ?? 0) - (a.press ?? 0)); }
+
+  const top = sorted[0];
+  const topName = top ? getTeam(top.teamId)?.name ?? top.teamId : '';
+  const answer = !top
+    ? 'Tactical identities across the field:'
+    : lead === 'possession'
+      ? `${topName} are the most possession-dominant side (${top.possession}%), a ${top.style.toLowerCase()} team. Tactical identities across the field:`
+      : lead === 'press'
+        ? `${topName} press the highest (index ${top.press}/100), a ${top.style.toLowerCase()} side. Tactical identities across the field:`
+        : `Tactical identities across the field — ${topName} lead the press (${top.press}/100):`;
+
+  const rows = sorted.slice(0, 12).map((r, i) => {
+    const t = getTeam(r.teamId);
+    return [
+      i + 1,
+      t ? `${t.flag} ${t.name}` : r.teamId,
+      r.style,
+      r.possession !== null ? `${r.possession}%` : '—',
+      r.press !== null ? String(r.press) : '—',
+      r.formation ?? '—',
+    ];
+  });
+  return {
+    query: q, intent: 'tactics', answer,
+    columns: ['#', 'Team', 'Style', 'Poss.', 'Press', 'Shape'],
+    rows, entityType: 'team', vizHint: 'table',
+    followUps: ['Which teams press the highest?', 'Most possession-dominant teams', "Brazil's playing style"],
   };
 }
 

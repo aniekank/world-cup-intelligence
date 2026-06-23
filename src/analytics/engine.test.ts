@@ -133,6 +133,22 @@ describe('AI layer', () => {
     expect(r.intent).toBe('easiest-path');
   });
 
+  it('answers a tactics / playing-style query with a styles board', () => {
+    const r = answerQuery('best coaching tactics');
+    expect(r.intent).toBe('tactics');
+    expect(r.rows.length).toBeGreaterThan(0);
+    expect(r.columns).toContain('Style');
+  });
+
+  it('answers a named-team tactical-identity query', () => {
+    const top = engine().powerRankings[0]!;
+    const name = getTeams().find((t) => t.id === top.teamId)!.name;
+    const r = answerQuery(`${name} playing style`);
+    expect(r.intent).toBe('tactics');
+    expect(r.entityType).toBe('team');
+    expect(r.answer.length).toBeGreaterThan(20);
+  });
+
   it('generates insights, a match summary and a scouting report', () => {
     expect(generateInsights().length).toBeGreaterThan(0);
     const m = dataset().matches.find((x) => x.status === 'FINISHED')!;

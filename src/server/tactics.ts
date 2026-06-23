@@ -1,5 +1,5 @@
 import 'server-only';
-import { getTeam, getTeamMatches, getPlayerViews } from '@/data/store';
+import { getTeam, getTeams, getTeamMatches, getPlayerViews } from '@/data/store';
 
 /**
  * Tactical identity — a derived playing-style read for a team.
@@ -137,6 +137,40 @@ export function tacticalProfile(teamId: string): TacticalProfile {
       { label: 'Final-third passes / game', value: String(Math.round(progPerGame)) },
     ],
   };
+}
+
+export interface TacticalBoardRow {
+  teamId: string;
+  style: string;
+  possession: number | null; // %, null when the source has no team possession (player-derived read)
+  press: number | null; // 0..100 press index, null when unavailable
+  formation?: string;
+  sample: number; // matches the read is based on
+}
+
+/**
+ * Tactical identity for every team that has a read — powers the "Ask the data"
+ * tactics/style queries. Only teams with team-level stats expose possession +
+ * press numbers; player-derived (build-up only) reads carry the style label but
+ * null metrics, so callers can rank/filter honestly.
+ */
+export function tacticalBoard(): TacticalBoardRow[] {
+  const out: TacticalBoardRow[] = [];
+  for (const t of getTeams()) {
+    const p = tacticalProfile(t.id);
+    if (!p.available || !p.label) continue;
+    const possession = p.bars?.find((b) => b.label === 'Possession')?.value ?? null;
+    const press = p.bars?.find((b) => b.label === 'Press intensity')?.value ?? null;
+    out.push({
+      teamId: t.id,
+      style: p.label,
+      possession: possession === null ? null : Math.round(possession),
+      press: press === null ? null : Math.round(press),
+      formation: p.formation,
+      sample: p.sampleMatches ?? 0,
+    });
+  }
+  return out;
 }
 
 /** A one-line "styles clash" framing for a fixture, when both teams have a read. */
