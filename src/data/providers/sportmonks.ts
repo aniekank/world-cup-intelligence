@@ -411,9 +411,14 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       const goalsFor = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
       const status = mapStatus(f.state?.developer_name);
       const groupLetter = f.group?.name?.match(/Group\s+([A-L])/i)?.[1]?.toUpperCase() ?? groupByCode.get(homeId) ?? null;
+      // SportMonks carries the group-stage matchday in `round.name` ("1".."3").
+      // Without this every group match defaulted to matchday 1, so the "current
+      // matchday" read wrong all tournament. (WC-031)
+      const roundMd = Number(f.round?.name);
+      const matchday = Number.isFinite(roundMd) && roundMd > 0 ? roundMd : 1;
       return {
         id: `m-${f.id}`, competitionId: 'wc-2026', stage: 'GROUP', groupId: groupLetter,
-        matchday: 1, kickoff: f.starting_at ? `${f.starting_at.replace(' ', 'T')}Z` : new Date().toISOString(),
+        matchday, kickoff: f.starting_at ? `${f.starting_at.replace(' ', 'T')}Z` : new Date().toISOString(),
         venue: f.venue?.name ?? 'TBD', city: f.venue?.city_name ?? '',
         status, minute: status === 'FINISHED' ? 90 : 0,
         homeTeamId: homeId, awayTeamId: awayId,

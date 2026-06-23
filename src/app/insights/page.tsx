@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { insights, dailyBriefing } from '@/server/queries';
+import { insights, dailyBriefing, briefingMeta } from '@/server/queries';
 import { PageHeader, Panel, Badge } from '@/components/ui';
 import type { Insight } from '@/domain/types';
 
@@ -28,6 +28,7 @@ function entityHref(i: Insight): string | null {
 
 export default function InsightsPage() {
   const briefing = dailyBriefing();
+  const { subtitle: briefingSubtitle } = briefingMeta();
   const all = insights();
 
   return (
@@ -38,7 +39,7 @@ export default function InsightsPage() {
         description="Automatically detected stories — upsets, over/under-performers, breakout players, momentum swings and milestones — mined from the analytics engine and ranked by significance."
       />
 
-      <Panel title="Daily Briefing" subtitle="13 June 2026 · Matchday 3">
+      <Panel title="Daily Briefing" subtitle={briefingSubtitle}>
         <h2 className="text-lg font-semibold text-terminal-bright">{briefing.headline}</h2>
         <p className="mt-2 text-sm text-terminal-text">{briefing.body}</p>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">

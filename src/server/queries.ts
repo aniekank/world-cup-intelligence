@@ -217,6 +217,45 @@ export function insights() {
 export function dailyBriefing() {
   return generateDailyBriefing();
 }
+/**
+ * Sub-heading for the Daily Briefing panel: today's date + where the tournament
+ * actually is right now, both derived from the fixtures (not a hardcoded date).
+ * "Now" = a live match if one is in play, else the next scheduled match, else
+ * the last one played. Only the live edition gets a calendar date — a historical
+ * edition just shows its phase.
+ */
+export function briefingMeta(): { subtitle: string } {
+  const matches = getMatches();
+  const live = matches.filter((m) => m.status === 'LIVE' || m.status === 'HALFTIME');
+  const scheduled = [...matches.filter((m) => m.status === 'SCHEDULED')].sort((a, b) =>
+    a.kickoff.localeCompare(b.kickoff),
+  );
+  const finished = matches.filter((m) => m.status === 'FINISHED');
+  const ref = live[0] ?? scheduled[0] ?? finished[finished.length - 1];
+  // Once the group stage is over there are no scheduled/live group fixtures left
+  // (knockout fixtures are TBD and simulated via the bracket, not in `matches`),
+  // so don't keep reporting the last group matchday — call it the knockout stage.
+  const groupDone = !live.length && !scheduled.length && finished.length > 0;
+  const period = groupDone ? 'Knockout stage' : ref ? stageLabel(ref) : 'Tournament';
+  if (getActiveTournamentId() === 'live-2026') {
+    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return { subtitle: `${today} · ${period}` };
+  }
+  return { subtitle: period };
+}
+
+function stageLabel(m: Match): string {
+  if (m.stage === 'GROUP') return `Matchday ${m.matchday}`;
+  const names: Record<string, string> = {
+    R32: 'Round of 32',
+    R16: 'Round of 16',
+    QF: 'Quarter-finals',
+    SF: 'Semi-finals',
+    THIRD_PLACE: 'Third-place play-off',
+    FINAL: 'Final',
+  };
+  return names[m.stage] ?? 'Knockout stage';
+}
 export function watchStorylines() {
   return storylines();
 }
