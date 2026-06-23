@@ -176,6 +176,13 @@ describe('AI layer', () => {
     expect(answerQuery('is Mbappe injured').intent).toBe('unsupported');
   });
 
+  it('resolves a bare player name (full + surname) to a player lookup', () => {
+    const p = getPlayerViews().filter((x) => x.name.trim().includes(' ')).sort((a, b) => b.stats.minutes - a.stats.minutes)[0]!;
+    expect(answerQuery(p.name).intent).toBe('player-lookup'); // full name, e.g. "Lionel Messi"
+    const surname = p.name.split(' ').pop()!;
+    if (surname.length >= 4) expect(answerQuery(surname).intent).toBe('player-lookup'); // bare surname
+  });
+
   it('generates insights, a match summary and a scouting report', () => {
     expect(generateInsights().length).toBeGreaterThan(0);
     const m = dataset().matches.find((x) => x.status === 'FINISHED')!;

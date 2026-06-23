@@ -226,3 +226,33 @@ export function extractPlayers(sentence: string, limit = 4): PlayerView[] {
   scored.sort((a, b) => b.s - a.s || b.p.stats.minutes - a.p.stats.minutes);
   return scored.slice(0, limit).map((x) => x.p);
 }
+
+/**
+ * The single most-confident player for an entity *lookup* (e.g. "Pedri",
+ * "Lionel Messi"). Unlike `extractPlayers` it deliberately ignores the fuzzy
+ * (edit-distance) tier: a bare name like "Pedri" must not be diluted by every
+ * near-spelling ("Pedro") into an ambiguous multi-result set. Returns null when
+ * nothing matches on a real name token / full name (so a typo'd or unknown name
+ * falls through to the caller's fallback rather than a wrong guess).
+ * Ties (same-surname players) resolve to the one with the most minutes.
+ */
+export function bestPlayer(sentence: string): PlayerView | null {
+  const sNorm = normalize(sentence);
+  const sTokens = new Set(sNorm.split(' ').filter(Boolean));
+  let best: { p: PlayerView; s: number } | null = null;
+  for (const p of getPlayerViews()) {
+    const nName = normalize(p.name);
+    let s = 0;
+    if (nName.length >= 5 && sNorm.includes(nName)) {
+      s = nName.length; // full name phrase
+    } else {
+      for (const nt of nName.split(' ')) {
+        if (nt.length >= 4 && sTokens.has(nt)) s = Math.max(s, nt.length); // exact name token, no fuzz
+      }
+    }
+    if (s > 0 && (!best || s > best.s || (s === best.s && p.stats.minutes > best.p.stats.minutes))) {
+      best = { p, s };
+    }
+  }
+  return best?.p ?? null;
+}

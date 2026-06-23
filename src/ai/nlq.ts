@@ -13,7 +13,7 @@
 
 import { getPlayerViews, getTeams, getTeam, getGroups, getMatches, getTeamMatches } from '@/data/store';
 import { engine } from '@/analytics';
-import { extractPlayers, extractTeam } from '@/ai/query/resolver';
+import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
 import type { NLQueryResult, PlayerView, Position } from '@/domain/types';
 
@@ -317,7 +317,8 @@ export function answerQuery(rawQuery: string): NLQueryResult {
   // ── Entity lookups — only when the query is actually *about* that entity
   //    (mostly just the name), so an unhandled question that merely mentions a
   //    team/player falls through to the helpful fallback instead of a wrong page. ──
-  if (players.length === 1 && lookupResidual(q, players[0]!.name) <= 1) return playerLookup(q, players[0]!);
+  const topPlayer = bestPlayer(q);
+  if (topPlayer && lookupResidual(q, topPlayer.name) <= 1) return playerLookup(q, topPlayer);
   const team = detectTeam(q);
   if (team && lookupResidual(q, team.name) <= 1) return teamLookup(q, team.id);
 
