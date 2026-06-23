@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { tournamentSummaries } from '@/server/history';
 import { PageHeader, Panel, Stat } from '@/components/ui';
-import { HBar } from '@/components/charts/Recharts';
+import { HBar, AreaTrend } from '@/components/charts/Recharts';
 import { ExploreTournamentButton } from '@/components/history/ExploreTournamentButton';
 
 export const metadata: Metadata = { title: 'Through the Years' };
@@ -16,32 +16,51 @@ export default async function HistoryPage() {
   const totalMatches = all.reduce((s, t) => s + t.matches, 0);
   const avgGpg = totalMatches ? totalGoals / totalMatches : 0;
 
-  const gpgData = all.map((t) => ({ label: t.short, value: Math.round(t.goalsPerGame * 100) / 100, color: t.gender === 'women' ? '#ff2e9a' : '#1fe5c4' }));
-  const xgData = all.map((t) => ({ label: t.short, value: Math.round(t.xgPerShot * 100) / 100, color: t.gender === 'women' ? '#ff2e9a' : '#22e0d0' }));
+  // Goals per game is known for every edition → plot it as a trend over the
+  // eras, one coherent series per gender (mixing them on one axis would zig-zag
+  // by competition, not by time). `all` is already sorted ascending by year.
+  const menGpg = men.map((t) => ({ year: t.short, gpg: Math.round(t.goalsPerGame * 100) / 100 }));
+  const womenGpg = women.map((t) => ({ year: t.short, gpg: Math.round(t.goalsPerGame * 100) / 100 }));
+
+  // xG only exists for the shot-level (StatsBomb) editions — never fabricate a
+  // zero for the archive; show only the editions we actually have shots for.
+  const xgData = all
+    .filter((t) => t.hasShots)
+    .map((t) => ({ label: t.short, value: Math.round(t.xgPerShot * 100) / 100, color: t.gender === 'women' ? '#ff2e9a' : '#22e0d0' }));
 
   return (
     <div className="space-y-6">
       <PageHeader
         kicker="The Data Through the Eras"
         title="Through the Years"
-        description="Real event data spanning four World Cups — full shot-level analytics from StatsBomb. How the game's output, shot quality and finishing have evolved across men's and women's tournaments, with every champion and Golden Boot."
+        description="Every FIFA World Cup since 1930, men's and women's — results, goals, champions and Golden Boots from the full archive, with shot-level analytics (xG) for the four most recent tournaments via StatsBomb. How scoring has evolved across the eras."
       />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Tournaments analyzed" value={all.length} sub="full event data" />
+        <Stat label="Tournaments" value={all.length} sub="men's & women's" />
         <Stat label="Matches" value={totalMatches} accent="#1fe5c4" />
         <Stat label="Goals" value={totalGoals} sub={`${avgGpg.toFixed(2)} / game`} accent="#a8e020" />
         <Stat label="Span" value={`${Math.min(...all.map((t) => t.year))}–${Math.max(...all.map((t) => t.year))}`} accent="#ff2e9a" />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Goals per Game" subtitle="By tournament · teal = men, pink = women">
-          <HBar data={gpgData} unit="" color="#1fe5c4" height={Math.max(180, all.length * 46)} />
-        </Panel>
-        <Panel title="Shot Quality (xG per shot)" subtitle="Average chance quality by tournament">
-          <HBar data={xgData} unit="" color="#22e0d0" height={Math.max(180, all.length * 46)} />
-        </Panel>
+        {menGpg.length > 0 && (
+          <Panel title="Goals per Game · Men's" subtitle="Across every men's World Cup">
+            <AreaTrend data={menGpg} dataKey="gpg" xKey="year" color="#1fe5c4" height={220} />
+          </Panel>
+        )}
+        {womenGpg.length > 0 && (
+          <Panel title="Goals per Game · Women's" subtitle="Across every women's World Cup">
+            <AreaTrend data={womenGpg} dataKey="gpg" xKey="year" color="#ff2e9a" height={220} />
+          </Panel>
+        )}
       </div>
+
+      {xgData.length > 0 && (
+        <Panel title="Shot Quality (xG per shot)" subtitle="Shot-level editions only · StatsBomb">
+          <HBar data={xgData} unit="" color="#22e0d0" height={Math.max(180, xgData.length * 46)} />
+        </Panel>
+      )}
 
       {[
         { title: "Men's World Cups", items: men },
@@ -70,7 +89,7 @@ export default async function HistoryPage() {
                     <Mini label="Matches" value={String(t.matches)} />
                     <Mini label="Goals" value={String(t.goals)} accent="#a8e020" />
                     <Mini label="G/Game" value={t.goalsPerGame.toFixed(2)} accent="#1fe5c4" />
-                    <Mini label="xG/Shot" value={t.xgPerShot.toFixed(2)} accent="#22e0d0" />
+                    <Mini label="xG/Shot" value={t.hasShots ? t.xgPerShot.toFixed(2) : '—'} accent="#22e0d0" />
                   </div>
 
                   {t.topScorer && (

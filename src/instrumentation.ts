@@ -56,4 +56,16 @@ export async function register() {
     };
     setTimeout(() => void loop(), IDLE_MS);
   }
+
+  // Warm the cross-tournament "Through the Years" summary in the background so the
+  // first visitor doesn't pay the one-time cost of parsing every archived edition
+  // (~31 snapshots, 1930–2023). Memoized after this; best-effort.
+  void (async () => {
+    try {
+      const { tournamentSummaries } = await import('@/server/history');
+      await tournamentSummaries();
+    } catch {
+      /* non-fatal — the page will compute it lazily on first visit */
+    }
+  })();
 }
