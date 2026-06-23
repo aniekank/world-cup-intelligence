@@ -64,10 +64,16 @@ export function buildPowerRankings(
     // Power rating: ELO-tier (0..100) + deep-run equity + xG signal
     const eloTier = ((t.elo - 1580) / (2120 - 1580)) * 100;
     const deepRun = f ? (f.winTitle * 220 + f.reachSF * 40 + f.reachQF * 12) : 0;
-    const powerRating = round1(clamp(eloTier * 0.55 + deepRun + xgDiffPerGame * 6, 0, 100));
+    // Keep the raw (pre-clamp) score for sorting: several elite teams saturate
+    // the 0..100 display ceiling, and ranking by the clamped value leaves their
+    // order to be decided by array position — which isn't stable across engine
+    // rebuilds, so the very top would reshuffle on every live status flip.
+    const rawScore = eloTier * 0.55 + deepRun + xgDiffPerGame * 6;
+    const powerRating = round1(clamp(rawScore, 0, 100));
 
     return {
       teamId: t.id,
+      rawScore,
       powerRating,
       offenseRating: round1(clamp(50 + (xgFor / games - 1.3) * 28 + (t.attackRating - 75) * 1.4, 0, 100)),
       defenseRating: round1(clamp(50 + (1.3 - xgAgainst / games) * 28 + (t.defenseRating - 75) * 1.4, 0, 100)),
@@ -76,9 +82,12 @@ export function buildPowerRankings(
     };
   });
 
-  rows.sort((a, b) => b.powerRating - a.powerRating);
+  // Sort by the un-clamped score, then ELO as a deterministic final tie-break,
+  // so the order is identical every rebuild (and identical on every page that
+  // reads it — home panel and the full /rankings table).
+  rows.sort((a, b) => b.rawScore - a.rawScore || b.elo - a.elo || a.teamId.localeCompare(b.teamId));
 
-  return rows.map((r, i) => {
+  return rows.map(({ rawScore: _rawScore, ...r }, i) => {
     const rank = i + 1;
     const prev = previous?.get(r.teamId) ?? rank;
     const trend: PowerRankingRow['trend'] = rank < prev ? 'up' : rank > prev ? 'down' : 'flat';
