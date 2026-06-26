@@ -23,15 +23,21 @@ export async function register() {
   const trackLoading = id === 'live-2026';
   if (trackLoading) g.__wcLiveLoading = true;
   void (async () => {
-    try {
-      const { activateTournament } = await import('@/data/loadTournament');
-      const snap = await activateTournament(id);
-      console.log(`[data] Active tournament: ${snap.competition.name} [src=${snap.meta?.source ?? '?'}] — ${snap.teams.length} teams, ${snap.players.length} players, ${snap.matches.length} matches.`);
-    } catch (err) {
-      console.error('[data] Tournament load failed — staying on simulation:', err);
-    } finally {
-      if (trackLoading) g.__wcLiveLoading = false;
+    const { activateTournament } = await import('@/data/loadTournament');
+    // Retry a transient boot-time fetch failure before falling back to the
+    // simulation. The refresh loop below keeps retrying after that, so a
+    // SportMonks hiccup at boot can never strand the app on the placeholder. (WC-041)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const snap = await activateTournament(id);
+        console.log(`[data] Active tournament: ${snap.competition.name} [src=${snap.meta?.source ?? '?'}] — ${snap.teams.length} teams, ${snap.players.length} players, ${snap.matches.length} matches.`);
+        break;
+      } catch (err) {
+        console.error(`[data] Tournament load attempt ${attempt}/3 failed:`, err);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 4000));
+      }
     }
+    if (trackLoading) g.__wcLiveLoading = false;
   })();
 
   // For the live edition, poll the fixtures feed so in-play games flip to LIVE
@@ -48,16 +54,27 @@ export async function register() {
     const loop = async () => {
       let live = false;
       try {
-        const { refreshLiveScores } = await import('@/data/loadTournament');
-        await refreshLiveScores();
-        const { getLiveMatches } = await import('@/data/store');
-        live = getLiveMatches().length > 0;
+        const store = await import('@/data/store');
+        const lt = await import('@/data/loadTournament');
+        if (store.getActiveTournamentId() !== 'live-2026') {
+          // Not on live yet (a boot fetch failed) — keep retrying the full load so
+          // the app can't stay stranded on the simulation placeholder. (WC-041)
+          g.__wcLiveLoading = true;
+          try {
+            await lt.activateTournament('live-2026');
+          } finally {
+            g.__wcLiveLoading = false;
+          }
+        } else {
+          await lt.refreshLiveScores();
+        }
+        live = store.getLiveMatches().length > 0;
         // Capture closing-line snapshots for Track Record Phase 2 (self-gated:
         // no-op unless Upstash is configured; internally throttled to ~18 min).
         const { snapshotUpcoming } = await import('@/server/predictionLog');
         await snapshotUpcoming();
       } catch (err) {
-        console.error('[data] Live refresh failed:', err);
+        console.error('[data] Live refresh/recovery failed:', err);
       } finally {
         setTimeout(() => void loop(), live ? LIVE_MS : IDLE_MS);
       }
