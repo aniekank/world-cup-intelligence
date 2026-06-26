@@ -12,15 +12,20 @@ import { useRouter } from 'next/navigation';
  *
  * Only engages when the server says it's still loading (`initialBlocking`), so a
  * normal load (live data already in memory — the common case between deploys)
- * renders nothing here and pays no cost. A safety cap guarantees it can never
- * hang: if live data is slow, it falls through to the app (where the "Loading
- * live data…" pill takes over).
+ * renders nothing here and pays no cost. A generous safety cap guarantees it can
+ * never hang forever: only a prolonged, genuine failure falls through to the app.
  */
-const MAX_HOLD_MS = 30_000;
+// Hold until the live snapshot is genuinely live. The real load (fixtures + 48
+// squads + events + enrichments) routinely runs ~25–40s, so a short cap would
+// reveal the simulation right before live lands — exactly what we don't want
+// during a live tournament. Only a genuine, prolonged failure trips this cap.
+const MAX_HOLD_MS = 90_000;
+const SLOW_AFTER_MS = 14_000;
 
 export function BootGate({ initialBlocking }: { initialBlocking: boolean }) {
   const router = useRouter();
   const [blocking, setBlocking] = useState(initialBlocking);
+  const [slow, setSlow] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Decide once, at mount. `router.refresh()` re-renders the layout server-side
   // with loading=false, flipping the `initialBlocking` prop — so this MUST NOT be
@@ -33,20 +38,27 @@ export function BootGate({ initialBlocking }: { initialBlocking: boolean }) {
     let cancelled = false;
     const start = Date.now();
     const tick = async () => {
-      let booting = false;
+      // Reveal ONLY once the live tournament is actually active. `loading:false`
+      // alone is not enough — a *failed* load also clears the flag while leaving
+      // the simulation active, and revealing that sim is the bug we're fixing. We
+      // keep holding through the self-heal retries until live-2026 lands.
+      let ready = false;
       try {
-        const res = await fetch('/api/live-status', { cache: 'no-store' });
-        booting = !!(await res.json()).loading;
+        const s = await (await fetch('/api/live-status', { cache: 'no-store' })).json();
+        ready = s.tournamentId === 'live-2026' && !s.loading;
       } catch {
-        booting = false;
+        ready = false;
       }
       if (cancelled) return;
-      if (booting && Date.now() - start < MAX_HOLD_MS) {
+      const elapsed = Date.now() - start;
+      if (!ready && elapsed < MAX_HOLD_MS) {
+        if (elapsed > SLOW_AFTER_MS) setSlow(true);
         timer.current = setTimeout(tick, 1200);
         return;
       }
-      // Live data has landed (or we hit the cap) — pull the live content in, then
-      // reveal a beat later so the now-live render replaces the placeholder first.
+      // Live data has landed (or, after MAX_HOLD, we give up and fall back rather
+      // than block forever) — pull the live content in, then reveal a beat later
+      // so the now-live render replaces the placeholder first.
       router.refresh();
       timer.current = setTimeout(() => {
         if (!cancelled) setBlocking(false);
@@ -70,11 +82,13 @@ export function BootGate({ initialBlocking }: { initialBlocking: boolean }) {
         .wci-bootgate .ring{width:46px;height:46px;border-radius:50%;border:3px solid rgba(31,229,196,.18);
           border-top-color:#1fe5c4;animation:wciBootSpin .8s linear infinite;}
         .wci-bootgate .sub{font-size:13px;color:#9683b5;}
+        .wci-bootgate .hint{font-size:12px;color:#6f5d8c;max-width:300px;text-align:center;}
         @keyframes wciBootSpin{to{transform:rotate(360deg)}}
       `}</style>
       <div className="mark">World Cup Intelligence</div>
       <div className="ring" />
       <div className="sub">Loading live tournament data…</div>
+      {slow && <div className="hint">Pulling the latest fixtures, squads, and results. This can take a moment.</div>}
     </div>
   );
 }
