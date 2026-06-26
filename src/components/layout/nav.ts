@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Radio,
   CalendarDays,
+  Newspaper,
   Shield,
   ShieldHalf,
   Users,
@@ -42,6 +43,7 @@ export const NAV: NavItem[] = [
   { label: 'Guide', href: '/guide', icon: LifeBuoy, section: 'main' },
   { label: 'Live Center', href: '/live', icon: Radio, section: 'main', badge: 'live' },
   { label: 'Matches', href: '/matches', icon: CalendarDays, section: 'main' },
+  { label: 'Results', href: '/results', icon: Newspaper, section: 'main' },
   { label: 'Teams', href: '/teams', icon: Shield, section: 'main' },
   { label: 'Players', href: '/players', icon: Users, section: 'main' },
 

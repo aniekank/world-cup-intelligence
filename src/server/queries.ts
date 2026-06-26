@@ -14,6 +14,7 @@ import {
   getMatches,
   getMatch,
   getTeamMatches,
+  getPlayer,
   getPlayerViews,
   getPlayerView,
   getSquad,
@@ -127,6 +128,50 @@ export function matchesView(opts?: { status?: string; stage?: string; groupId?: 
   return pool
     .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
     .map((m) => ({ ...m, prediction: eng.predictions.get(m.id) ?? null }));
+}
+
+/**
+ * Finished matches, newest first, each with its AI recap and goal scorers —
+ * powers the Results tab so you can read what happened without opening every game.
+ */
+export function resultsFeed() {
+  return getMatches()
+    .filter((m) => m.status === 'FINISHED')
+    .sort((a, b) => b.kickoff.localeCompare(a.kickoff))
+    .map((m) => {
+      const home = getTeam(m.homeTeamId);
+      const away = getTeam(m.awayTeamId);
+      if (!home || !away) return null;
+      const scorers = m.events
+        .filter((e) => e.type === 'GOAL' || e.type === 'PENALTY_GOAL')
+        .sort((a, b) => a.minute - b.minute)
+        .map((e) => ({
+          name: (e.playerId ? getPlayer(e.playerId)?.name : null) ?? 'Goal',
+          minute: e.minute,
+          teamId: e.teamId,
+          pen: e.type === 'PENALTY_GOAL',
+        }));
+      let summary = '';
+      try {
+        summary = generateMatchSummary(m.id);
+      } catch {
+        /* one bad recap shouldn't drop the whole feed */
+      }
+      return {
+        id: m.id,
+        kickoff: m.kickoff,
+        stage: m.stage,
+        groupId: m.groupId,
+        home: { id: home.id, name: home.name, flag: home.flag, code: home.code },
+        away: { id: away.id, name: away.name, flag: away.flag, code: away.code },
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
+        penalties: m.penalties,
+        scorers,
+        summary,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
 export function matchDetail(id: string) {
