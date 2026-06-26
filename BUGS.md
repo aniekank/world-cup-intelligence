@@ -32,14 +32,7 @@ differently between the two.
 
 ## Open bugs
 
-### ENH-1 — Live scoreboard doesn't auto-update in the browser
-- **Area:** match/live pages (client)
-- **Severity:** enhancement
-- **Steps:** Open a live match; watch a goal go in.
-- **Expected:** Score/minute tick without a manual reload.
-- **Actual:** Server data refreshes every 60s, but the browser only shows it after a page reload.
-- **Notes:** Agreed as the next task — add a client-side poll (every ~30–60s) on the match/live pages. Not a defect, a missing feature.
-- **Status:** 🟢 Resolved — a global `<LiveRefresh>` (mounted in the Topbar) polls a no-store `/api/live-status` probe (cached snapshot only, no provider call) and calls `router.refresh()` whenever the snapshot generation changes, so every page re-renders in place without a manual reload. Polls 15s while a match is live, 60s idle; pauses on a hidden tab; catches up on refocus. A freshness pill shows "N live · updated Ns ago" (live) / "Live" (idle). Server poll also made adaptive + env-tunable (`LIVE_REFRESH_MS` / `LIVE_REFRESH_LIVE_MS`, 30s while live). · LiveRefresh.tsx · api/live-status · instrumentation.ts
+_None — all tracked bugs and enhancements are resolved. New items go here using the template above._
 
 ---
 
@@ -47,6 +40,7 @@ differently between the two.
 
 | ID | Bug | Area | Root cause | Fix |
 |----|-----|------|-----------|-----|
+| ENH-1 | Live scoreboard didn't auto-update in the browser (enhancement) | match/live pages (client) | Server data refreshed every 60s, but the browser only showed it after a manual reload — no client-side poll. | A global `<LiveRefresh>` (mounted in the Topbar) polls a no-store `/api/live-status` probe (cached snapshot only, no provider call) and `router.refresh()`es whenever the snapshot generation changes, so every page re-renders in place without a reload. Polls 15s while a match is live, 60s idle; pauses on a hidden tab; catches up on refocus. A freshness pill shows "N live · updated Ns ago" (live) / "Live" (idle). Server poll also made adaptive + env-tunable (`LIVE_REFRESH_MS` / `LIVE_REFRESH_LIVE_MS`, 30s while live). · LiveRefresh.tsx · api/live-status · instrumentation.ts |
 | WC-001 | Every player shown as "CM" | data adapter | `detailedPosition` hardcoded to `'CM'` | Map role→detailed position (GK/CB/CM/ST) · pre-launch |
 | WC-002 | `/live` crash — `reading 'flag'` | live/matches render | TBD knockout fixtures → `getTeam(id)!` undefined → `.flag` | Guard MatchCard + `liveMatches`/`matchDetail` filters · pre-launch |
 | WC-003 | Home page "client-side exception" | home / narratives | `getPlayerView` used `getTeam()!` → undefined during live load | `getPlayerView` returns `undefined` when team unresolved; cascaded guards · pre-launch |
