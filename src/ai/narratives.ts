@@ -90,8 +90,12 @@ const bootTitles = (v: string) => [
 ];
 
 export function generateInsights(): Insight[] {
-  const eng = engine();
   const insights: Insight[] = [];
+  // Never let one bad data edge throw and blank the whole home page — build what
+  // we can and serve it (the sections that succeeded). The error is logged so the
+  // root cause is visible in the server logs. (WC-040)
+  try {
+  const eng = engine();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
 
   // 1. Upset detection — finished matches where a much weaker side won
@@ -264,6 +268,9 @@ export function generateInsights(): Insight[] {
   // Hot scoring streak — record watch
   const streak = scoringStreakInsight();
   if (streak) insights.push(streak);
+  } catch (err) {
+    console.error('[narratives] generateInsights failed; serving partial insights.', err);
+  }
 
   const order = { high: 0, medium: 1, low: 2 };
   return insights.sort((a, b) => order[a.severity] - order[b.severity]);

@@ -272,11 +272,21 @@ export function homeData() {
   const live = liveMatches();
   const upcoming = matchesView({ status: 'SCHEDULED' }).slice(0, 6);
   const topScorers = players({ sort: 'goals', limit: 5 });
+  // No single panel's narrative may take down the whole home page — degrade each
+  // to an empty/neutral default and log, rather than throw. (WC-040)
+  const safe = <T,>(fn: () => T, fallback: T): T => {
+    try {
+      return fn();
+    } catch (e) {
+      console.error('[homeData] panel failed; serving fallback.', e);
+      return fallback;
+    }
+  };
   return {
     competition: getCompetition(),
-    briefing: generateDailyBriefing(),
-    briefingDeck: generateBriefingDeck(),
-    criticalMatches: criticalMatchesView(4),
+    briefing: safe(generateDailyBriefing, { headline: 'Tournament briefing', body: 'The live briefing is updating.', bullets: [] }),
+    briefingDeck: safe(generateBriefingDeck, []),
+    criticalMatches: safe(() => criticalMatchesView(4), []),
     favorites,
     live,
     upcoming,
@@ -285,7 +295,7 @@ export function homeData() {
       .map((r) => ({ ...r, team: teamMap.get(r.teamId) }))
       .filter((r): r is typeof r & { team: Team } => Boolean(r.team))
       .slice(0, 5),
-    insights: generateInsights().slice(0, 4),
+    insights: safe(() => generateInsights().slice(0, 4), []),
     goldenBoot: eng.goldenBoot.slice(0, 5).map((g) => {
       const v = getPlayerViews().find((p) => p.id === g.playerId);
       return { ...g, player: v ?? null };
