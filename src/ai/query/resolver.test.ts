@@ -132,6 +132,21 @@ describe('resolver — regressions caught by the live corpus', () => {
   it('one-char-deletion typo on a long surname still resolves ("morals" → Morales)', () => {
     expect(scoreName('morals', 'Marcos Morales')).toBeGreaterThan(0.55);
   });
+
+  // WC-014: "lionel messi" surfaced a weak runner-up. The first name "lionel"
+  // matches the stored initial "L" (0.5) and a near-miss surname fuzz-matches
+  // (0.62) — neither a strong hit, but together they cleared the bar.
+  it('full first name + surname does not surface a near-miss surname ("lionel messi" ≠ L. Bessi)', () => {
+    expect(scoreName('lionel messi', 'L. Messi')).toBeGreaterThan(0.55); // the real one still wins
+    expect(scoreName('lionel messi', 'L. Bessi')).toBeLessThan(0.55); // one-edit surname + initial → noise
+  });
+
+  // A 5-char query token (max edit budget = 1) once leaked a spurious 0.45 against
+  // almost any word, because the over-budget sentinel (max+1 = 2) was misread as
+  // "two typos". So "lionel messi" matched anyone named Lionel.
+  it('a 5-char token does not fuzzy-match an unrelated word ("messi" ≠ Scaloni)', () => {
+    expect(scoreName('lionel messi', 'Lionel Scaloni')).toBeLessThan(0.55);
+  });
 });
 
 describe('resolver — NLQ mention extraction inside sentences', () => {

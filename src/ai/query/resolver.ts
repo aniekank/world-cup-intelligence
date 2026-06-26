@@ -73,8 +73,14 @@ function tokenScore(qt: string, nt: string): number {
   const max = qt.length >= 6 ? 2 : qt.length >= 5 ? 1 : 0; // typo tolerance — only for ≥5-char tokens, so short names ("kane") don't fuzz into "sané"
   if (max > 0) {
     const d = editDistance(qt, nt, max);
-    if (d === 1) return 0.62; // one typo → still a confident match
-    if (d === 2) return 0.45; // two typos → weak, needs corroboration
+    // `editDistance` returns `max+1` as its over-budget sentinel. For a 5-char
+    // token (max=1) that sentinel is exactly 2 — which must NOT be read as "two
+    // typos". Trust the distance only when it's genuinely within budget, or a
+    // 5-char token leaks a spurious 0.45 against almost any word ("messi"↔"scaloni").
+    if (d <= max) {
+      if (d === 1) return 0.62; // one typo → still a confident match
+      if (d === 2) return 0.45; // two typos → weak, needs corroboration
+    }
   }
   return 0;
 }
@@ -101,6 +107,7 @@ export function scoreName(query: string, name: string): number {
   let total = 0;
   let sig = 0;
   let sigMatched = 0;
+  let strong = 0; // sig tokens matched on real content (exact / prefix), not just an initial or a fuzzy near-miss
   for (const qt of qts) {
     const isSig = qt.length >= 3;
     if (isSig) sig++;
@@ -118,11 +125,17 @@ export function scoreName(query: string, name: string): number {
       used[idx] = true;
       total += best;
       if (isSig && best >= 0.5) sigMatched++;
+      if (isSig && best >= 0.7) strong++;
     } else if (isSig) {
       return bonus; // a meaningful word matched nothing → wrong entity (keep only a pure-substring hit)
     }
   }
   if (sig > 0 && sigMatched === 0) return bonus;
+  // An initial-only match (a full first name "lionel" hitting the stored "L") plus
+  // a fuzzy near-miss surname ("messi"↔"bessi") can clear the bar on weak evidence
+  // alone. Require at least one strongly-matched word (exact or prefix) once the
+  // query carries two+ significant tokens, so "lionel messi" can't surface "L. Bessi".
+  if (sig >= 2 && strong === 0) return bonus;
   return total + bonus;
 }
 
