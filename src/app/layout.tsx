@@ -5,6 +5,8 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { ManifestoBackdrop } from '@/components/effects/ManifestoBackdrop';
 import { IntroSplash } from '@/components/effects/IntroSplash';
+import { BootGate } from '@/components/effects/BootGate';
+import { liveStatus } from '@/server/queries';
 
 // Default to the production origin (not localhost) so social share cards —
 // og:image, twitter:image — resolve to a reachable URL even when
@@ -42,9 +44,19 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // True only during the boot window (live snapshot still loading). Drives a
+  // loading screen so the placeholder simulation is never shown during a live
+  // tournament. Defensive: a read failure just means "not booting". (WC-042)
+  let booting = false;
+  try {
+    booting = liveStatus().loading;
+  } catch {
+    /* ignore */
+  }
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen">
+        <BootGate initialBlocking={booting} />
         <IntroSplash />
         <ManifestoBackdrop />
         <div className="flex min-h-screen">
