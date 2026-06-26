@@ -88,25 +88,30 @@ export function MiniMatchRow({ match, home, away }: { match: Match; home: Team; 
   if (!home || !away) return null;
   const live = match.status === 'LIVE';
   return (
-    <Link href={`/matches/${match.id}`} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-terminal-elevated">
-      <span className="flex w-1/3 items-center justify-end gap-1.5 truncate text-right">
-        <span className="truncate text-terminal-text">{home.name}</span>
-        <span>{home.flag}</span>
-      </span>
-      <span className="tnum flex items-center gap-1 rounded bg-terminal-elevated px-2 py-0.5 text-xs font-semibold text-terminal-bright">
-        {match.status === 'SCHEDULED' ? (
-          <span className="text-terminal-muted">v</span>
-        ) : (
-          <>
-            {match.homeScore}–{match.awayScore}
-          </>
-        )}
-        {live && <LiveDot />}
-      </span>
-      <span className="flex w-1/3 items-center gap-1.5 truncate">
-        <span>{away.flag}</span>
-        <span className="truncate text-terminal-text">{away.name}</span>
-      </span>
+    <Link href={`/matches/${match.id}`} className="block rounded px-2 py-1.5 hover:bg-terminal-elevated">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="flex w-1/3 items-center justify-end gap-1.5 truncate text-right">
+          <span className="truncate text-terminal-text">{home.name}</span>
+          <span>{home.flag}</span>
+        </span>
+        <span className="tnum flex items-center gap-1 rounded bg-terminal-elevated px-2 py-0.5 text-xs font-semibold text-terminal-bright">
+          {match.status === 'SCHEDULED' ? (
+            <span className="text-terminal-muted">v</span>
+          ) : (
+            <>
+              {match.homeScore}–{match.awayScore}
+            </>
+          )}
+          {live && <LiveDot />}
+        </span>
+        <span className="flex w-1/3 items-center gap-1.5 truncate">
+          <span>{away.flag}</span>
+          <span className="truncate text-terminal-text">{away.name}</span>
+        </span>
+      </div>
+      <div className="mt-0.5 text-center text-[10px] text-terminal-muted">
+        {live ? "Live now" : <LocalTime iso={match.kickoff} variant="clock" />}
+      </div>
     </Link>
   );
 }
