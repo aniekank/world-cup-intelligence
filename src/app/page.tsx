@@ -10,6 +10,7 @@ import { CriticalMatchCard } from '@/components/CriticalMatchCard';
 import { LiveTicker } from '@/components/home/LiveTicker';
 import { ParallaxBurst } from '@/components/effects/ParallaxBurst';
 import { pct } from '@/lib/format';
+import { RUNS } from '@/analytics/simulate';
 
 export default function HomePage() {
   const data = homeData();
@@ -95,7 +96,7 @@ export default function HomePage() {
           {/* Title contenders */}
           <Panel
             title="Title Contenders"
-            subtitle="Monte Carlo championship probability · n=3,000"
+            subtitle={`Monte Carlo championship probability · n=${RUNS.toLocaleString()}`}
             action={
               <Link href="/predictions" className="flex items-center gap-1 text-xs text-accent hover:underline">
                 Predictions <ArrowRight className="h-3 w-3" />

@@ -20,6 +20,7 @@ import {
   Swords,
 } from 'lucide-react';
 import { PageHeader, Panel, Badge } from '@/components/ui';
+import { RUNS } from '@/analytics/simulate';
 
 export const metadata: Metadata = { title: 'Guide' };
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,7 @@ const TOUR: { icon: typeof Globe2; title: string; href: string; body: string }[]
     icon: Sparkles,
     title: 'Predictions',
     href: '/predictions',
-    body: 'The forecast. We play the rest of the tournament 3,000 times and count how often each team wins its group, reaches each round, and lifts the trophy. See the glossary below for what every column means.',
+    body: `The forecast. We play the rest of the tournament ${RUNS.toLocaleString()} times and count how often each team wins its group, reaches each round, and lifts the trophy. See the glossary below for what every column means.`,
   },
   {
     icon: Trophy,
@@ -220,7 +221,7 @@ const GLOSSARY: {
         body: (
           <p>
             Rather than guess one outcome, we play the entire rest of the tournament{' '}
-            <strong>3,000 times</strong>. Each run completes the groups, seeds the bracket, and plays out every knockout
+            <strong>{RUNS.toLocaleString()} times</strong>. Each run completes the groups, seeds the bracket, and plays out every knockout
             tie using the teams’ win probabilities — with a dose of randomness, so upsets happen just like in real life.
             We then count how often each thing occurred. That count <em>is</em> the probability.
           </p>
@@ -232,8 +233,9 @@ const GLOSSARY: {
         short: 'odds of winning it all',
         body: (
           <p>
-            The share of those 3,000 simulations a team won the whole tournament. <strong>Title 18%</strong> means they
-            lifted the trophy in about 540 of 3,000 runs. It already accounts for how hard their likely path is.
+            The share of those {RUNS.toLocaleString()} simulations a team won the whole tournament. <strong>Title 18%</strong> means
+            they lifted the trophy in about {Math.round(0.18 * RUNS).toLocaleString()} of {RUNS.toLocaleString()} runs. It already
+            accounts for how hard their likely path is.
           </p>
         ),
       },

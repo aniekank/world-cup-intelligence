@@ -89,11 +89,11 @@ export function setDataset(
   _matchIndex = null;
   _indexedSnap = null; // force syncIndexes() to rebuild — don't leave a stale pointer (WC-044)
   _percentileCache = null;
-  // Invalidate the analytics engine (lives on globalThis too). The 3,000-run
-  // Monte Carlo is expensive, so a routine live score/minute tick skips it
-  // (rebuildEngine:false) — only activation or a match STATUS flip (kickoff /
-  // full-time) rebuilds forecasts. Without this, the simulation re-ran on every
-  // 60s refresh, making page renders take 13-18s and time out (502s).
+  // Invalidate the analytics engine (lives on globalThis too). A full forecast
+  // rebuild is ~0.5s, so it's cheap — but there's no reason to redo it for a mere
+  // score/minute change, so a routine tick skips it (rebuildEngine:false) and only
+  // activation or a match STATUS flip (kickoff / full-time) rebuilds. The next
+  // request after a flip pays the sub-second build lazily.
   if (opts?.rebuildEngine !== false) {
     (globalThis as unknown as { __wcEngine?: unknown }).__wcEngine = undefined;
   }

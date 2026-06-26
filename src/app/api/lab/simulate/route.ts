@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getTeams, getGroups, getMatches } from '@/data/store';
 import { engine } from '@/analytics';
-import { runSimulation } from '@/analytics/simulate';
+import { runSimulation, RUNS } from '@/analytics/simulate';
 import type { Team, TeamForecast } from '@/domain/types';
 
 /**
  * Monte Carlo "what-if": override one team's attack / defense / ELO and re-run
- * the real tournament simulator (3,000 runs) against the current results. Returns
- * that team's before/after stage probabilities plus the reshuffled title-odds
- * leaderboard, so the user can see the whole field react to one team's strength.
+ * the real tournament simulator against the current results, at the same fidelity
+ * as the headline forecast (so the before/after comparison is apples-to-apples —
+ * the "before" comes from the live engine). At ~0.2s the full re-sim is plenty
+ * snappy for the slider. Returns that team's before/after stage probabilities plus
+ * the reshuffled title-odds leaderboard, so the user can see the whole field react
+ * to one team's strength.
  */
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
       before: slim(baseline.get(teamId)),
       after: slim(forecasts.get(teamId)),
       leaderboard,
-      runs: 3000,
+      runs: RUNS,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

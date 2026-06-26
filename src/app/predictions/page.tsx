@@ -8,6 +8,7 @@ import { HBar } from '@/components/charts/Recharts';
 import { pct } from '@/lib/format';
 import { TrackActivation } from '@/components/TrackActivation';
 import { RegionalGoldenBoot } from '@/components/predictions/RegionalGoldenBoot';
+import { RUNS } from '@/analytics/simulate';
 
 export const metadata: Metadata = { title: 'Predictions' };
 
@@ -25,7 +26,7 @@ export default function PredictionsPage() {
       <PageHeader
         kicker="Forecasting"
         title="Tournament Predictions"
-        description="Every probability is derived from 3,000 Monte Carlo simulations of the remaining tournament: each run completes the group stage, resolves the best third-placed teams, seeds the knockout bracket, and plays out every tie via ELO win expectancy."
+        description={`Every probability is derived from ${RUNS.toLocaleString()} Monte Carlo simulations of the remaining tournament: each run completes the group stage, resolves the best third-placed teams, seeds the knockout bracket, and plays out every tie via ELO win expectancy.`}
         action={
           <Link
             href="/guide#monte-carlo"

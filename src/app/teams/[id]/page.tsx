@@ -9,6 +9,7 @@ import { Panel, Stat, Badge, FormString, Table, Th, Td, MetricBar } from '@/comp
 import { MiniMatchRow } from '@/components/MatchCard';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { pct, ordinal } from '@/lib/format';
+import { RUNS } from '@/analytics/simulate';
 
 export function generateMetadata({ params }: { params: { id: string } }): Metadata {
   const t = getTeam(params.id);
@@ -74,7 +75,7 @@ export default function TeamPage({ params }: { params: { id: string } }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel title="Tournament Outlook" subtitle="Monte Carlo · n=3,000">
+        <Panel title="Tournament Outlook" subtitle={`Monte Carlo · n=${RUNS.toLocaleString()}`}>
           <div className="space-y-3">
             {[
               { label: 'Qualify (R32)', v: f?.reachR32 ?? 0 },

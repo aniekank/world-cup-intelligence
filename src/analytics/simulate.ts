@@ -16,10 +16,13 @@ import { Rng } from '@/data/prng';
 import { eloExpectation } from './elo';
 import type { Match, Team, Group, TeamForecast } from '@/domain/types';
 
-// 3,000 Monte Carlo runs: forecast probabilities are stable to ~1% at this count,
-// while keeping a (now-rare, status-change-only) engine rebuild well under a second
-// of CPU instead of the 13-18s an 8,000-run resim cost on the request path.
-export const RUNS = 3000;
+// 8,000 Monte Carlo runs — forecast probabilities stable to a few tenths of a
+// percent across the meaningful range. The run count is NOT a latency lever: a
+// full engine rebuild at 8,000 is ~0.5s (measured; 3,000 vs 8,000 is ~80ms), and
+// it only fires on a match STATUS flip, not routine score ticks (store.setDataset).
+// (The historical "13-18s renders / 502s" were the live DATA fetch on the request
+// path, not the sim — the earlier drop to 3,000 was treating the wrong cause.)
+export const RUNS = 8000;
 
 interface GroupState {
   groupId: string;

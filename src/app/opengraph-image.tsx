@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { RUNS } from '@/analytics/simulate';
 
 export const alt = 'WC26 Intelligence — World Cup Analytics Terminal';
 export const size = { width: 1200, height: 630 };
@@ -84,7 +85,7 @@ export default function OG() {
           </div>
 
           <div style={{ display: 'flex', gap: 16 }}>
-            {['xG & Advanced Stats', '3,000 Simulations', 'Natural-Language Search'].map((t) => (
+            {['xG & Advanced Stats', `${RUNS.toLocaleString()} Simulations`, 'Natural-Language Search'].map((t) => (
               <div
                 key={t}
                 style={{
