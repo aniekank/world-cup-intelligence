@@ -1,7 +1,8 @@
 /**
  * Tournament registry — the catalogue of World Cups the platform can analyze.
- * The live edition streams from API-Football; historical editions load from
- * precomputed StatsBomb open-data snapshots (run `npm run data:statsbomb:all`).
+ * The live edition streams from SportMonks; the four most recent past editions
+ * load from precomputed StatsBomb open-data snapshots; every other World Cup
+ * (1930 onward) loads from the bundled Fjelstul/datahub archive.
  * The active tournament is switchable at runtime (see src/data/store.ts).
  */
 

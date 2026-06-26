@@ -17,7 +17,7 @@ export default function SettingsPage() {
           <Row k="Competition" v={`${comp.name} (${comp.season})`} />
           <Row k="Hosts" v={comp.hostCountries.join(', ')} />
           <Row k="Data source" v="Deterministic simulation engine" />
-          <Row k="Simulations" v="8,000 Monte Carlo runs" />
+          <Row k="Simulations" v="3,000 Monte Carlo runs" />
           <Row k="Analytics" v="ELO · bivariate-Poisson · xG · power ratings" />
         </dl>
       </Panel>

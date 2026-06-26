@@ -14,6 +14,10 @@ import {
   Target,
   Activity,
   Gauge,
+  Newspaper,
+  Brain,
+  FlaskConical,
+  Swords,
 } from 'lucide-react';
 import { PageHeader, Panel, Badge } from '@/components/ui';
 
@@ -32,7 +36,13 @@ const TOUR: { icon: typeof Globe2; title: string; href: string; body: string }[]
     icon: Radio,
     title: 'Live Center & Matches',
     href: '/live',
-    body: 'Scores and fixtures for the active tournament. On the live 2026 dataset this updates as real matches are played; open any match for the lineups, shot map, and momentum.',
+    body: 'Scores and fixtures for the active tournament. On the live 2026 dataset this updates in your browser as real matches are played — no reload needed; open any match for the lineups, shot map, momentum, and an auto-written recap.',
+  },
+  {
+    icon: Newspaper,
+    title: 'Results & Recaps',
+    href: '/results',
+    body: 'Every finished match, newest first — final score, goalscorers, and a plain-language recap of how it played out. Grouped by the day it was played in your own timezone.',
   },
   {
     icon: Layers,
@@ -44,7 +54,7 @@ const TOUR: { icon: typeof Globe2; title: string; href: string; body: string }[]
     icon: Sparkles,
     title: 'Predictions',
     href: '/predictions',
-    body: 'The forecast. We play the rest of the tournament 8,000 times and count how often each team wins its group, reaches each round, and lifts the trophy. See the glossary below for what every column means.',
+    body: 'The forecast. We play the rest of the tournament 3,000 times and count how often each team wins its group, reaches each round, and lifts the trophy. See the glossary below for what every column means.',
   },
   {
     icon: Trophy,
@@ -53,10 +63,34 @@ const TOUR: { icon: typeof Globe2; title: string; href: string; body: string }[]
     body: 'The single most-likely knockout path from the Round of 32 to the Final, with each tie decided by the stronger side’s win probability.',
   },
   {
+    icon: Target,
+    title: 'Track Record',
+    href: '/track-record',
+    body: 'How the model has actually done — its pre-match predictions scored against real results, with accuracy and calibration. We show our work, hits and misses alike.',
+  },
+  {
     icon: Coins,
     title: 'Betting Edge',
     href: '/betting',
     body: 'A comparison tool — our model’s probabilities lined up against real bookmaker prices to flag where they disagree. It is for analysis and education, not tipping. Read the responsible-gambling notice at the top of that page.',
+  },
+  {
+    icon: FlaskConical,
+    title: 'Model Lab',
+    href: '/lab',
+    body: 'An interactive look under the hood: the Poisson scoreline grid, a Monte Carlo simulator you can re-run, calibration curves, and more. For when you want to see how the predictions are actually made.',
+  },
+  {
+    icon: Brain,
+    title: 'AI Insights & Ask',
+    href: '/ask',
+    body: 'Ask a plain-English question — “who has the best xG per 90?”, “Spain’s playing style”, “how many goals has Mbappé scored?” — and get an answer straight from the data. AI Insights surfaces the day’s storylines automatically.',
+  },
+  {
+    icon: Swords,
+    title: 'Clash of Civilizations',
+    href: '/civilizations',
+    body: 'A playful lens on the bracket — group nations by region, language, or other shared traits and see how the “civilizations” stack up against each other.',
   },
   {
     icon: Shirt,
@@ -74,7 +108,7 @@ const TOUR: { icon: typeof Globe2; title: string; href: string; body: string }[]
     icon: History,
     title: 'Through the Years',
     href: '/history',
-    body: 'Switch between past tournaments — 2018, 2022, the Women’s 2019 & 2023 — using the selector in the top-right. The whole app re-points to that edition: squads, results, analytics, and forecasts for that year.',
+    body: 'Browse every World Cup ever played — all the men’s tournaments back to 1930 and every Women’s World Cup since 1991. The four most recent (2022, 2018, Women’s 2023 & 2019) carry full event data — advanced stats and shot maps; older editions show results, scorers, and squads. Switch edition with the selector in the top-right and the whole app re-points to that year.',
   },
 ];
 
@@ -186,7 +220,7 @@ const GLOSSARY: {
         body: (
           <p>
             Rather than guess one outcome, we play the entire rest of the tournament{' '}
-            <strong>8,000 times</strong>. Each run completes the groups, seeds the bracket, and plays out every knockout
+            <strong>3,000 times</strong>. Each run completes the groups, seeds the bracket, and plays out every knockout
             tie using the teams’ win probabilities — with a dose of randomness, so upsets happen just like in real life.
             We then count how often each thing occurred. That count <em>is</em> the probability.
           </p>
@@ -198,8 +232,8 @@ const GLOSSARY: {
         short: 'odds of winning it all',
         body: (
           <p>
-            The share of those 8,000 simulations a team won the whole tournament. <strong>Title 18%</strong> means they
-            lifted the trophy in about 1,440 of 8,000 runs. It already accounts for how hard their likely path is.
+            The share of those 3,000 simulations a team won the whole tournament. <strong>Title 18%</strong> means they
+            lifted the trophy in about 540 of 3,000 runs. It already accounts for how hard their likely path is.
           </p>
         ),
       },
@@ -320,9 +354,10 @@ export default function GuidePage() {
             <p>
               <strong className="text-terminal-bright">Pick which tournament you’re looking at.</strong> The selector in
               the top-right switches the entire app between the live{' '}
-              <span className="text-terminal-bright">World Cup 2026</span>, past editions (2018, 2022, Women’s 2019 &
-              2023), and a <span className="text-accent-violet">🎲 Simulated 2026</span> sandbox. Every page —
-              standings, predictions, players — re-points to your choice.
+              <span className="text-terminal-bright">World Cup 2026</span>, every past World Cup — all the men’s
+              tournaments back to <span className="text-terminal-bright">1930</span> and every Women’s World Cup — and a{' '}
+              <span className="text-accent-violet">🎲 Simulated 2026</span> sandbox. Every page — standings, predictions,
+              players — re-points to your choice.
             </p>
           </li>
           <li className="flex gap-3">

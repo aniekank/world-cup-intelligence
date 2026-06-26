@@ -13,6 +13,7 @@
 
 import { getPlayerViews, getTeams, getTeam, getGroups, getMatches, getTeamMatches } from '@/data/store';
 import { engine } from '@/analytics';
+import { RUNS } from '@/analytics/simulate';
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
 import type { NLQueryResult, PlayerView, Position } from '@/domain/types';
@@ -646,7 +647,7 @@ function titleQuery(q: string): NLQueryResult {
   return {
     query: q,
     intent: 'title-odds',
-    answer: `${lead.t.name} are the most likely champions at ${pct(lead.f.winTitle)}, ahead of ${ranked[1]?.t.name} (${pct(ranked[1]?.f.winTitle ?? 0)}). Based on ${eng.forecasts.size} teams across ${(8000).toLocaleString()} simulations.`,
+    answer: `${lead.t.name} are the most likely champions at ${pct(lead.f.winTitle)}, ahead of ${ranked[1]?.t.name} (${pct(ranked[1]?.f.winTitle ?? 0)}). Based on ${eng.forecasts.size} teams across ${RUNS.toLocaleString()} simulations.`,
     columns: ['#', 'Team', 'Win title%', 'Reach final%', 'Power'],
     rows: ranked.map((x, i) => [i + 1, `${x.t.flag} ${x.t.name}`, pct(x.f.winTitle), pct(x.f.reachFinal), x.f.powerRating]),
     entityType: 'team',

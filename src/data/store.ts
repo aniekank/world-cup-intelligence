@@ -89,7 +89,7 @@ export function setDataset(
   _matchIndex = null;
   _indexedSnap = null; // force syncIndexes() to rebuild — don't leave a stale pointer (WC-044)
   _percentileCache = null;
-  // Invalidate the analytics engine (lives on globalThis too). The 8,000-run
+  // Invalidate the analytics engine (lives on globalThis too). The 3,000-run
   // Monte Carlo is expensive, so a routine live score/minute tick skips it
   // (rebuildEngine:false) — only activation or a match STATUS flip (kickoff /
   // full-time) rebuilds forecasts. Without this, the simulation re-ran on every

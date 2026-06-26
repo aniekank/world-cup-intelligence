@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
             <footer className="border-t border-terminal-border px-6 py-4 text-xs text-terminal-muted">
               TASK Enterprises presents <span className="text-terminal-text">World Cup Intelligence</span> ·
-              Analytics engine v1.0 · Monte Carlo n=8,000
+              Analytics engine v1.0 · Monte Carlo n=3,000
             </footer>
           </div>
         </div>

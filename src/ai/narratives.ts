@@ -13,6 +13,7 @@
 
 import { getTeams, getTeam, getPlayerViews, getMatch, getMatches, getPlayer, datasetMeta } from '@/data/store';
 import { engine } from '@/analytics';
+import { RUNS } from '@/analytics/simulate';
 import { criticalMatches } from '@/ai/previews';
 import type { Match, PlayerView } from '@/domain/types';
 import type { Insight } from '@/domain/types';
@@ -695,7 +696,7 @@ export function generateBriefingDeck(): BriefingCard[] {
       id: 'title-race',
       kicker: 'Title Race',
       headline: `${fav.t.name} lead at ${pct(fav.f.winTitle)} to win it`,
-      body: `The Monte Carlo makes ${fav.t.name} the favourites at ${pct(fav.f.winTitle)} to lift the trophy${second ? `, ${pct(fav.f.winTitle - second.f.winTitle)} clear of ${second.t.name} on ${pct(second.f.winTitle)}` : ''}${third ? `, with ${third.t.name} third at ${pct(third.f.winTitle)}` : ''}. Drawn from 8,000 tournament simulations.`,
+      body: `The Monte Carlo makes ${fav.t.name} the favourites at ${pct(fav.f.winTitle)} to lift the trophy${second ? `, ${pct(fav.f.winTitle - second.f.winTitle)} clear of ${second.t.name} on ${pct(second.f.winTitle)}` : ''}${third ? `, with ${third.t.name} third at ${pct(third.f.winTitle)}` : ''}. Drawn from ${RUNS.toLocaleString()} tournament simulations.`,
       tags: ranked.slice(0, 3).map((r) => `${r.t.flag} ${r.t.name} ${pct(r.f.winTitle)}`),
       accent: '#1fe5c4',
     });

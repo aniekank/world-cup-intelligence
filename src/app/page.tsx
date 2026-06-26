@@ -95,7 +95,7 @@ export default function HomePage() {
           {/* Title contenders */}
           <Panel
             title="Title Contenders"
-            subtitle="Monte Carlo championship probability · n=8,000"
+            subtitle="Monte Carlo championship probability · n=3,000"
             action={
               <Link href="/predictions" className="flex items-center gap-1 text-xs text-accent hover:underline">
                 Predictions <ArrowRight className="h-3 w-3" />
