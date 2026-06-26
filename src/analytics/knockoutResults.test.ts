@@ -44,6 +44,21 @@ describe('reconcileForecastsWithResults', () => {
     expect([z.reachR32, z.reachR16, z.reachQF, z.reachSF, z.reachFinal, z.winTitle]).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
+  it('does NOT zero a still-qualifying team while group games remain (WC-038)', () => {
+    // The real-world incident: SportMonks draws a few R32 ties early (clinched
+    // teams) while the group stage is still being played. A dominant favourite
+    // with a game in hand must keep its forecast, not get zeroed.
+    const f = map(fc('arg', { winTitle: 0.25, reachR32: 0.99, reachFinal: 0.4 }), fc('bra'), fc('jpn'));
+    const matches = [
+      ko('GROUP', 'arg', 'jor', { status: 'SCHEDULED' }), // group stage not finished
+      ko('R32', 'bra', 'jpn', { status: 'SCHEDULED' }), // an early-drawn knockout tie
+    ];
+    reconcileForecastsWithResults(f, matches, [team('arg'), team('bra'), team('jpn'), team('jor')]);
+    const arg = f.get('arg')!;
+    expect([arg.winTitle, arg.reachR32, arg.reachFinal]).toEqual([0.25, 0.99, 0.4]); // untouched
+    expect(f.get('bra')!.reachR32).toBe(1); // bra is in a real R32 tie → confirmed through
+  });
+
   it('eliminates the loser of a finished R32 tie and confirms the winner into R16', () => {
     const f = map(fc('a'), fc('b'));
     reconcileForecastsWithResults(f, [ko('R32', 'a', 'b', { status: 'FINISHED', hs: 2, as: 0 })], [team('a'), team('b')]);

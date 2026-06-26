@@ -80,7 +80,13 @@ export function reconcileForecastsWithResults(
       qualified.add(m.awayTeamId);
     }
   }
-  const haveR32 = qualified.size > 0;
+  // SportMonks fills R32 ties INCREMENTALLY as teams clinch, so a handful of real
+  // R32 fixtures can exist while the group stage is still being played. The
+  // qualified set is only the *complete* bracket once every group game is done —
+  // until then a still-qualifying side (a group leader with a game in hand) must
+  // keep its projection, never be zeroed for "not qualifying". (WC-038)
+  const groupStageComplete = !matches.some((m) => m.stage === 'GROUP' && m.status !== 'FINISHED');
+  const bracketKnown = groupStageComplete && qualified.size > 0;
 
   // Confirmed progress per team.
   const playedRound = new Map<string, number>(); // furthest round they appear in
@@ -107,7 +113,7 @@ export function reconcileForecastsWithResults(
     if (!f) continue;
 
     // Groups are over and this team isn't in the bracket → out of everything.
-    if (haveR32 && !qualified.has(t.id)) {
+    if (bracketKnown && !qualified.has(t.id)) {
       f.reachR32 = 0;
       f.reachR16 = 0;
       f.reachQF = 0;
