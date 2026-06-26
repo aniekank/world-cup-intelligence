@@ -1,6 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { generateDataset } from '@/data/generate';
-import { setDataset, getPlayerView, getPlayers } from '@/data/store';
+import { setDataset, getPlayerView, getPlayers, getTeam, getPlayer } from '@/data/store';
+
+describe('store indexes never go null (WC-044)', () => {
+  it('lookups survive re-setting the active snapshot (which invalidates the indexes)', () => {
+    const snap = generateDataset();
+    setDataset(snap, 'test', 'simulation');
+    const teamId = snap.teams[0]!.id;
+    const playerId = snap.players[0]!.id;
+    expect(getTeam(teamId)).toBeDefined(); // builds the indexes
+    // Re-set the SAME snapshot object — nulls the indexes while the snapshot
+    // identity is unchanged: the exact state that used to leave teamIndex() = null!
+    setDataset(snap, 'test', 'simulation');
+    expect(() => getTeam(teamId)).not.toThrow();
+    expect(() => getPlayer(playerId)).not.toThrow();
+    expect(getTeam(teamId)).toBeDefined();
+    expect(getPlayer(playerId)).toBeDefined();
+  });
+});
 
 describe('getPlayerView', () => {
   beforeEach(() => setDataset(generateDataset(), 'simulation', 'simulation'));

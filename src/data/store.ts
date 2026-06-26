@@ -87,6 +87,7 @@ export function setDataset(
   _playerIndex = null;
   _statsIndex = null;
   _matchIndex = null;
+  _indexedSnap = null; // force syncIndexes() to rebuild — don't leave a stale pointer (WC-044)
   _percentileCache = null;
   // Invalidate the analytics engine (lives on globalThis too). The 8,000-run
   // Monte Carlo is expensive, so a routine live score/minute tick skips it
@@ -117,7 +118,12 @@ let _indexedSnap: DatasetSnapshot | null = null;
 
 function syncIndexes(): void {
   const snap = dataset();
-  if (_indexedSnap === snap) return;
+  // Rebuild on a snapshot swap OR if any index is missing. The second guard is
+  // load-bearing: setDataset() nulls the indexes, and a concurrent/cross-instance
+  // path could otherwise leave `_indexedSnap === snap` with a null index, so
+  // `teamIndex()` returned `null!` and every getTeam()/getPlayer() lookup threw
+  // "Cannot read properties of null (reading 'get')". (WC-044)
+  if (_indexedSnap === snap && _teamIndex && _playerIndex && _statsIndex && _matchIndex) return;
   _teamIndex = new Map(snap.teams.map((t) => [t.id, t]));
   _playerIndex = new Map(snap.players.map((p) => [p.id, p]));
   _statsIndex = new Map(Object.entries(snap.playerStats));
