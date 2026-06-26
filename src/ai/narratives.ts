@@ -493,6 +493,7 @@ function phaseLabel(scheduled: Match[]): string {
 }
 
 export function generateDailyBriefing(): { headline: string; body: string; bullets: string[] } {
+  try {
   const eng = engine();
   const all = getMatches();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
@@ -639,6 +640,10 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
   }
 
   return { headline, body, bullets };
+  } catch (err) {
+    console.error('[narratives] generateDailyBriefing failed; serving a neutral briefing.', err);
+    return { headline: 'Tournament briefing', body: 'The live briefing is updating.', bullets: [] };
+  }
 }
 
 // ── Briefing deck ────────────────────────────────────────────────────────────
@@ -657,6 +662,7 @@ export interface BriefingCard {
 }
 
 export function generateBriefingDeck(): BriefingCard[] {
+  try {
   const eng = engine();
   const all = getMatches();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
@@ -824,6 +830,10 @@ export function generateBriefingDeck(): BriefingCard[] {
   }
 
   return cards.filter((c) => c.body && c.body.trim().length > 0);
+  } catch (err) {
+    console.error('[narratives] generateBriefingDeck failed; serving an empty deck.', err);
+    return [];
+  }
 }
 
 /**
