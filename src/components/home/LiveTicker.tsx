@@ -16,7 +16,13 @@ export function LiveTicker() {
   const generatedAt = dataset().generatedAt;
   const matches = getMatches()
     .filter((m) => isLive(m.status) || m.status === 'FINISHED')
-    .sort((a, b) => (isLive(b.status) ? 1 : 0) - (isLive(a.status) ? 1 : 0))
+    // Live games first, then finished games most-recent-first (by kickoff) so the
+    // ticker reads newest → oldest instead of the feed's arbitrary fixture order.
+    .sort(
+      (a, b) =>
+        (isLive(b.status) ? 1 : 0) - (isLive(a.status) ? 1 : 0) ||
+        b.kickoff.localeCompare(a.kickoff),
+    )
     .slice(0, 16);
 
   if (matches.length === 0) return null;
