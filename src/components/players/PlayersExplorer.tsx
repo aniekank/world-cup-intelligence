@@ -73,6 +73,9 @@ export function PlayersExplorer() {
     (p) => p.name.toLowerCase().includes(query.toLowerCase()) && (!region || p.confederation === region),
   );
   const shown = filtered.slice(0, visible);
+  // Player-level xG has no source for the live WC — hide the column/sort rather
+  // than show a 0 for everyone. Shows when the dataset actually has it (history).
+  const hasXg = (data ?? []).some((p) => (p.stats?.xG ?? 0) > 0);
 
   return (
     <div className="space-y-4">
@@ -109,7 +112,7 @@ export function PlayersExplorer() {
           onChange={(e) => setSort(e.target.value)}
           className="rounded-md border border-terminal-border bg-terminal-panel px-3 py-2 text-xs text-terminal-bright focus:border-accent focus:outline-none"
         >
-          {SORTS.map((s) => (
+          {SORTS.filter((s) => hasXg || s.key !== 'xG').map((s) => (
             <option key={s.key} value={s.key}>
               Sort: {s.label}
             </option>
@@ -135,7 +138,7 @@ export function PlayersExplorer() {
               <th className="px-3 py-2 text-right">Min</th>
               <th className="px-3 py-2 text-right">G</th>
               <th className="px-3 py-2 text-right">A</th>
-              <th className="px-3 py-2 text-right">xG</th>
+              {hasXg && <th className="px-3 py-2 text-right">xG</th>}
               <th className="px-3 py-2 text-right">xA</th>
               <th className="px-3 py-2 text-right">Form</th>
             </tr>
@@ -173,7 +176,7 @@ export function PlayersExplorer() {
                   <td className="px-3 py-2 text-right tnum text-terminal-muted">{p.stats.minutes}</td>
                   <td className="px-3 py-2 text-right tnum font-semibold text-terminal-bright">{p.stats.goals}</td>
                   <td className="px-3 py-2 text-right tnum">{p.stats.assists}</td>
-                  <td className="px-3 py-2 text-right tnum text-accent-cyan">{(p.stats.xG ?? 0).toFixed(1)}</td>
+                  {hasXg && <td className="px-3 py-2 text-right tnum text-accent-cyan">{(p.stats.xG ?? 0).toFixed(1)}</td>}
                   <td className="px-3 py-2 text-right tnum text-accent-violet">{(p.stats.xA ?? 0).toFixed(1)}</td>
                   <td className="px-3 py-2 text-right tnum">{p.stats.formIndex}</td>
                 </tr>

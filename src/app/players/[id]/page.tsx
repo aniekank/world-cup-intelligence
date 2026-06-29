@@ -117,7 +117,12 @@ export default function PlayerPage({ params }: { params: { id: string } }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
         <Stat label="Goals" value={p.stats.goals} accent="#1fe5c4" />
         <Stat label="Assists" value={p.stats.assists} accent="#22e0d0" />
-        <Stat label="xG" value={p.stats.xG.toFixed(1)} sub={`${(p.stats.goals - p.stats.xG >= 0 ? '+' : '')}${(p.stats.goals - p.stats.xG).toFixed(1)} vs xG`} />
+        {p.stats.xG > 0 ? (
+          <Stat label="xG" value={p.stats.xG.toFixed(1)} sub={`${(p.stats.goals - p.stats.xG >= 0 ? '+' : '')}${(p.stats.goals - p.stats.xG).toFixed(1)} vs xG`} />
+        ) : (
+          // No player-level xG source for the WC — show a real stat instead of a fake 0.
+          <Stat label="Shots" value={p.stats.shots} sub={`${p.stats.shotsOnTarget} on target`} />
+        )}
         <Stat label="xA" value={p.stats.xA.toFixed(1)} />
         <Stat label="Minutes" value={p.stats.minutes} sub={`${p.stats.appearances} apps`} />
         <Stat label="Form" value={p.stats.formIndex} accent="#ff8a1e" />
