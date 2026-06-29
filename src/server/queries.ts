@@ -24,6 +24,7 @@ import {
   getActiveSource,
 } from '@/data/store';
 import { engine } from '@/analytics';
+import { defaultTournamentId } from '@/data/tournaments';
 import { rankPlayers, rankTeams } from '@/ai/query/resolver';
 import { generateInsights, generateDailyBriefing, generateBriefingDeck, generateMatchSummary, storylines } from '@/ai/narratives';
 import { criticalMatches, matchPreview } from '@/ai/previews';
@@ -37,16 +38,25 @@ import type { Team, TeamView, Match } from '@/domain/types';
  */
 export function liveStatus() {
   const live = getLiveMatches();
-  const g = globalThis as unknown as { __wcLiveLoading?: boolean };
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean };
+  const activeId = getActiveTournamentId();
+  // The deployment intends the live edition (DATA_SOURCE → live-2026) but we're
+  // not on it yet and it has never booted: this is the involuntary boot fallback
+  // to the simulation, NOT a user-chosen sandbox. The gate must hold here too —
+  // including between self-heal retries, when `loading` momentarily clears — so a
+  // page load in that gap never flashes the placeholder simulation. Once live has
+  // booted once, switching to the sim sandbox is a deliberate choice (no gate).
+  const awaitingLive = defaultTournamentId() === 'live-2026' && activeId !== 'live-2026' && !g.__wcLiveBooted;
   return {
     generatedAt: dataset().generatedAt,
-    tournamentId: getActiveTournamentId(),
+    tournamentId: activeId,
     source: getActiveSource(),
     isLive: live.length > 0,
     liveCount: live.length,
     // True while the live snapshot is still loading at boot (the app is serving
     // the placeholder simulation until it swaps in).
     loading: !!g.__wcLiveLoading,
+    awaitingLive,
   };
 }
 

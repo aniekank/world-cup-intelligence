@@ -50,7 +50,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // tournament. Defensive: a read failure just means "not booting". (WC-042)
   let booting = false;
   try {
-    booting = liveStatus().loading;
+    const ls = liveStatus();
+    // Hold the gate while live is still loading OR while we're sitting on the
+    // placeholder simulation waiting for the intended live edition to boot (covers
+    // the gap between self-heal retries, when `loading` momentarily clears). (WC-048)
+    booting = ls.loading || ls.awaitingLive;
   } catch {
     /* ignore */
   }
