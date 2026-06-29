@@ -17,7 +17,7 @@ export default function StandingsPage() {
       <PageHeader
         kicker="Group Stage"
         title="Standings"
-        description="Live group tables with FIFA tiebreakers, xG context, and Monte Carlo qualification probability. Top 2 of each group plus the 8 best third-placed teams advance to the Round of 32."
+        description="Live group tables — real points, goal difference, and xG context, with FIFA tiebreakers. Top 2 of each group plus the 8 best third-placed teams advance to the Round of 32. Flip Predictions (top bar) to overlay the Monte Carlo qualification odds."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -31,7 +31,7 @@ export default function StandingsPage() {
                   <Th align="center">Pl</Th>
                   <Th align="center">GD</Th>
                   <Th align="center">Pts</Th>
-                  <Th align="right">Q%</Th>
+                  <Th align="right" className="model-only">Q%</Th>
                 </tr>
               </thead>
               <tbody>
@@ -60,7 +60,7 @@ export default function StandingsPage() {
                     <Td align="center">{r.played}</Td>
                     <Td align="center">{r.goalDifference > 0 ? `+${r.goalDifference}` : r.goalDifference}</Td>
                     <Td align="center" className="font-bold text-terminal-bright">{r.points}</Td>
-                    <Td align="right">
+                    <Td align="right" className="model-only">
                       <span className={r.qualificationProbability > 0.6 ? 'text-accent' : 'text-terminal-text'}>
                         {pct(r.qualificationProbability, 0)}
                       </span>

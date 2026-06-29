@@ -110,12 +110,13 @@ export default function HomePage() {
             {data.live.length === 0 && data.upcoming.length === 0 && <EmptyState>No scheduled matches.</EmptyState>}
           </Panel>
 
-          {/* Matches that matter — ranked by what's at stake */}
+          {/* Matches that matter — ranked by what's at stake (model-curated) */}
           {data.criticalMatches.length > 0 && (
             <Panel
               title="Matches that matter"
               subtitle="Upcoming fixtures ranked by what's at stake"
               action={<Flame className="h-4 w-4 text-accent-red" />}
+              className="model-only"
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 {data.criticalMatches.map((p) => (
@@ -125,10 +126,11 @@ export default function HomePage() {
             </Panel>
           )}
 
-          {/* Title contenders */}
+          {/* Title contenders (Monte Carlo prediction) */}
           <Panel
             title="Title Contenders"
             subtitle={`Monte Carlo championship probability · n=${RUNS.toLocaleString()}`}
+            className="model-only"
             action={
               <Link href="/predictions" className="flex items-center gap-1 text-xs text-accent hover:underline">
                 Predictions <ArrowRight className="h-3 w-3" />
@@ -156,7 +158,7 @@ export default function HomePage() {
 
         {/* Right rail */}
         <div className="space-y-6">
-          <Panel title="Power Rankings" subtitle="Top 5" action={<Trophy className="h-4 w-4 text-accent-amber" />}>
+          <Panel title="Power Rankings" subtitle="Top 5" action={<Trophy className="h-4 w-4 text-accent-amber" />} className="model-only">
             <ol className="space-y-2">
               {data.powerTop.map((r) => (
                 <li key={r.teamId} className="flex items-center gap-3">
@@ -181,7 +183,7 @@ export default function HomePage() {
                   </Link>
                   <span className="ml-auto flex items-center gap-2 text-xs text-terminal-muted">
                     <span className="tnum font-semibold text-terminal-bright">{g.currentGoals}</span>
-                    <span className="tnum">→ {g.projectedGoals}</span>
+                    <span className="model-only tnum">→ {g.projectedGoals}</span>
                   </span>
                 </li>
               ))}

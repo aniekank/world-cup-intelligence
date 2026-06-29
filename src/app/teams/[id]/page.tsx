@@ -75,7 +75,7 @@ export default function TeamPage({ params }: { params: { id: string } }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel title="Tournament Outlook" subtitle={`Monte Carlo · n=${RUNS.toLocaleString()}`}>
+        <Panel title="Tournament Outlook" subtitle={`Monte Carlo · n=${RUNS.toLocaleString()}`} className="model-only">
           <div className="space-y-3">
             {[
               { label: 'Qualify (R32)', v: f?.reachR32 ?? 0 },

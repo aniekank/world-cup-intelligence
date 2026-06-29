@@ -57,6 +57,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen">
+        {/* Apply the persisted real-vs-model preference before first paint so
+            prediction surfaces (.model-only) don't flash. Default = real only. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('wc:showModel')==='on')document.documentElement.dataset.showModel='on';}catch(e){}`,
+          }}
+        />
         <BootGate initialBlocking={booting} />
         <IntroSplash />
         <ManifestoBackdrop />

@@ -108,7 +108,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
         )}
 
         {!finished && prediction && (
-          <div className="mx-auto mt-6 max-w-md">
+          <div className="model-only mx-auto mt-6 max-w-md">
             <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
             <div className="mt-1 flex justify-between text-xs tnum text-terminal-muted">
               <span>{home.code} {(prediction.homeWin * 100).toFixed(0)}%</span>

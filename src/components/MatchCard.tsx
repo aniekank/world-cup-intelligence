@@ -51,7 +51,7 @@ export function MatchCard({
       )}
 
       {!finished && prediction && (
-        <div className="mt-3 space-y-1">
+        <div className="model-only mt-3 space-y-1">
           <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
           <div className="flex justify-between text-[10px] tnum text-terminal-muted">
             <span>{(prediction.homeWin * 100).toFixed(0)}%</span>

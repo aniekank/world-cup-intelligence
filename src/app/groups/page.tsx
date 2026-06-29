@@ -38,7 +38,7 @@ export default function GroupsPage() {
                     <Th align="center">L</Th>
                     <Th align="center">GD</Th>
                     <Th align="center">Pts</Th>
-                    <Th align="right">Q%</Th>
+                    <Th align="right" className="model-only">Q%</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -61,7 +61,7 @@ export default function GroupsPage() {
                       <Td align="center">{r.lost}</Td>
                       <Td align="center">{r.goalDifference > 0 ? `+${r.goalDifference}` : r.goalDifference}</Td>
                       <Td align="center" className="font-bold text-terminal-bright">{r.points}</Td>
-                      <Td align="right" className="text-accent">{pct(r.qualificationProbability, 0)}</Td>
+                      <Td align="right" className="model-only text-accent">{pct(r.qualificationProbability, 0)}</Td>
                     </tr>
                   ))}
                 </tbody>
