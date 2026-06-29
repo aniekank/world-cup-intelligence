@@ -14,12 +14,23 @@ export default function BracketPage() {
   const stages: MatchStage[] = ['R32', 'R16', 'QF', 'SF', 'FINAL'];
   const byStage = stages.map((s) => ({ stage: s, nodes: nodes.filter((n) => n.stage === s) }));
 
+  // The first column is the REAL draw once it's been seeded from actual fixtures
+  // (each node carries a matchId). Surface where the knockout actually stands.
+  const firstStage = byStage.find((b) => b.nodes.length)?.stage ?? 'R32';
+  const firstRound = byStage.find((b) => b.stage === firstStage)?.nodes ?? [];
+  const drawn = firstRound.some((n) => n.matchId);
+  const played = firstRound.filter((n) => n.decided).length;
+
+  const description = drawn
+    ? `${stageName[firstStage]} shows the real draw and results — ${played} of ${firstRound.length} ties played. Rounds beyond it are projected forward by ELO win expectancy until they're drawn.`
+    : 'Most-likely path built from the current qualifiers under standard seeding, each tie projected by ELO win expectancy. It switches to the real draw and results once the knockout fixtures are set.';
+
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="Knockout Phase"
-        title="Projected Bracket"
-        description="Most-likely Round-of-32 → Final path built from current projected qualifiers and seeded with standard tournament seeding. Each tie is projected with an ELO win expectancy; the higher-probability side advances through the tree."
+        kicker={drawn ? `Knockout Phase · ${stageName[firstStage]} underway` : 'Knockout Phase'}
+        title="Knockout Bracket"
+        description={description}
       />
 
       <SimulationBanner context="bracket" />
@@ -45,7 +56,7 @@ export default function BracketPage() {
 }
 
 function BracketTie({ node }: { node: Node }) {
-  const homeWins = node.homeAdvanceProb >= node.awayAdvanceProb;
+  const homeWins = node.winnerTeamId ? node.winnerTeamId === node.homeTeamId : node.homeAdvanceProb >= node.awayAdvanceProb;
   return (
     <div className="rounded-md border border-terminal-border bg-terminal-elevated text-xs">
       <Side
@@ -53,6 +64,8 @@ function BracketTie({ node }: { node: Node }) {
         flag={node.home?.flag}
         name={node.home?.name}
         prob={node.homeAdvanceProb}
+        score={node.decided ? node.homeScore ?? null : null}
+        pens={node.penaltyWin && homeWins}
         winner={homeWins && !!node.home}
       />
       <div className="h-px bg-terminal-border" />
@@ -61,6 +74,8 @@ function BracketTie({ node }: { node: Node }) {
         flag={node.away?.flag}
         name={node.away?.name}
         prob={node.awayAdvanceProb}
+        score={node.decided ? node.awayScore ?? null : null}
+        pens={node.penaltyWin && !homeWins}
         winner={!homeWins && !!node.away}
       />
     </div>
@@ -72,14 +87,19 @@ function Side({
   flag,
   name,
   prob,
+  score,
+  pens,
   winner,
 }: {
   label: string;
   flag?: string;
   name?: string;
   prob: number;
+  score?: number | null;
+  pens?: boolean;
   winner: boolean;
 }) {
+  const decided = score !== null && score !== undefined;
   return (
     <div className={`flex items-center gap-2 px-2.5 py-1.5 ${winner ? 'bg-accent/[0.08]' : ''}`}>
       <span className="w-7 shrink-0 font-mono text-[10px] text-terminal-muted">{label}</span>
@@ -87,7 +107,14 @@ function Side({
       <span className={`flex-1 truncate ${winner ? 'font-semibold text-terminal-bright' : 'text-terminal-text'}`}>
         {name ?? 'TBD'}
       </span>
-      <span className={`tnum ${winner ? 'text-accent' : 'text-terminal-muted'}`}>{pct(prob, 0)}</span>
+      {decided ? (
+        <span className={`tnum font-semibold ${winner ? 'text-accent' : 'text-terminal-muted'}`}>
+          {score}
+          {pens ? <span className="ml-0.5 text-[9px] font-normal">p</span> : null}
+        </span>
+      ) : (
+        <span className={`tnum ${winner ? 'text-accent' : 'text-terminal-muted'}`}>{pct(prob, 0)}</span>
+      )}
     </div>
   );
 }

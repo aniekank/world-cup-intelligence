@@ -403,6 +403,12 @@ export interface BracketNode {
   // Simulated probability each side advances from this node
   homeAdvanceProb: number;
   awayAdvanceProb: number;
+  // Set when this node is a REAL, played fixture (the drawn knockout round), so
+  // the UI can show the actual scoreline instead of a projected advance %.
+  decided?: boolean;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  penaltyWin?: boolean; // the decided result went to penalties
 }
 
 export interface GoldenBootProjection {

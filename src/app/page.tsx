@@ -21,12 +21,44 @@ export default function HomePage() {
   // the live feed leaves empty — otherwise "Total xG" reads 0 on live (WC-016).
   const totalXG = getPlayerViews().reduce((s, p) => s + p.stats.xG, 0);
 
+  // Tournament phase — so the home page clearly states where the knockout stands.
+  const KO_ORDER = ['R32', 'R16', 'QF', 'SF', 'FINAL'] as const;
+  const KO_LABEL: Record<string, string> = {
+    R32: 'Round of 32', R16: 'Round of 16', QF: 'Quarter-finals', SF: 'Semi-finals', THIRD_PLACE: 'Third-place play-off', FINAL: 'Final',
+  };
+  const groupDone = allMatches.some((m) => m.stage === 'GROUP') && allMatches.filter((m) => m.stage === 'GROUP').every((m) => m.status === 'FINISHED');
+  const koMatches = allMatches.filter((m) => m.stage !== 'GROUP');
+  const inKnockout = groupDone && koMatches.length > 0;
+  const curKoStage =
+    KO_ORDER.find((s) => koMatches.some((m) => m.stage === s && m.status !== 'FINISHED')) ??
+    [...KO_ORDER].reverse().find((s) => koMatches.some((m) => m.stage === s));
+  const roundMatches = curKoStage ? koMatches.filter((m) => m.stage === curKoStage) : [];
+  const roundPlayed = roundMatches.filter((m) => m.status === 'FINISHED').length;
+  const phaseLabel = inKnockout && curKoStage ? KO_LABEL[curKoStage] ?? 'Knockout stage' : 'Group stage';
+
   return (
     <div className="space-y-6">
       {/* Live ticker */}
       <Reveal>
         <LiveTicker />
       </Reveal>
+
+      {/* Knockout-stage status — make the current round unmistakable */}
+      {inKnockout && (
+        <Reveal>
+          <Link
+            href="/bracket"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-accent/30 bg-accent/[0.06] px-4 py-2.5 text-sm transition-colors hover:border-accent/60"
+          >
+            <Trophy className="h-4 w-4 text-accent" />
+            <span className="font-semibold uppercase tracking-wide text-accent">Knockout Stage</span>
+            <span className="text-terminal-muted">·</span>
+            <span className="font-semibold text-terminal-bright">{phaseLabel}</span>
+            <span className="text-terminal-muted">· {roundPlayed} of {roundMatches.length} ties played</span>
+            <span className="ml-auto text-accent">View bracket →</span>
+          </Link>
+        </Reveal>
+      )}
 
       {/* Briefing hero */}
       <Reveal>
@@ -55,7 +87,7 @@ export default function HomePage() {
         <div className="space-y-6 lg:col-span-2">
           <Panel
             title="Live & Upcoming"
-            subtitle="Final round of group fixtures"
+            subtitle={inKnockout ? `${phaseLabel} · knockout stage` : 'Group stage fixtures'}
             action={
               <Link href="/matches" className="flex items-center gap-1 text-xs text-accent hover:underline">
                 All matches <ArrowRight className="h-3 w-3" />

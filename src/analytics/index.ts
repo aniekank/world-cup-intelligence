@@ -76,7 +76,7 @@ export function engine(): EngineSnapshot {
   const powerRankings = buildPowerRankings(teams, matches, forecasts);
 
   // 4. Projected bracket
-  const bracket = buildBracket(standingsByGroup, forecasts, teamMap);
+  const bracket = buildBracket(standingsByGroup, forecasts, teamMap, matches);
 
   // 5. Golden Boot projection
   const groupGamesLeftByTeam = computeGroupGamesLeft(teams, matches);

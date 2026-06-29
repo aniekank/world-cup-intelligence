@@ -19,7 +19,7 @@ export async function register() {
   // A loading flag (only for the live edition) lets the client show a "Loading
   // live data…" indicator during that window instead of silently rendering the
   // placeholder simulation.
-  const g = globalThis as unknown as { __wcLiveLoading?: boolean };
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean };
   const trackLoading = id === 'live-2026';
   if (trackLoading) g.__wcLiveLoading = true;
   void (async () => {
@@ -31,6 +31,7 @@ export async function register() {
       try {
         const snap = await activateTournament(id);
         console.log(`[data] Active tournament: ${snap.competition.name} [src=${snap.meta?.source ?? '?'}] — ${snap.teams.length} teams, ${snap.players.length} players, ${snap.matches.length} matches.`);
+        if (id === 'live-2026') g.__wcLiveBooted = true; // live data is in memory — recovery no longer needed
         break;
       } catch (err) {
         console.error(`[data] Tournament load attempt ${attempt}/3 failed:`, err);
@@ -56,18 +57,23 @@ export async function register() {
       try {
         const store = await import('@/data/store');
         const lt = await import('@/data/loadTournament');
-        if (store.getActiveTournamentId() !== 'live-2026') {
-          // Not on live yet (a boot fetch failed) — keep retrying the full load so
-          // the app can't stay stranded on the simulation placeholder. (WC-041)
+        if (store.getActiveTournamentId() === 'live-2026') {
+          await lt.refreshLiveScores();
+        } else if (!g.__wcLiveBooted) {
+          // Live's boot load hasn't succeeded yet — keep retrying so a failed boot
+          // can't strand us on the simulation placeholder. (WC-041) But once live
+          // HAS loaded at least once, a non-live active tournament means the user
+          // deliberately switched to a past edition (or the sim sandbox) — leave
+          // their choice alone, or the loop yanks them back to 2026 mid-browse. (WC-046)
           g.__wcLiveLoading = true;
           try {
             await lt.activateTournament('live-2026');
+            g.__wcLiveBooted = true;
           } finally {
             g.__wcLiveLoading = false;
           }
-        } else {
-          await lt.refreshLiveScores();
         }
+        // else: the user is browsing a past edition — do nothing this cycle.
         live = store.getLiveMatches().length > 0;
         // Capture closing-line snapshots for Track Record Phase 2 (self-gated:
         // no-op unless Upstash is configured; internally throttled to ~18 min).
