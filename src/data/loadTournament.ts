@@ -113,6 +113,9 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   if (id === 'live-2026' && !snap.teams.some((t) => t.coach?.career)) {
     void enrichLiveCoaches().catch(() => {});
   }
+  if (id === 'live-2026' && !snap.matches.some((m) => (m.teamStats?.[m.homeTeamId]?.xG ?? 0) > 0)) {
+    void enrichLiveXg().catch(() => {});
+  }
   return snap;
 }
 
@@ -266,6 +269,7 @@ export async function rebuildLiveSnapshot(): Promise<void> {
       void enrichLiveTvListings().catch(() => {});
       void enrichLiveH2H().catch(() => {});
       void enrichLiveCoaches().catch(() => {});
+      void enrichLiveXg().catch(() => {}); // re-overlay xG (a fresh fetch drops it)
       console.log('[data] Live snapshot rebuilt — player stats re-aggregated.');
     }
   } catch (e) {
@@ -352,5 +356,32 @@ export async function enrichLiveCoaches(): Promise<void> {
     await attachCoachCareers(getTeams(), key);
   } catch {
     /* coach careers stay absent — non-fatal */
+  }
+}
+
+/**
+ * Overlay REAL team xG from API-Football onto the live matches — SportMonks gates
+ * xG behind a tier we don't have. Unlike the other enrichments this feeds the
+ * analytics engine (standings xGFor/xGAgainst), so when it lands new values we
+ * swap the snapshot to trigger an engine rebuild. Best-effort. (WC-049)
+ */
+export async function enrichLiveXg(): Promise<void> {
+  if (getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.API_FOOTBALL_KEY;
+  if (!key) return;
+  try {
+    const { attachApiFootballXg } = await import('./providers/apiFootball');
+    const n = await attachApiFootballXg(getMatches(), getTeams(), key);
+    if (n > 0) {
+      const snap = getCachedTournament('live-2026');
+      const t = getTournament('live-2026');
+      if (snap && t) {
+        // New snapshot object → indexes + engine rebuild so standings xG updates.
+        setDataset({ ...snap, generatedAt: new Date().toISOString() }, sourceLabel(t), 'live-2026', { rebuildEngine: true });
+      }
+      console.log(`[data] Real team xG attached to ${n} match(es) (API-Football).`);
+    }
+  } catch (e) {
+    console.warn('[data] xG enrichment failed; xG stays absent.', e);
   }
 }

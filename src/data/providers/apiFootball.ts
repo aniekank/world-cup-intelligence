@@ -15,6 +15,7 @@ import type {
   Player,
   PlayerStats,
   Match,
+  MatchTeamStats,
   DatasetSnapshot,
   Position,
   DetailedPosition,
@@ -397,4 +398,82 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
     generatedAt: new Date().toISOString(),
     meta: { source: 'api-football', hasAdvancedMetrics: true, hasShotData: false },
   };
+}
+
+// ── Real team xG overlay ─────────────────────────────────────
+// SportMonks (our primary live feed) gates xG behind a tier we don't have, but
+// API-Football exposes `expected_goals` per fixture. We pull it and overlay it
+// onto the SportMonks matches, joined by team + kickoff date. Player-level xG has
+// no source for the WC (neither provider exposes it), so it stays absent.
+
+interface AFStatRow { team: { id: number; name: string }; statistics: { type: string; value: number | string | null }[]; }
+
+// API-Football spellings that differ from ours (normalized: lowercase, letters
+// only). Verified by comparing both squads' 48 names for WC2026.
+const AF_XG_NAME_ALIASES: Record<string, string> = {
+  southkorea: 'korearepublic',
+  czechia: 'czechrepublic',
+  bosniaherzegovina: 'bosniaandherzegovina',
+  usa: 'unitedstates',
+  ivorycoast: 'cotedivoire',
+};
+const normName = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, '');
+
+/**
+ * Overlay real team xG onto `matches` (mutates `teamStats[id].xG` in place).
+ * Best-effort; skips matches that already carry real xG. Returns #updated.
+ */
+export async function attachApiFootballXg(matches: Match[], teams: Team[], apiKey: string): Promise<number> {
+  const byNorm = new Map<string, Team>();
+  for (const t of teams) byNorm.set(normName(t.name), t);
+  const resolve = (afName: string): Team | undefined => {
+    const n = normName(afName);
+    return byNorm.get(n) ?? byNorm.get(AF_XG_NAME_ALIASES[n] ?? ' ');
+  };
+  const day = (iso: string) => iso.slice(0, 10);
+  const pair = (a: string, b: string) => [a, b].sort().join('|');
+  const byKeyDate = new Map<string, Match>();
+  const byPair = new Map<string, Match[]>();
+  for (const m of matches) {
+    byKeyDate.set(`${pair(m.homeTeamId, m.awayTeamId)}|${day(m.kickoff)}`, m);
+    const arr = byPair.get(pair(m.homeTeamId, m.awayTeamId));
+    if (arr) arr.push(m); else byPair.set(pair(m.homeTeamId, m.awayTeamId), [m]);
+  }
+
+  const fixtures = await af<AFFixture[]>(`/fixtures?league=${WORLD_CUP_LEAGUE}&season=${SEASON}`, apiKey);
+  const jobs: { fx: AFFixture; m: Match; home: Team; away: Team }[] = [];
+  for (const fx of fixtures) {
+    if (!['FT', 'AET', 'PEN'].includes(fx.fixture.status.short)) continue; // finished only
+    const home = resolve(fx.teams.home.name);
+    const away = resolve(fx.teams.away.name);
+    if (!home || !away) continue;
+    let m = byKeyDate.get(`${pair(home.id, away.id)}|${day(fx.fixture.date)}`);
+    if (!m) { const c = byPair.get(pair(home.id, away.id)); if (c && c.length === 1) m = c[0]; } // unique-pair fallback (tz date slip)
+    if (!m) continue;
+    if ((m.teamStats?.[m.homeTeamId]?.xG ?? 0) > 0) continue; // already enriched
+    jobs.push({ fx, m, home, away });
+  }
+
+  let updated = 0;
+  const BATCH = 4; // small concurrency — `af()` already retries on 429
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    await Promise.all(jobs.slice(i, i + BATCH).map(async ({ fx, m, home, away }) => {
+      let stats: AFStatRow[];
+      try { stats = await af<AFStatRow[]>(`/fixtures/statistics?fixture=${fx.fixture.id}`, apiKey); } catch { return; }
+      const xgOf = (afId: number): number | null => {
+        const v = stats.find((s) => s.team.id === afId)?.statistics.find((x) => x.type === 'expected_goals')?.value;
+        const n = typeof v === 'string' ? parseFloat(v) : v;
+        return typeof n === 'number' && Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+      };
+      const hx = xgOf(fx.teams.home.id);
+      const ax = xgOf(fx.teams.away.id);
+      if (hx == null && ax == null) return;
+      const ts = (m.teamStats ?? (m.teamStats = {})) as Record<string, MatchTeamStats>;
+      const put = (id: string, xg: number | null) => { if (xg == null) return; const cur = ts[id] ?? ({ teamId: id } as MatchTeamStats); cur.xG = xg; ts[id] = cur; };
+      put(home.id, hx); // xG belongs to the team, not the home/away slot
+      put(away.id, ax);
+      updated++;
+    }));
+  }
+  return updated;
 }

@@ -17,9 +17,13 @@ export default function HomePage() {
   const allMatches = getMatches();
   const played = allMatches.filter((m) => m.status === 'FINISHED');
   const totalGoals = played.reduce((s, m) => s + m.homeScore + m.awayScore, 0);
-  // Sum player xG (real on every source) rather than per-match team stats, which
-  // the live feed leaves empty — otherwise "Total xG" reads 0 on live (WC-016).
-  const totalXG = getPlayerViews().reduce((s, p) => s + p.stats.xG, 0);
+  // Sum REAL team xG from finished matches (API-Football overlay; WC-049). The
+  // live feed has no player-level xG, so summing that read 0 — this reverses the
+  // WC-016 workaround now that real team xG is available.
+  const totalXG = allMatches.reduce(
+    (s, m) => s + (m.status === 'FINISHED' ? (m.teamStats[m.homeTeamId]?.xG ?? 0) + (m.teamStats[m.awayTeamId]?.xG ?? 0) : 0),
+    0,
+  );
 
   // Tournament phase — so the home page clearly states where the knockout stands.
   const KO_ORDER = ['R32', 'R16', 'QF', 'SF', 'FINAL'] as const;
