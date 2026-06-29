@@ -85,6 +85,19 @@ export function civilizationsView() {
     if (ca && m.homeScore === 0) csByConf.set(ca, (csByConf.get(ca) ?? 0) + 1);
   }
 
+  // Real, SETTLED qualification: a team is "through" once it actually appears in a
+  // knockout (R32+) fixture. This counts best-third qualifiers too — the group
+  // `status` only flags top-2 finishers, so it was undercounting (e.g. it missed
+  // most of the 9-of-10 CAF teams that reached the Round of 32).
+  const qualifiedIds = new Set<string>();
+  for (const m of getMatches()) {
+    if (m.stage !== 'GROUP') {
+      if (m.homeTeamId) qualifiedIds.add(m.homeTeamId);
+      if (m.awayTeamId) qualifiedIds.add(m.awayTeamId);
+    }
+  }
+  const settled = qualifiedIds.size > 0;
+
   // ── Per-region aggregate ──
   const regions: RegionStat[] = [];
   for (const conf of CONF_ORDER) {
@@ -101,8 +114,12 @@ export function civilizationsView() {
       if (s) {
         played += s.played; won += s.won; drawn += s.drawn; lost += s.lost;
         gf += s.goalsFor; ga += s.goalsAgainst; points += s.points;
-        if (s.status === 'Q') qualified++; if (s.status === 'E') eliminated++;
       }
+      // Real qualification once the knockout draw exists; provisional group status before it.
+      if (settled) {
+        if (qualifiedIds.has(t.id)) qualified++; else eliminated++;
+      } else if (s?.status === 'Q') qualified++;
+      else if (s?.status === 'E') eliminated++;
       titleProb += f?.winTitle ?? 0;
       knockoutProb += f?.reachR16 ?? 0;
       teamRows.push({ id: t.id, name: t.name, code: t.code, flag: t.flag, winTitle: f?.winTitle ?? 0, points: s?.points ?? 0, played: s?.played ?? 0, status: s?.status ?? null });
@@ -181,7 +198,7 @@ export function civilizationsView() {
   const totalTitle = regions.reduce((s, r) => s + r.titleProb, 0) || 1;
   const presentConfs = CONF_ORDER.filter((c) => regions.some((r) => r.conf === c));
 
-  return { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta: CONF_META };
+  return { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, settled, meta: CONF_META };
 }
 
 export type CivilizationsData = ReturnType<typeof civilizationsView>;

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { civilizationsView, CONF_META, GOAL_INTERVALS } from '@/server/civilizations';
 import type { Confederation } from '@/domain/types';
 import { PageHeader, Panel } from '@/components/ui';
+import { RUNS } from '@/analytics/simulate';
 
 export const metadata: Metadata = { title: 'Clash of the Civilizations' };
 
@@ -10,7 +11,7 @@ const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 const pct0 = (v: number) => `${Math.round(v * 100)}%`;
 
 export default function CivilizationsPage() {
-  const { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, meta } = civilizationsView();
+  const { regions, goalTiming, matrix, crossRecord, topClashes, totalTitle, presentConfs, settled, meta } = civilizationsView();
   const leader = regions[0];
 
   // Goals-graphic derivations
@@ -33,7 +34,7 @@ export default function CivilizationsPage() {
       />
 
       {/* Which continent is winning the World Cup? */}
-      <Panel title="Which continent is winning the World Cup?" subtitle="Combined championship probability by region · Monte Carlo, n=3,000">
+      <Panel title="Which continent is winning the World Cup?" subtitle={`Combined championship probability by region · Monte Carlo, n=${RUNS.toLocaleString()}`}>
         <div className="flex h-9 w-full overflow-hidden rounded-lg">
           {regions.map((r) => {
             const w = (r.titleProb / totalTitle) * 100;
@@ -146,9 +147,14 @@ export default function CivilizationsPage() {
             </div>
 
             <div className="flex items-center gap-3 px-4 py-2.5 text-[11px]">
-              {r.qualified > 0 && <span className="flex items-center gap-1 text-accent"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{r.qualified} through</span>}
+              {r.qualified > 0 && (
+                <span className="flex items-center gap-1 text-accent">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  {settled ? `${r.qualified} of ${r.teamCount} through to R32` : `${r.qualified} through`}
+                </span>
+              )}
               {r.eliminated > 0 && <span className="flex items-center gap-1 text-accent-red"><span className="h-1.5 w-1.5 rounded-full bg-accent-red" />{r.eliminated} out</span>}
-              <span className="ml-auto text-terminal-muted">knockout reach {pct0(r.knockoutProb / r.teamCount)}</span>
+              <span className="model-only ml-auto text-terminal-muted">knockout reach {pct0(r.knockoutProb / r.teamCount)}</span>
             </div>
 
             {(r.topScorer || r.cleanSheets > 0 || r.yellow > 0) && (
