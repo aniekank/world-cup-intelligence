@@ -7,7 +7,7 @@ import { pct } from '@/lib/format';
 export const metadata: Metadata = { title: 'Standings' };
 
 export default function StandingsPage() {
-  const { groups, bestThirds } = standingsView();
+  const { groups, bestThirds, settled } = standingsView();
   // Team-level xG comes from per-match team stats, which the live feed leaves
   // empty — hide the xG line entirely rather than show "0.0 / 0.0" (WC-016).
   const hasXg = groups.some((g) => g.rows.some((r) => r.xGFor > 0 || r.xGAgainst > 0));
@@ -17,7 +17,7 @@ export default function StandingsPage() {
       <PageHeader
         kicker="Group Stage"
         title="Standings"
-        description="Live group tables — real points, goal difference, and xG context, with FIFA tiebreakers. Top 2 of each group plus the 8 best third-placed teams advance to the Round of 32. Flip Predictions (top bar) to overlay the Monte Carlo qualification odds."
+        description="Group tables — real points, goal difference, xG context, and FIFA tiebreakers. Top 2 of each group plus the 8 best third-placed teams reach the Round of 32. The right column shows who actually qualified once the group stage ends; while it's still live, flip Predictions (top bar) for the Monte Carlo qualification odds."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -31,7 +31,7 @@ export default function StandingsPage() {
                   <Th align="center">Pl</Th>
                   <Th align="center">GD</Th>
                   <Th align="center">Pts</Th>
-                  <Th align="right" className="model-only">Q%</Th>
+                  {settled ? <Th align="right">Status</Th> : <Th align="right" className="model-only">Q%</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -60,11 +60,17 @@ export default function StandingsPage() {
                     <Td align="center">{r.played}</Td>
                     <Td align="center">{r.goalDifference > 0 ? `+${r.goalDifference}` : r.goalDifference}</Td>
                     <Td align="center" className="font-bold text-terminal-bright">{r.points}</Td>
-                    <Td align="right" className="model-only">
-                      <span className={r.qualificationProbability > 0.6 ? 'text-accent' : 'text-terminal-text'}>
-                        {pct(r.qualificationProbability, 0)}
-                      </span>
-                    </Td>
+                    {settled ? (
+                      <Td align="right">
+                        {r.qualified ? <Badge tone="accent">Through</Badge> : <Badge tone="red">Out</Badge>}
+                      </Td>
+                    ) : (
+                      <Td align="right" className="model-only">
+                        <span className={r.qualificationProbability > 0.6 ? 'text-accent' : 'text-terminal-text'}>
+                          {pct(r.qualificationProbability, 0)}
+                        </span>
+                      </Td>
+                    )}
                   </tr>
                 ))}
               </tbody>

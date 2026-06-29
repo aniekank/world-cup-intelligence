@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     /* ignore */
   }
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className="min-h-screen">
         {/* Apply the persisted real-vs-model preference before first paint so
             prediction surfaces (.model-only) don't flash. Default = real only. */}

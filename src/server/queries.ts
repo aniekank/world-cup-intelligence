@@ -201,11 +201,28 @@ export function liveMatches() {
 export function standingsView() {
   const eng = engine();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
+  const matches = getMatches();
+  // Real, SETTLED qualification: once the group stage is over and the R32 draw
+  // exists, a team is through iff it actually appears in an R32 fixture. Before
+  // that, qualification is still a (model) probability. `settled` lets the UI
+  // swap the predicted "Q%" for a real "Through / Out" status.
+  const groupGames = matches.filter((m) => m.stage === 'GROUP');
+  const groupStageComplete = groupGames.length > 0 && groupGames.every((m) => m.status === 'FINISHED');
+  const qualifiedIds = new Set<string>();
+  for (const m of matches) {
+    if (m.stage !== 'GROUP') {
+      if (m.homeTeamId) qualifiedIds.add(m.homeTeamId);
+      if (m.awayTeamId) qualifiedIds.add(m.awayTeamId);
+    }
+  }
+  const settled = groupStageComplete && qualifiedIds.size > 0;
+
   return {
+    settled,
     groups: getGroups().map((g) => ({
       group: g,
       rows: (eng.standingsByGroup.find((s) => s[0]?.groupId === g.id) ?? [])
-        .map((r) => ({ ...r, team: teamMap.get(r.teamId) }))
+        .map((r) => ({ ...r, team: teamMap.get(r.teamId), qualified: qualifiedIds.has(r.teamId) }))
         .filter((r): r is typeof r & { team: Team } => Boolean(r.team)),
     })),
     bestThirds: eng.bestThirds

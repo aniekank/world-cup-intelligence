@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { standingsView, matchesView } from '@/server/queries';
 import { getTeam } from '@/data/store';
-import { PageHeader, Panel, Table, Th, Td } from '@/components/ui';
+import { PageHeader, Panel, Table, Th, Td, Badge } from '@/components/ui';
 import { SimulationBanner } from '@/components/SimulationBanner';
 import { MiniMatchRow } from '@/components/MatchCard';
 import { pct } from '@/lib/format';
@@ -10,7 +10,7 @@ import { pct } from '@/lib/format';
 export const metadata: Metadata = { title: 'Groups' };
 
 export default function GroupsPage() {
-  const { groups } = standingsView();
+  const { groups, settled } = standingsView();
 
   return (
     <div className="space-y-6">
@@ -38,7 +38,7 @@ export default function GroupsPage() {
                     <Th align="center">L</Th>
                     <Th align="center">GD</Th>
                     <Th align="center">Pts</Th>
-                    <Th align="right" className="model-only">Q%</Th>
+                    {settled ? <Th align="right">Status</Th> : <Th align="right" className="model-only">Q%</Th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -61,7 +61,11 @@ export default function GroupsPage() {
                       <Td align="center">{r.lost}</Td>
                       <Td align="center">{r.goalDifference > 0 ? `+${r.goalDifference}` : r.goalDifference}</Td>
                       <Td align="center" className="font-bold text-terminal-bright">{r.points}</Td>
-                      <Td align="right" className="model-only text-accent">{pct(r.qualificationProbability, 0)}</Td>
+                      {settled ? (
+                        <Td align="right">{r.qualified ? <Badge tone="accent">Through</Badge> : <Badge tone="red">Out</Badge>}</Td>
+                      ) : (
+                        <Td align="right" className="model-only text-accent">{pct(r.qualificationProbability, 0)}</Td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
