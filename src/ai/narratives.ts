@@ -99,25 +99,39 @@ export function generateInsights(): Insight[] {
   const eng = engine();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
 
-  // 1. Upset detection — finished matches where a much weaker side won
+  const finishedAll = getMatches().filter((x) => x.status === 'FINISHED');
+  // This is a *daily* briefing, so match-based stories (upsets etc.) should reflect
+  // the current state of the tournament, not replay an old group-stage result for
+  // days. Only consider games within ~3 days of the most recent one — otherwise a
+  // big early upset keeps headlining long after the teams have moved on (or out).
+  const latestTs = Math.max(0, ...finishedAll.map((m) => Date.parse(m.kickoff)));
+  const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+  const isRecent = (m: { kickoff: string }) => latestTs - Date.parse(m.kickoff) <= RECENT_MS;
+
+  // 1. Upset detection — recent finished matches a much weaker side won (incl. on penalties)
   let upsetIdx = 0;
-  for (const m of getMatches().filter((x) => x.status === 'FINISHED')) {
+  for (const m of finishedAll.filter(isRecent)) {
     const home = teamMap.get(m.homeTeamId);
     const away = teamMap.get(m.awayTeamId);
     if (!home || !away) continue; // unresolved team — skip
     const eloGap = home.elo - away.elo;
-    const homeWon = m.homeScore > m.awayScore;
-    const awayWon = m.awayScore > m.homeScore;
+    // The "winner" is who actually advanced — penalties decide a level knockout tie.
+    const homeWon = m.homeScore > m.awayScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.home > m.penalties.away);
+    const awayWon = m.awayScore > m.homeScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.away > m.penalties.home);
     const underdogWon = (awayWon && eloGap > 120) || (homeWon && eloGap < -120);
     if (underdogWon) {
       const winner = homeWon ? home : away;
       const loser = homeWon ? away : home;
+      const onPens = m.homeScore === m.awayScore && !!m.penalties;
+      const result = onPens
+        ? `knocked ${loser.name} out on penalties (${m.homeScore}-${m.awayScore}, ${m.penalties!.home}-${m.penalties!.away} pens)`
+        : `beat ${loser.name} ${m.homeScore}-${m.awayScore}`;
       insights.push({
         id: `upset-${m.id}`,
         kind: 'upset',
         severity: Math.abs(eloGap) > 220 ? 'high' : 'medium',
         title: pick(upsetTitles(winner.name, loser.name), upsetIdx),
-        body: `${winner.name} beat ${loser.name} ${m.homeScore}-${m.awayScore} despite a ${Math.abs(Math.round(eloGap))}-point ELO deficit — ${pick(upsetShock, upsetIdx)}. xG told a ${
+        body: `${winner.name} ${result} despite a ${Math.abs(Math.round(eloGap))}-point ELO deficit — ${pick(upsetShock, upsetIdx)}. xG told a ${
           (m.teamStats[winner.id]?.xG ?? 0) > (m.teamStats[loser.id]?.xG ?? 0) ? 'deserved' : 'smash-and-grab'
         } story.`,
         entityType: 'match',
@@ -274,7 +288,12 @@ export function generateInsights(): Insight[] {
   }
 
   const order = { high: 0, medium: 1, low: 2 };
-  return insights.sort((a, b) => order[a.severity] - order[b.severity]);
+  // Within a severity tier, lead with the most recent: a match-based story is
+  // ranked by its kickoff, so today's results beat last week's; team/player
+  // insights reflect the current standings, so they sort as "now".
+  const kickoffById = new Map(getMatches().map((m) => [m.id, Date.parse(m.kickoff)]));
+  const recency = (i: Insight) => (i.entityType === 'match' && i.entityId ? kickoffById.get(i.entityId) ?? 0 : Date.now());
+  return insights.sort((a, b) => order[a.severity] - order[b.severity] || recency(b) - recency(a));
 }
 
 /** The longest active "scored in consecutive matches" run at the tournament. */
