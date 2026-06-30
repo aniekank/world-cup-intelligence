@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { bracketView } from '@/server/queries';
 import { PageHeader, Panel } from '@/components/ui';
 import { SimulationBanner } from '@/components/SimulationBanner';
@@ -57,8 +58,8 @@ export default function BracketPage() {
 
 function BracketTie({ node }: { node: Node }) {
   const homeWins = node.winnerTeamId ? node.winnerTeamId === node.homeTeamId : node.homeAdvanceProb >= node.awayAdvanceProb;
-  return (
-    <div className="rounded-md border border-terminal-border bg-terminal-elevated text-xs">
+  const inner = (
+    <>
       <Side
         label={node.homeLabel}
         flag={node.home?.flag}
@@ -78,7 +79,17 @@ function BracketTie({ node }: { node: Node }) {
         pens={node.penaltyWin && !homeWins}
         winner={!homeWins && !!node.away}
       />
-    </div>
+    </>
+  );
+  const base = 'block rounded-md border border-terminal-border bg-terminal-elevated text-xs';
+  // Real fixtures (R32, and any drawn round) carry a matchId → link to the match.
+  // Projected ties (matchId null) stay non-clickable.
+  return node.matchId ? (
+    <Link href={`/matches/${node.matchId}`} className={`${base} transition-colors hover:border-accent/60`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={base}>{inner}</div>
   );
 }
 
