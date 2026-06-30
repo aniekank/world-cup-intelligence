@@ -36,7 +36,7 @@ export async function clubConnections() {
 
   for (const p of getPlayerViews()) {
     let club: ClubAffiliation | undefined;
-    for (const key of clubMatchKeys(p.name, p.birthDate)) {
+    for (const key of clubMatchKeys(p.fullName ?? p.name, p.birthDate)) {
       club = keyMap.get(key);
       if (club) break;
     }

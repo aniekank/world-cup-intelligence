@@ -167,7 +167,8 @@ export interface Team {
 
 export interface Player {
   id: ID;
-  name: string;
+  name: string; // display name — the form the player is commonly known by (e.g. "Guillermo Ochoa")
+  fullName?: string; // full registered name when it differs (used for search + club crosswalk)
   teamId: ID;
   shirtNumber: number;
   position: Position;

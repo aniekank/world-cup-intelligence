@@ -81,7 +81,7 @@ interface AFFixture {
   score: { halftime: { home: number | null; away: number | null }; penalty: { home: number | null; away: number | null } };
 }
 interface AFPlayerRow {
-  player: { id: number; name: string; firstname: string | null; lastname: string | null; age: number | null; height: string | null; photo: string };
+  player: { id: number; name: string; firstname: string | null; lastname: string | null; age: number | null; birth?: { date?: string | null }; height: string | null; photo: string };
   statistics: {
     team: { id: number };
     games: { appearences: number | null; minutes: number | null; position: string | null; number: number | null };
@@ -98,6 +98,33 @@ interface AFPlayerRow {
 
 function codeFor(name: string, code: string | null): string {
   return (code ?? name.slice(0, 3)).toUpperCase();
+}
+
+/**
+ * Build the name a player is COMMONLY known by, from API-Football's three name
+ * fields. The registered firstname+lastname is often the full legal name (every
+ * given name + both surnames) — "Francisco Guillermo Ochoa Magaña" — which reads
+ * badly. But `player.name` encodes the known name as "Initial. Surname"
+ * ("G. Ochoa"), and the initial tells us WHICH given name he goes by (Guillermo,
+ * not Francisco). So: take the surname from `player.name`, expand the initial
+ * against the firstname tokens, and you get "Guillermo Ochoa". When `player.name`
+ * has no initial pattern it's already a clean common name ("Mohanad Ali",
+ * "Rodrygo") — use it as-is. Falls back to first-given + surname. (WC-054)
+ */
+const normTok = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function displayName(common: string | null, firstname: string | null, lastname: string | null): string {
+  const c = (common ?? '').trim();
+  const givens = (firstname ?? '').trim().split(/\s+/).filter(Boolean);
+  const m = c.match(/^([A-Za-zÀ-ÿ])\.\s*(.+)$/); // "G. Ochoa" → initial G, surname "Ochoa"
+  if (m) {
+    const initial = normTok(m[1]!)[0];
+    const surname = m[2]!.trim();
+    const given = givens.find((t) => normTok(t)[0] === initial) ?? givens[0] ?? '';
+    return (given ? `${given} ` : '') + surname;
+  }
+  if (c) return c; // already a clean common name (no leading initial)
+  const lastTok = (lastname ?? '').trim().split(/\s+/).filter(Boolean);
+  return [givens[0], lastTok[lastTok.length - 1]].filter(Boolean).join(' ') || 'Unknown';
 }
 
 function mapStatus(short: string): Match['status'] {
@@ -352,17 +379,25 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
         const tid = key(stat.team.id);
         const pid = `${tid}-${row.player.id}`;
         const fullName = [row.player.firstname, row.player.lastname].filter(Boolean).join(' ').trim();
+        const display = displayName(row.player.name, row.player.firstname, row.player.lastname); // "Guillermo Ochoa", not the full legal name (WC-054)
         let p = playerById.get(pid);
         if (!p) {
-          p = newPlayer(pid, fullName || row.player.name, tid, stat.games.number ?? 0, mapPosition(stat.games.position), row.player.age ?? 0, parseInt(row.player.height ?? '182') || 182);
+          p = newPlayer(pid, display || fullName || row.player.name, tid, stat.games.number ?? 0, mapPosition(stat.games.position), row.player.age ?? 0, parseInt(row.player.height ?? '182') || 182);
           players.push(p);
           playerById.set(pid, p);
           playerStats[pid] = emptyStats(pid);
-        } else if (fullName) {
-          p.name = fullName; // upgrade abbreviated squad name → full name
+        } else if (display) {
+          p.name = display; // upgrade abbreviated squad name → clean common name
         }
+        // Keep the full registered name for search + the club crosswalk (which
+        // matches on every surname token), while `name` stays the short form.
+        if (fullName && normTok(fullName) !== normTok(p.name)) p.fullName = fullName;
         // Headshot (free on API-Football; squad feed doesn't carry it, this page does).
         if (row.player.photo) p.photo = row.player.photo;
+        // Birthdate — the cross-provider key for the club-affiliation crosswalk
+        // (clubMatchKeys needs surname+dob). The squad feed omits it; this page has it.
+        // Without it Club Connections / Discoveries silently match nobody. (WC-053)
+        if (row.player.birth?.date) p.birthDate = row.player.birth.date;
         const ps = playerStats[pid] ?? emptyStats(pid);
         ps.minutes = stat.games.minutes ?? 0;
         ps.appearances = stat.games.appearences ?? 0;

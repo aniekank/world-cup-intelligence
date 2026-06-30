@@ -37,7 +37,7 @@ interface FrozenMatch {
   formations: { home: string; away: string } | null;
   referee: string | null;
   weather: { tempC: number; description: string } | null;
-  lineups: Record<string, { id: string; name: string; pos: Position }[]> | null;
+  lineups: Record<string, { id: string; name: string; pos: Position; shirt?: number }[]> | null;
 }
 interface Frozen { capturedAt: string; teams: FrozenTeam[]; players: FrozenPlayer[]; matches: FrozenMatch[] }
 
@@ -81,6 +81,15 @@ export async function applyFrozenOverlay(snap: DatasetSnapshot): Promise<{ feet:
   // across providers, so we always resolve through the canonical name).
   const frozenCodeToCanon = new Map(frozen.teams.map((t) => [t.id, canon(t.name)]));
   const liveCodeToCanon = new Map(snap.teams.map((t) => [t.id, canon(t.name)]));
+  // `${canonTeam}|${shirt}` → live player id, for re-keying frozen lineups (which
+  // carry shirts) onto live API-Football player ids.
+  const liveByTeamShirt = new Map<string, string>();
+  for (const p of snap.players) {
+    if (p.shirtNumber > 0) {
+      const k = `${liveCodeToCanon.get(p.teamId) ?? canon(p.teamId)}|${p.shirtNumber}`;
+      if (!liveByTeamShirt.has(k)) liveByTeamShirt.set(k, p.id);
+    }
+  }
 
   // ── Players: foot + the AF-absent advanced metrics ─────────────────────────
   const byShirt = new Map<string, FrozenPlayer>();
@@ -104,6 +113,9 @@ export async function applyFrozenOverlay(snap: DatasetSnapshot): Promise<{ feet:
     if (!fp) continue;
     // Foot: API-Football defaults everyone to 'right'; the frozen value is real.
     if (fp.foot && p.foot !== fp.foot) { p.foot = fp.foot; feet++; }
+    // Birthdate backfill for the ~1% of players API-Football's stats feed omits
+    // (the club crosswalk needs it; the adapter covers the rest). (WC-053)
+    if (fp.birthDate && !p.birthDate) p.birthDate = fp.birthDate;
     const ls = snap.playerStats[p.id];
     if (ls && fp.stats) {
       for (const k of FILL_IF_ZERO) if (!ls[k] && fp.stats[k]) (ls[k] as number) = fp.stats[k] as number;
@@ -163,12 +175,19 @@ export async function applyFrozenOverlay(snap: DatasetSnapshot): Promise<{ feet:
     if (fm.referee && !m.referee) m.referee = fm.referee;
     if (fm.weather && !m.weather) m.weather = fm.weather;
     if (fm.lineups && !m.lineups) {
-      // Re-key lineups (stored under frozen team codes) onto live team ids.
+      // Re-key lineups onto live team ids AND re-key each player's id to the live
+      // API-Football id by team+shirt — frozen lineup ids are SportMonks ids that
+      // would 404 on the team page. Shirt is an exact within-team key. (WC-052)
       const remapped: Record<string, { id: string; name: string; pos: Position }[]> = {};
       for (const [code, xi] of Object.entries(fm.lineups)) {
         const tc = frozenCodeToCanon.get(code) ?? canon(code);
         const liveId = hc === tc ? m.homeTeamId : ac === tc ? m.awayTeamId : null;
-        if (liveId) remapped[liveId] = xi;
+        if (!liveId) continue;
+        const teamCanon = liveId === m.homeTeamId ? hc : ac;
+        remapped[liveId] = xi.map((pl) => {
+          const live = pl.shirt ? liveByTeamShirt.get(`${teamCanon}|${pl.shirt}`) : undefined;
+          return live ? { id: live, name: pl.name, pos: pl.pos } : { id: pl.id, name: pl.name, pos: pl.pos };
+        });
       }
       if (Object.keys(remapped).length) m.lineups = remapped;
     }

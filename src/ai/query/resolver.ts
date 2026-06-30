@@ -163,7 +163,9 @@ export function rankPlayers(query: string, limit = 8): PlayerView[] {
   if (!normalize(query)) return [];
   const scored: { p: PlayerView; s: number }[] = [];
   for (const p of getPlayerViews()) {
-    const s = scoreName(query, p.name);
+    // Score the display name AND the full registered name, so a search for a
+    // middle/legal name still resolves even though we now show the short form.
+    const s = Math.max(scoreName(query, p.name), p.fullName ? scoreName(query, p.fullName) : 0);
     if (s >= THRESHOLD) scored.push({ p, s });
   }
   scored.sort(

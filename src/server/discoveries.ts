@@ -53,7 +53,7 @@ export async function discoveries() {
   const candidates: (UnderratedPlayer & { score: number; conf: string })[] = [];
   for (const p of getPlayerViews()) {
     let club: ClubAffiliation | undefined;
-    for (const key of clubMatchKeys(p.name, p.birthDate)) {
+    for (const key of clubMatchKeys(p.fullName ?? p.name, p.birthDate)) {
       club = keyMap.get(key);
       if (club) break;
     }
@@ -96,7 +96,7 @@ export async function discoveries() {
       const keyPlayers = squad
         .map((p) => {
           let club;
-          for (const k of clubMatchKeys(p.name, p.birthDate)) { club = keyMap.get(k); if (club) break; }
+          for (const k of clubMatchKeys(p.fullName ?? p.name, p.birthDate)) { club = keyMap.get(k); if (club) break; }
           return club ? { id: p.id, name: p.name, club: club.club, league: club.leagueShort } : null;
         })
         .filter((x): x is { id: string; name: string; club: string; league: string } => Boolean(x))
