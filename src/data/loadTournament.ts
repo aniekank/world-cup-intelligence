@@ -353,11 +353,13 @@ export async function enrichLiveTvListings(): Promise<void> {
 
 export async function enrichLiveH2H(): Promise<void> {
   if (getActiveTournamentId() !== 'live-2026') return;
-  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
+  const key = process.env.API_FOOTBALL_KEY;
   if (!key) return;
   try {
-    const { attachHeadToHead } = await import('./providers/sportmonks');
-    await attachHeadToHead(getMatches(), key);
+    // API-Football h2h (was SportMonks) — survives the SportMonks cancellation.
+    const { attachApiFootballH2H } = await import('./providers/apiFootball');
+    const n = await attachApiFootballH2H(getMatches(), getTeams(), key);
+    if (n > 0) console.log(`[data] Head-to-head attached to ${n} fixture(s) (API-Football).`);
   } catch {
     /* h2h stays absent — non-fatal */
   }

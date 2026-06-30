@@ -16,6 +16,7 @@ import type {
   PlayerStats,
   Match,
   MatchTeamStats,
+  H2HMeeting,
   DatasetSnapshot,
   Position,
   DetailedPosition,
@@ -618,6 +619,49 @@ export async function attachApiFootballMatchStats(matches: Match[], teams: Team[
       if (fmHome?.formation && fmAway?.formation) m.formations = { home: fmHome.formation, away: fmAway.formation };
       if (fx.fixture.referee) m.referee = fx.fixture.referee.trim();
       updated++;
+    }));
+  }
+  return updated;
+}
+
+// ── Head-to-head (replaces the SportMonks h2h after the migration) ───────────
+// API-Football's /fixtures/headtohead keys on TEAM ids, so we first map our team
+// codes → AF ids (one call), then pull recent meetings per upcoming fixture and
+// shape them into H2HMeeting (the same form the match page already renders).
+
+/**
+ * Attach recent head-to-head meetings to upcoming `matches` (mutates `m.h2h`),
+ * from API-Football. Best-effort; capped to the soonest fixtures to bound calls.
+ * Returns #fixtures updated.
+ */
+export async function attachApiFootballH2H(matches: Match[], teams: Team[], apiKey: string): Promise<number> {
+  const afTeams = await af<AFTeam[]>(`/teams?league=${WORLD_CUP_LEAGUE}&season=${SEASON}`, apiKey).catch(() => [] as AFTeam[]);
+  if (!afTeams.length) return 0;
+  const codeToAfId = new Map<string, number>();
+  for (const t of afTeams) codeToAfId.set(codeFor(t.team.name, t.team.code).toLowerCase(), t.team.id);
+
+  const upcoming = matches
+    .filter((m) => m.status === 'SCHEDULED' && !m.h2h?.length && codeToAfId.has(m.homeTeamId) && codeToAfId.has(m.awayTeamId))
+    .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+    .slice(0, 32);
+
+  let updated = 0;
+  const BATCH = 4; // af() retries 429s
+  for (let i = 0; i < upcoming.length; i += BATCH) {
+    await Promise.all(upcoming.slice(i, i + BATCH).map(async (m) => {
+      const hId = codeToAfId.get(m.homeTeamId)!;
+      const aId = codeToAfId.get(m.awayTeamId)!;
+      let fixtures: AFFixture[];
+      try { fixtures = await af<AFFixture[]>(`/fixtures/headtohead?h2h=${hId}-${aId}&last=10`, apiKey); } catch { return; }
+      const meetings: H2HMeeting[] = [];
+      for (const fx of fixtures ?? []) {
+        if (!['FT', 'AET', 'PEN'].includes(fx.fixture.status.short)) continue; // played only
+        const homeCode = fx.teams.home.id === hId ? m.homeTeamId : fx.teams.home.id === aId ? m.awayTeamId : null;
+        const awayCode = fx.teams.away.id === hId ? m.homeTeamId : fx.teams.away.id === aId ? m.awayTeamId : null;
+        if (!homeCode || !awayCode) continue; // a fixture not between these two — skip
+        meetings.push({ date: (fx.fixture.date ?? '').slice(0, 10), homeCode, awayCode, homeScore: fx.goals.home ?? 0, awayScore: fx.goals.away ?? 0 });
+      }
+      if (meetings.length) { m.h2h = meetings.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5); updated++; }
     }));
   }
   return updated;
