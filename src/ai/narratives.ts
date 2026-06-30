@@ -436,7 +436,19 @@ export function generateMatchSummary(matchId: string): string {
     return `Live — ${clock}: ${state} at ${m.venue}.${scorers ? ' Scorers: ' + scorers + '.' : ''}`;
   }
 
-  const result = m.homeScore > m.awayScore ? `${home.name} won` : m.homeScore < m.awayScore ? `${away.name} won` : 'It finished level';
+  // A level knockout tie is decided on penalties — name the shootout winner
+  // instead of calling it "level". (Appended score below completes the sentence.)
+  const penWinner = m.penalties ? (m.penalties.home > m.penalties.away ? home : away) : null;
+  const penLine = m.penalties
+    ? `${Math.max(m.penalties.home, m.penalties.away)}–${Math.min(m.penalties.home, m.penalties.away)}`
+    : '';
+  const result = m.homeScore > m.awayScore
+    ? `${home.name} won`
+    : m.homeScore < m.awayScore
+      ? `${away.name} won`
+      : penWinner
+        ? `${penWinner.name} won on penalties (${penLine}) after a`
+        : 'It finished level';
   const xgLine =
     hStat && aStat && (hStat.xG > 0 || aStat.xG > 0)
       ? ` Underlying numbers: ${home.code} ${fmt(hStat.xG)} xG, ${away.code} ${fmt(aStat.xG)} xG${

@@ -171,15 +171,19 @@ export function civilizationsView() {
     const home = matrix[ca]![cb]!, away = matrix[cb]![ca]!;
     home.played++; away.played++;
     home.gf += m.homeScore; home.ga += m.awayScore; away.gf += m.awayScore; away.ga += m.homeScore;
-    if (m.homeScore > m.awayScore) { home.w++; away.l++; }
-    else if (m.homeScore < m.awayScore) { home.l++; away.w++; }
+    // A level knockout tie is decided on penalties — credit the shootout winner.
+    const homeWon = m.homeScore > m.awayScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.home > m.penalties.away);
+    const awayWon = m.awayScore > m.homeScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.away > m.penalties.home);
+    if (homeWon) { home.w++; away.l++; }
+    else if (awayWon) { home.l++; away.w++; }
     else { home.d++; away.d++; }
     const margin = Math.abs(m.homeScore - m.awayScore);
-    if (margin >= 1) {
-      const winnerConf = m.homeScore > m.awayScore ? ca : cb;
-      const loserConf = m.homeScore > m.awayScore ? cb : ca;
+    if (margin >= 1 || homeWon || awayWon) {
+      const winnerConf = homeWon ? ca : cb;
+      const loserConf = homeWon ? cb : ca;
       const tH = teams.find((t) => t.id === m.homeTeamId), tA = teams.find((t) => t.id === m.awayTeamId);
-      if (tH && tA) clashes.push({ label: `${tH.name} ${m.homeScore}–${m.awayScore} ${tA.name}`, winnerConf, loserConf, score: `${m.homeScore}-${m.awayScore}`, margin });
+      const penTag = m.penalties && margin === 0 ? ` (${Math.max(m.penalties.home, m.penalties.away)}–${Math.min(m.penalties.home, m.penalties.away)} pens)` : '';
+      if (tH && tA) clashes.push({ label: `${tH.name} ${m.homeScore}–${m.awayScore}${penTag} ${tA.name}`, winnerConf, loserConf, score: `${m.homeScore}-${m.awayScore}`, margin });
     }
   }
 
