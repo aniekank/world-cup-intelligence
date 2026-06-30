@@ -118,82 +118,66 @@ export function buildBracket(
     return null;
   };
 
-  // If the real first knockout round is fully drawn, build that column from the
-  // ACTUAL fixtures (real matchups + results) rather than re-seeding a guess.
-  const firstStage = stages[0]!;
-  const realFirst = matches
-    .filter((m) => m.stage === firstStage.stage && m.homeTeamId && m.awayTeamId && teams.has(m.homeTeamId) && teams.has(m.awayTeamId))
-    .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
-  const useReal = firstStage.count > 1 && realFirst.length === firstStage.count;
+  // Walk every round. A round that's fully DRAWN (its real fixtures exist with
+  // both teams) renders from the ACTUAL matchups + results; a round that hasn't
+  // been drawn yet is projected forward from the previous round's winners. So the
+  // bracket stays real round-by-round all the way to the Final — no per-round
+  // patching as R16/QF/SF get drawn. (Generalises the old R32-only handling.)
+  let currentSides: { teamId: string; label: string }[] = slots.map((q) => ({ teamId: q?.teamId ?? '', label: q?.label ?? 'TBD' }));
 
-  let currentSides: { teamId: string; label: string }[];
-  if (useReal) {
-    currentSides = realFirst.map((m, i) => {
-      const slot = `${firstStage.prefix}-${i + 1}`;
-      const nextSlot = stages.length > 1 ? `${stages[1]!.prefix}-${Math.floor(i / 2) + 1}` : null;
-      const decidedWinner = winnerOf(m);
-      const decided = decidedWinner !== null;
-      const homeProb = decided
-        ? decidedWinner === m.homeTeamId ? 1 : 0
-        : eloExpectation(teams.get(m.homeTeamId)?.elo ?? 1700, teams.get(m.awayTeamId)?.elo ?? 1700, 0);
-      const winnerId = decidedWinner ?? (homeProb >= 0.5 ? m.homeTeamId : m.awayTeamId);
-      nodes.push({
-        slot,
-        stage: firstStage.stage,
-        matchId: m.id,
-        homeTeamId: m.homeTeamId,
-        awayTeamId: m.awayTeamId,
-        homeLabel: teams.get(m.homeTeamId)?.code ?? '',
-        awayLabel: teams.get(m.awayTeamId)?.code ?? '',
-        winnerTeamId: winnerId,
-        feedsInto: nextSlot,
-        homeAdvanceProb: Math.round(homeProb * 1000) / 1000,
-        awayAdvanceProb: Math.round((1 - homeProb) * 1000) / 1000,
-        decided,
-        homeScore: decided ? m.homeScore : null,
-        awayScore: decided ? m.awayScore : null,
-        penaltyWin: decided && m.homeScore === m.awayScore && !!m.penalties,
-      });
-      return { teamId: winnerId, label: teams.get(winnerId)?.code ?? '' };
-    });
-  } else {
-    currentSides = slots.map((q) => ({ teamId: q?.teamId ?? '', label: q?.label ?? 'TBD' }));
-  }
-
-  // Project the remaining rounds from `currentSides` via ELO. When the real first
-  // round was used, start at stage 1 (its winners are already the next inputs).
-  for (let si = useReal ? 1 : 0; si < stages.length; si++) {
+  for (let si = 0; si < stages.length; si++) {
     const st = stages[si]!;
+    const next = stages[si + 1];
+    const real = matches
+      .filter((m) => m.stage === st.stage && m.homeTeamId && m.awayTeamId && teams.has(m.homeTeamId) && teams.has(m.awayTeamId))
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+    const useReal = real.length === st.count; // the whole round is drawn
+
     const winners: { teamId: string; label: string }[] = [];
     for (let i = 0; i < st.count; i++) {
-      const home = currentSides[i * 2] ?? { teamId: '', label: 'TBD' };
-      const away = currentSides[i * 2 + 1] ?? { teamId: '', label: 'TBD' };
       const slot = st.count === 1 ? 'FINAL' : `${st.prefix}-${i + 1}`;
-      const next = stages[si + 1];
       const nextSlot = next ? (next.count === 1 ? 'FINAL' : `${next.prefix}-${Math.floor(i / 2) + 1}`) : null;
 
-      let homeProb = 0.5;
-      if (home.teamId && away.teamId) {
-        homeProb = eloExpectation(teams.get(home.teamId)?.elo ?? 1700, teams.get(away.teamId)?.elo ?? 1700, 0);
-      } else if (home.teamId) homeProb = 1;
-      else if (away.teamId) homeProb = 0;
-
-      const winner = homeProb >= 0.5 ? home : away;
-      winners.push({ teamId: winner.teamId, label: winner.label });
-
-      nodes.push({
-        slot,
-        stage: st.stage,
-        matchId: null,
-        homeTeamId: home.teamId || null,
-        awayTeamId: away.teamId || null,
-        homeLabel: home.label,
-        awayLabel: away.label,
-        winnerTeamId: winner.teamId || null,
-        feedsInto: nextSlot,
-        homeAdvanceProb: Math.round(homeProb * 1000) / 1000,
-        awayAdvanceProb: Math.round((1 - homeProb) * 1000) / 1000,
-      });
+      if (useReal) {
+        const m = real[i]!;
+        const decidedWinner = winnerOf(m);
+        const decided = decidedWinner !== null;
+        const homeProb = decided
+          ? decidedWinner === m.homeTeamId ? 1 : 0
+          : eloExpectation(teams.get(m.homeTeamId)?.elo ?? 1700, teams.get(m.awayTeamId)?.elo ?? 1700, 0);
+        const winnerId = decidedWinner ?? (homeProb >= 0.5 ? m.homeTeamId : m.awayTeamId);
+        winners.push({ teamId: winnerId, label: teams.get(winnerId)?.code ?? '' });
+        nodes.push({
+          slot, stage: st.stage, matchId: m.id,
+          homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId,
+          homeLabel: teams.get(m.homeTeamId)?.code ?? '', awayLabel: teams.get(m.awayTeamId)?.code ?? '',
+          winnerTeamId: winnerId, feedsInto: nextSlot,
+          homeAdvanceProb: Math.round(homeProb * 1000) / 1000,
+          awayAdvanceProb: Math.round((1 - homeProb) * 1000) / 1000,
+          decided,
+          homeScore: decided ? m.homeScore : null,
+          awayScore: decided ? m.awayScore : null,
+          penaltyWin: decided && m.homeScore === m.awayScore && !!m.penalties,
+        });
+      } else {
+        const home = currentSides[i * 2] ?? { teamId: '', label: 'TBD' };
+        const away = currentSides[i * 2 + 1] ?? { teamId: '', label: 'TBD' };
+        let homeProb = 0.5;
+        if (home.teamId && away.teamId) {
+          homeProb = eloExpectation(teams.get(home.teamId)?.elo ?? 1700, teams.get(away.teamId)?.elo ?? 1700, 0);
+        } else if (home.teamId) homeProb = 1;
+        else if (away.teamId) homeProb = 0;
+        const winner = homeProb >= 0.5 ? home : away;
+        winners.push({ teamId: winner.teamId, label: winner.label });
+        nodes.push({
+          slot, stage: st.stage, matchId: null,
+          homeTeamId: home.teamId || null, awayTeamId: away.teamId || null,
+          homeLabel: home.label, awayLabel: away.label,
+          winnerTeamId: winner.teamId || null, feedsInto: nextSlot,
+          homeAdvanceProb: Math.round(homeProb * 1000) / 1000,
+          awayAdvanceProb: Math.round((1 - homeProb) * 1000) / 1000,
+        });
+      }
     }
     currentSides = winners;
   }

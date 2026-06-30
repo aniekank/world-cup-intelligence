@@ -64,4 +64,25 @@ describe('buildBracket — seeds the first round from the real draw', () => {
     expect(sf.every((n) => n.matchId === null)).toBe(true); // all projected
     expect(sf.every((n) => !n.decided)).toBe(true);
   });
+
+  // Generalisation: EVERY drawn round renders from real fixtures, not just the
+  // first — so as R16/QF/SF/Final get drawn, the bracket stays real round-by-round
+  // with no per-round patching.
+  it('uses real fixtures for a later round too (the Final), once it is drawn', () => {
+    const sf = [
+      m('m-sf1', 'a1', 'b2', 'FINISHED', 2, 0, '2026-07-10T18:00:00Z'),
+      m('m-sf2', 'b1', 'a2', 'FINISHED', 1, 0, '2026-07-10T21:00:00Z'),
+    ];
+    // The real Final, played: a1 beat b1 3-1.
+    const finalMatch = { ...m('m-final', 'a1', 'b1', 'FINISHED', 3, 1, '2026-07-14T18:00:00Z'), stage: 'FINAL' } as Match;
+    const nodes = buildBracket(standings, forecasts, teams, [...sf, finalMatch]);
+
+    const final = nodes.find((n) => n.stage === 'FINAL')!;
+    expect(final.matchId).toBe('m-final'); // real fixture, not projected
+    expect(final.homeTeamId).toBe('a1');
+    expect(final.awayTeamId).toBe('b1'); // the REAL final pairing
+    expect(final.decided).toBe(true);
+    expect(final.homeScore).toBe(3);
+    expect(final.winnerTeamId).toBe('a1');
+  });
 });

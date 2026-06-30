@@ -15,21 +15,25 @@ export default function BracketPage() {
   const stages: MatchStage[] = ['R32', 'R16', 'QF', 'SF', 'FINAL'];
   const byStage = stages.map((s) => ({ stage: s, nodes: nodes.filter((n) => n.stage === s) }));
 
-  // The first column is the REAL draw once it's been seeded from actual fixtures
-  // (each node carries a matchId). Surface where the knockout actually stands.
-  const firstStage = byStage.find((b) => b.nodes.length)?.stage ?? 'R32';
-  const firstRound = byStage.find((b) => b.stage === firstStage)?.nodes ?? [];
-  const drawn = firstRound.some((n) => n.matchId);
-  const played = firstRound.filter((n) => n.decided).length;
+  // The CURRENT round = the latest one drawn from real fixtures (its nodes carry a
+  // matchId) that still has ties to play; if all real ties are done, the latest
+  // real round. Tracks the tournament forward (R32 → R16 → … → Final) on its own.
+  const realStages = byStage.filter((b) => b.nodes.some((n) => n.matchId));
+  const current =
+    realStages.find((b) => b.nodes.some((n) => !n.decided)) ?? realStages[realStages.length - 1];
+  const drawn = !!current;
+  const curStage = current?.stage ?? 'R32';
+  const curRound = current?.nodes ?? [];
+  const played = curRound.filter((n) => n.decided).length;
 
   const description = drawn
-    ? `${stageName[firstStage]} shows the real draw and results — ${played} of ${firstRound.length} ties played. Rounds beyond it are projected forward by ELO win expectancy until they're drawn.`
+    ? `${stageName[curStage]} shows the real draw and results — ${played} of ${curRound.length} ties played. Rounds beyond it are projected forward by ELO win expectancy until they're drawn.`
     : 'Most-likely path built from the current qualifiers under standard seeding, each tie projected by ELO win expectancy. It switches to the real draw and results once the knockout fixtures are set.';
 
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker={drawn ? `Knockout Phase · ${stageName[firstStage]} underway` : 'Knockout Phase'}
+        kicker={drawn ? `Knockout Phase · ${stageName[curStage]} underway` : 'Knockout Phase'}
         title="Knockout Bracket"
         description={description}
       />
