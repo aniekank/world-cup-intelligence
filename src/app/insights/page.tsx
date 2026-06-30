@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { insights, dailyBriefing, briefingMeta } from '@/server/queries';
+import { historicalInsights } from '@/server/knockoutHistory';
 import { PageHeader, Panel, Badge } from '@/components/ui';
 import type { Insight } from '@/domain/types';
 
@@ -26,10 +27,11 @@ function entityHref(i: Insight): string | null {
   return null;
 }
 
-export default function InsightsPage() {
+export default async function InsightsPage() {
   const briefing = dailyBriefing();
   const { subtitle: briefingSubtitle } = briefingMeta();
-  const all = insights();
+  // Live stories first; historical-context cards (rematches, shootout records) after.
+  const all = [...insights(), ...(await historicalInsights())];
 
   return (
     <div className="space-y-6">

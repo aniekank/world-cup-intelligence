@@ -9,6 +9,7 @@ import { TeamCrest } from '@/components/brand/TeamCrest';
 import { stageName } from '@/lib/format';
 import { LocalTime } from '@/components/LocalTime';
 import { WhereToWatch } from '@/components/WhereToWatch';
+import { KnockoutHistoryPanel } from '@/components/match/KnockoutHistoryPanel';
 import { stylesClash } from '@/server/tactics';
 import type { MatchEvent } from '@/domain/types';
 
@@ -160,6 +161,9 @@ export default function MatchPage({ params }: { params: { id: string } }) {
           <p className="text-sm leading-relaxed text-terminal-text">{clash.line}</p>
         </Panel>
       )}
+
+      {/* Past World Cups: meetings, pedigree, shootouts, legends (live knockout ties only) */}
+      <KnockoutHistoryPanel home={home} away={away} stage={match.stage} />
 
       {preview?.h2h && preview.h2h.meetings.length > 0 && (
         <Panel title="Head to head" subtitle={preview.h2h.line}>

@@ -95,8 +95,10 @@ export async function register() {
     try {
       const { tournamentSummaries } = await import('@/server/history');
       await tournamentSummaries();
+      const { warmKnockoutHistory } = await import('@/server/knockoutHistory');
+      await warmKnockoutHistory(); // index past WCs for the live knockout-context panels
     } catch {
-      /* non-fatal — the page will compute it lazily on first visit */
+      /* non-fatal — the pages will compute it lazily on first visit */
     }
   })();
 }
