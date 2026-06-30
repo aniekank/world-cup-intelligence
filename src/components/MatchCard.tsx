@@ -30,10 +30,15 @@ export function MatchCard({
         <span>{match.groupId ? `Group ${match.groupId}` : stageName[match.stage]}</span>
         {live ? (
           <span className="flex items-center gap-1.5 font-semibold text-accent-red">
-            <LiveDot /> {match.minute}′
+            <LiveDot />{' '}
+            {match.livePhase === 'PEN'
+              ? 'Penalties'
+              : match.livePhase === 'BREAK'
+                ? 'Break'
+                : `${match.livePhase === 'ET' ? 'ET ' : ''}${match.minute}′`}
           </span>
         ) : finished ? (
-          <span>FT</span>
+          <span>{match.penalties ? 'FT (pens)' : 'FT'}</span>
         ) : (
           <LocalTime iso={match.kickoff} />
         )}

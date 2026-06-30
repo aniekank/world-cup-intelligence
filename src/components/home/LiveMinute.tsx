@@ -17,22 +17,29 @@ export function LiveMinute({
   minute,
   status,
   generatedAt,
+  livePhase,
 }: {
   minute: number;
   status: string;
   generatedAt: string;
+  livePhase?: 'ET' | 'PEN' | 'BREAK';
 }) {
   const anchor = Date.parse(generatedAt);
   // Seed from the anchor so the first client render matches the server (no
   // hydration mismatch); the effect swaps in the real clock and starts ticking.
   const [now, setNow] = useState(() => (Number.isFinite(anchor) ? anchor : Date.now()));
 
+  const ticking = status === 'LIVE' && livePhase !== 'PEN' && livePhase !== 'BREAK';
   useEffect(() => {
-    if (status !== 'LIVE') return;
+    if (!ticking) return; // no running clock during the penalty shootout / a break
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [status, generatedAt]);
+  }, [ticking, generatedAt]);
 
-  return <>{runningMinute(minute, status, anchor, now)}</>;
+  // Knockout sub-phases the feed collapses into "LIVE".
+  if (status === 'LIVE' && livePhase === 'PEN') return <>Pens</>;
+  if (status === 'LIVE' && livePhase === 'BREAK') return <>Break</>;
+  const label = runningMinute(minute, status, anchor, now);
+  return <>{status === 'LIVE' && livePhase === 'ET' ? `ET ${label}` : label}</>;
 }

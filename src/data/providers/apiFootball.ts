@@ -117,6 +117,7 @@ export interface FixtureUpdate {
   homeScoreHT: number;
   awayScoreHT: number;
   penalties: { home: number; away: number } | null;
+  livePhase?: 'ET' | 'PEN' | 'BREAK';
 }
 
 /** One raw event from /fixtures/events, normalized but not yet mapped to our ids. */

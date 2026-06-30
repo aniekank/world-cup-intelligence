@@ -252,6 +252,9 @@ export interface Match {
   city: string;
   status: MatchStatus;
   minute: number; // live clock; 0 if scheduled, 90/120 if finished
+  // Live sub-phase within a LIVE knockout match — SportMonks collapses these into
+  // LIVE, but the UI needs them to show "Extra Time" / "Penalties" / the break.
+  livePhase?: 'ET' | 'PEN' | 'BREAK';
   homeTeamId: ID;
   awayTeamId: ID;
   homeScore: number;

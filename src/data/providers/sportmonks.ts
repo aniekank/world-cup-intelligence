@@ -69,6 +69,15 @@ function mapStatus(dev: string | undefined): Match['status'] {
   return 'SCHEDULED';
 }
 
+/** Live knockout sub-phase (only while in play — AET/FT_PEN are finished, not live). */
+function mapPhase(dev: string | undefined): Match['livePhase'] {
+  const s = (dev ?? '').toUpperCase();
+  if (s === 'INPLAY_PENALTIES' || s === 'PENALTIES') return 'PEN';
+  if (s === 'INPLAY_ET' || s === 'INPLAY_ET_2' || s === 'EXTRA_TIME') return 'ET';
+  if (s === 'BREAK') return 'BREAK';
+  return undefined;
+}
+
 function mapEventType(name: string): EventType {
   const n = name.toLowerCase();
   if (n.includes('own')) return 'OWN_GOAL';
@@ -427,8 +436,11 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
       if (!homeId || !awayId) return null; // unresolved team — skip rather than crash
       const cur = (f.scores ?? []).filter((s) => s.description === 'CURRENT');
       const ht = (f.scores ?? []).filter((s) => s.description === '1ST_HALF');
+      const pens = (f.scores ?? []).filter((s) => s.description === 'PENALTY_SHOOTOUT');
       const goalsFor = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
       const status = mapStatus(f.state?.developer_name);
+      const livePhase = mapPhase(f.state?.developer_name);
+      const penalties = pens.length ? { home: goalsFor(home.id, pens), away: goalsFor(away.id, pens) } : null;
       // Real stage from SportMonks (was hardcoded 'GROUP', which mislabelled
       // knockout fixtures once their teams were assigned). (WC-032)
       const stage = mapStage(f.stage?.name);
@@ -448,11 +460,11 @@ export async function fetchSportMonksSnapshot(apiKey: string): Promise<DatasetSn
         id: `m-${f.id}`, competitionId: 'wc-2026', stage, groupId: groupLetter,
         matchday, kickoff: f.starting_at ? `${f.starting_at.replace(' ', 'T')}Z` : new Date().toISOString(),
         venue: f.venue?.name ?? 'TBD', city: f.venue?.city_name ?? '',
-        status, minute: status === 'FINISHED' ? 90 : 0,
+        status, minute: status === 'FINISHED' ? 90 : 0, ...(livePhase ? { livePhase } : {}),
         homeTeamId: homeId, awayTeamId: awayId,
         homeScore: goalsFor(home.id, cur), awayScore: goalsFor(away.id, cur),
         homeScoreHT: goalsFor(home.id, ht), awayScoreHT: goalsFor(away.id, ht),
-        penalties: null, teamStats: {}, events: [], shots: [], bracketSlot: null,
+        penalties, teamStats: {}, events: [], shots: [], bracketSlot: null,
         smHomeId: home.id, smAwayId: away.id,
       };
     })
@@ -713,8 +725,10 @@ export async function fetchSportMonksFixtures(apiKey: string): Promise<FixtureUp
     if (!home || !away) continue;
     const cur = (f.scores ?? []).filter((s) => s.description === 'CURRENT');
     const ht = (f.scores ?? []).filter((s) => s.description === '1ST_HALF');
+    const pens = (f.scores ?? []).filter((s) => s.description === 'PENALTY_SHOOTOUT');
     const gf = (pid: number, set: SMScore[]) => set.find((s) => s.participant_id === pid)?.score.goals ?? 0;
     const status = mapStatus(f.state?.developer_name);
+    const livePhase = mapPhase(f.state?.developer_name);
     // Live minute = the ticking period's clock (SportMonks runs it there); fall
     // back to the furthest period (≈45 at half-time) or 0. Was hardcoded to 0, so
     // every in-play match showed 0′.
@@ -729,7 +743,8 @@ export async function fetchSportMonksFixtures(apiKey: string): Promise<FixtureUp
       awayScore: gf(away.id, cur),
       homeScoreHT: gf(home.id, ht),
       awayScoreHT: gf(away.id, ht),
-      penalties: null,
+      penalties: pens.length ? { home: gf(home.id, pens), away: gf(away.id, pens) } : null,
+      livePhase,
     });
   }
   return out;

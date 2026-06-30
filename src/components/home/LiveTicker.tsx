@@ -50,7 +50,8 @@ export function LiveTicker() {
         <span>{away.flag}</span>
         {live ? (
           <span className="tnum text-[10px] text-accent-red">
-            <LiveMinute minute={m.minute} status={m.status} generatedAt={generatedAt} />
+            <LiveMinute minute={m.minute} status={m.status} generatedAt={generatedAt} livePhase={m.livePhase} />
+            {m.penalties && <span className="ml-1">({m.penalties.home}-{m.penalties.away}p)</span>}
           </span>
         ) : (
           <span className="text-[10px] text-terminal-muted">FT</span>

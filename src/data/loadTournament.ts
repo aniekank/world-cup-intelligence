@@ -207,7 +207,8 @@ export async function refreshLiveScores(): Promise<boolean> {
     const u = byId.get(m.id);
     const ev = eventsByMatch.get(m.id);
     const scoreChanged =
-      !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute);
+      !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute
+        || u.livePhase !== m.livePhase || (u.penalties?.home ?? -1) !== (m.penalties?.home ?? -1) || (u.penalties?.away ?? -1) !== (m.penalties?.away ?? -1));
     if (u && u.status !== m.status) statusChanged = true; // kickoff / full-time → forecasts worth rebuilding
     if (u && u.status === 'FINISHED' && m.status !== 'FINISHED') newlyFinished = true; // → re-aggregate player stats
     const eventsChanged = !!ev && ev.length !== m.events.length;
@@ -219,6 +220,7 @@ export async function refreshLiveScores(): Promise<boolean> {
         ? {
             status: u.status,
             minute: u.minute,
+            livePhase: u.livePhase,
             homeScore: u.homeScore,
             awayScore: u.awayScore,
             homeScoreHT: u.homeScoreHT,
