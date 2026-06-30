@@ -326,15 +326,26 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
     });
   }
 
-  // 2) Overlay stats + full names from the league players endpoint (paginated)
+  // 2) Overlay stats + full names from the league players endpoint (paginated).
+  // The WC roster is ~63 pages (20 players/page); the cap MUST cover all of them
+  // or players on later pages (e.g. Messi) keep zeroed stats. Drive the loop off
+  // the reported `paging.total` with a generous safety ceiling, retry 429s, and
+  // pace gently so the burst stays inside the per-minute rate limit. (WC-051)
   try {
-    for (let page = 1; page <= 15; page++) {
-      const res = await fetch(`${BASE}/players?league=${WORLD_CUP_LEAGUE}&season=${SEASON}&page=${page}`, {
-        headers: { 'x-apisports-key': apiKey },
-        next: { revalidate: 30 },
-      });
-      if (!res.ok) break;
+    let totalPages = 1;
+    for (let page = 1; page <= Math.min(totalPages, 80); page++) {
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        res = await fetch(`${BASE}/players?league=${WORLD_CUP_LEAGUE}&season=${SEASON}&page=${page}`, {
+          headers: { 'x-apisports-key': apiKey },
+          next: { revalidate: 30 },
+        });
+        if (res.status !== 429) break;
+        await sleep(1500 * (attempt + 1)); // rate-limited — back off and retry this page
+      }
+      if (!res || !res.ok) break;
       const json = (await res.json()) as { response: AFPlayerRow[]; paging: { current: number; total: number } };
+      totalPages = json.paging?.total ?? totalPages;
       for (const row of json.response) {
         const stat = row.statistics[0];
         if (!stat) continue;
@@ -374,6 +385,7 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
         playerStats[pid] = ps;
       }
       if (json.paging.current >= json.paging.total) break;
+      await sleep(120); // gentle pacing across ~63 pages
     }
   } catch {
     /* stats are best-effort; rosters from squads remain */
