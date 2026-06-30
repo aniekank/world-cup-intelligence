@@ -224,11 +224,14 @@ export default function TeamPage({ params }: { params: { id: string } }) {
               <div className="flex flex-wrap gap-1.5">
                 {lineup.xi.map((p) => {
                   const isNew = lineup.changes?.in.some((x) => x.id === p.id);
-                  return (
-                    <Link key={p.id} href={`/players/${p.id}`}
-                      className={`rounded-md border px-2 py-1 text-xs hover:border-accent/40 ${isNew ? 'border-accent/50 bg-accent/10 text-accent' : 'border-terminal-border text-terminal-text'}`}>
-                      {p.name.split(' ').slice(-1)[0]}{isNew && ' •'}
-                    </Link>
+                  const cls = `rounded-md border px-2 py-1 text-xs ${isNew ? 'border-accent/50 bg-accent/10 text-accent' : 'border-terminal-border text-terminal-text'}`;
+                  const label = <>{p.name.split(' ').slice(-1)[0]}{isNew && ' •'}</>;
+                  // Only link when the player resolves to a real profile — a dangling
+                  // lineup id (cross-provider/stale) renders as plain text, never a 404. (WC-052)
+                  return p.linkable ? (
+                    <Link key={p.id} href={`/players/${p.id}`} className={`${cls} hover:border-accent/40`}>{label}</Link>
+                  ) : (
+                    <span key={p.id} className={cls}>{label}</span>
                   );
                 })}
               </div>
