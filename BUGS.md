@@ -3,7 +3,7 @@
 A living tracker of bugs, their root causes, and fixes. Keep it next to the code so the
 record travels with the repo. Commit hashes let anyone see the exact change.
 
-**Last updated:** 2026-06-29
+**Last updated:** 2026-06-30
 
 ---
 
@@ -40,6 +40,7 @@ _None — all tracked bugs and enhancements are resolved. New items go here usin
 
 | ID | Bug | Area | Root cause | Fix |
 |----|-----|------|-----------|-----|
+| ENH-2 | Migrate live feed off SportMonks before the trial lapsed (2026-07-01) without losing data (enhancement) | data providers / load path | SportMonks trial ended; its paid tier was costly. API-Football (already paid) covers scores/squads/stats/events/xG but lacks a few SportMonks-only fields: player foot, deeper scouting metrics (big chances, progressive passes, ball recoveries, touches), coach careers, and played-match tactical stats (possession, PPDA, field tilt, formations, referee). | Froze those static/slow-changing fields ONCE from SportMonks into `cache/sportmonks-frozen.json` (48 teams, 1250 players, 76 matches), and overlay them onto the live API-Football snapshot by canonical name + shirt (`frozenOverlay.ts`). Verified 100% join: 349 feet, 1251 stat lines, 48 coach careers, 76 match stat sets. Future matches (past the freeze) get possession/shots/formations/referee live via `attachApiFootballMatchStats` (PPDA/field-tilt degrade — not in AF fixture stats). Flipped `live-2026` source `sportmonks`→`apifootball`. Permanent losses: weather + TV listings only. · frozenOverlay.ts · apiFootball.ts · loadTournament.ts · tournaments.ts |
 | ENH-1 | Live scoreboard didn't auto-update in the browser (enhancement) | match/live pages (client) | Server data refreshed every 60s, but the browser only showed it after a manual reload — no client-side poll. | A global `<LiveRefresh>` (mounted in the Topbar) polls a no-store `/api/live-status` probe (cached snapshot only, no provider call) and `router.refresh()`es whenever the snapshot generation changes, so every page re-renders in place without a reload. Polls 15s while a match is live, 60s idle; pauses on a hidden tab; catches up on refocus. A freshness pill shows "N live · updated Ns ago" (live) / "Live" (idle). Server poll also made adaptive + env-tunable (`LIVE_REFRESH_MS` / `LIVE_REFRESH_LIVE_MS`, 30s while live). · LiveRefresh.tsx · api/live-status · instrumentation.ts |
 | WC-001 | Every player shown as "CM" | data adapter | `detailedPosition` hardcoded to `'CM'` | Map role→detailed position (GK/CB/CM/ST) · pre-launch |
 | WC-002 | `/live` crash — `reading 'flag'` | live/matches render | TBD knockout fixtures → `getTeam(id)!` undefined → `.flag` | Guard MatchCard + `liveMatches`/`matchDetail` filters · pre-launch |

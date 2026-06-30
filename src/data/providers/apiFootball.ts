@@ -74,7 +74,7 @@ async function af<T>(path: string, apiKey: string, attempt = 0): Promise<T> {
 // ── External shapes (subset) ─────────────────────────────────
 interface AFTeam { team: { id: number; name: string; code: string | null; logo: string }; }
 interface AFFixture {
-  fixture: { id: number; date: string; status: { short: string; elapsed: number | null }; venue: { name: string | null; city: string | null } };
+  fixture: { id: number; date: string; referee?: string | null; status: { short: string; elapsed: number | null }; venue: { name: string | null; city: string | null } };
   league: { round: string };
   teams: { home: { id: number; name: string }; away: { id: number; name: string } };
   goals: { home: number | null; away: number | null };
@@ -473,6 +473,101 @@ export async function attachApiFootballXg(matches: Match[], teams: Team[], apiKe
       const put = (id: string, xg: number | null) => { if (xg == null) return; const cur = ts[id] ?? ({ teamId: id } as MatchTeamStats); cur.xG = xg; ts[id] = cur; };
       put(home.id, hx); // xG belongs to the team, not the home/away slot
       put(away.id, ax);
+      updated++;
+    }));
+  }
+  return updated;
+}
+
+// ── Per-match team stats / formations / referee (post-SportMonks) ────────────
+// SportMonks supplied these on its snapshot; API-Football has them too, on
+// separate endpoints we now call. For matches frozen before the SportMonks trial
+// lapsed the overlay already fills these (with PPDA/field-tilt SportMonks derived
+// and AF can't); this enrichment covers FUTURE matches — every finished game that
+// still lacks possession — so each new knockout round reports live without code
+// changes. PPDA/field-tilt aren't in AF's fixture stats, so they stay neutral.
+
+interface AFLineup { team: { id: number }; formation: string | null; startXI?: { player: { id: number; name: string; pos: string | null } }[] }
+
+/**
+ * Fill possession/shots/passes/corners/cards/saves + formations + referee on
+ * finished `matches` that don't already carry them (mutates in place). Joined by
+ * team name + date, like the xG overlay. Best-effort; returns #matches updated.
+ */
+export async function attachApiFootballMatchStats(matches: Match[], teams: Team[], apiKey: string): Promise<number> {
+  const byNorm = new Map<string, Team>();
+  for (const t of teams) byNorm.set(normName(t.name), t);
+  const resolve = (afName: string): Team | undefined => {
+    const n = normName(afName);
+    return byNorm.get(n) ?? byNorm.get(AF_XG_NAME_ALIASES[n] ?? ' ');
+  };
+  const day = (iso: string) => iso.slice(0, 10);
+  const pair = (a: string, b: string) => [a, b].sort().join('|');
+  const byKeyDate = new Map<string, Match>();
+  const byPair = new Map<string, Match[]>();
+  for (const m of matches) {
+    byKeyDate.set(`${pair(m.homeTeamId, m.awayTeamId)}|${day(m.kickoff)}`, m);
+    const arr = byPair.get(pair(m.homeTeamId, m.awayTeamId));
+    if (arr) arr.push(m); else byPair.set(pair(m.homeTeamId, m.awayTeamId), [m]);
+  }
+
+  const fixtures = await af<AFFixture[]>(`/fixtures?league=${WORLD_CUP_LEAGUE}&season=${SEASON}`, apiKey);
+  const jobs: { fx: AFFixture; m: Match; home: Team; away: Team }[] = [];
+  for (const fx of fixtures) {
+    if (!['FT', 'AET', 'PEN'].includes(fx.fixture.status.short)) continue; // finished only
+    const home = resolve(fx.teams.home.name);
+    const away = resolve(fx.teams.away.name);
+    if (!home || !away) continue;
+    let m = byKeyDate.get(`${pair(home.id, away.id)}|${day(fx.fixture.date)}`);
+    if (!m) { const c = byPair.get(pair(home.id, away.id)); if (c && c.length === 1) m = c[0]; }
+    if (!m) continue;
+    if ((m.teamStats?.[m.homeTeamId]?.possession ?? 0) > 0) continue; // already has tactical stats (frozen or prior run)
+    jobs.push({ fx, m, home, away });
+  }
+
+  let updated = 0;
+  const BATCH = 3; // 2 calls per job — keep concurrency modest (af() retries 429)
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    await Promise.all(jobs.slice(i, i + BATCH).map(async ({ fx, m, home, away }) => {
+      const [stats, lineups] = await Promise.all([
+        af<AFStatRow[]>(`/fixtures/statistics?fixture=${fx.fixture.id}`, apiKey).catch(() => [] as AFStatRow[]),
+        af<AFLineup[]>(`/fixtures/lineups?fixture=${fx.fixture.id}`, apiKey).catch(() => [] as AFLineup[]),
+      ]);
+      if (!stats.length) return;
+      const num = (afId: number, type: string): number => {
+        const v = stats.find((s) => s.team.id === afId)?.statistics.find((x) => x.type === type)?.value;
+        const n = typeof v === 'string' ? parseFloat(v) : v; // "55%" → 55
+        return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+      };
+      const build = (afId: number, teamId: string): MatchTeamStats => ({
+        teamId,
+        possession: num(afId, 'Ball Possession'),
+        shots: num(afId, 'Total Shots'),
+        shotsOnTarget: num(afId, 'Shots on Goal'),
+        xG: m.teamStats?.[teamId]?.xG ?? (() => { const v = num(afId, 'expected_goals'); return v; })(),
+        corners: num(afId, 'Corner Kicks'),
+        fouls: num(afId, 'Fouls'),
+        offsides: num(afId, 'Offsides'),
+        passes: num(afId, 'Total passes'),
+        passAccuracy: num(afId, 'Passes %'),
+        fieldTilt: 50, // AF fixture stats lack dangerous-attacks → neutral (SportMonks-only)
+        ppda: 0, // AF fixture stats lack tackles/interceptions → press index degrades
+        bigChances: 0,
+        saves: num(afId, 'Goalkeeper Saves'),
+        yellowCards: num(afId, 'Yellow Cards'),
+        redCards: num(afId, 'Red Cards'),
+      });
+      const ts: Record<string, MatchTeamStats> = {};
+      if (num(fx.teams.home.id, 'Ball Possession') > 0 || num(fx.teams.away.id, 'Ball Possession') > 0) {
+        ts[home.id] = build(fx.teams.home.id, home.id);
+        ts[away.id] = build(fx.teams.away.id, away.id);
+        m.teamStats = ts;
+      }
+      // Formations + starting XI.
+      const fmHome = lineups.find((l) => l.team.id === fx.teams.home.id);
+      const fmAway = lineups.find((l) => l.team.id === fx.teams.away.id);
+      if (fmHome?.formation && fmAway?.formation) m.formations = { home: fmHome.formation, away: fmAway.formation };
+      if (fx.fixture.referee) m.referee = fx.fixture.referee.trim();
       updated++;
     }));
   }

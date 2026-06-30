@@ -35,7 +35,11 @@ const HISTORICAL: TournamentInfo[] = (datahubEditions as Array<Omit<TournamentIn
 export const TOURNAMENTS: TournamentInfo[] = [
   {
     id: 'live-2026', label: 'World Cup 2026', short: '2026', year: 2026, gender: 'men',
-    host: 'USA · Canada · Mexico', source: 'sportmonks', coverage: 'live',
+    // API-Football (paid Pro plan) is the live feed; the SportMonks-only gap
+    // fields (foot, coach careers, played-match tactical stats) come from a
+    // one-time frozen overlay (see frozenOverlay.ts). Was 'sportmonks' until the
+    // trial lapsed 2026-07-01.
+    host: 'USA · Canada · Mexico', source: 'apifootball', coverage: 'live',
     championFlag: '🏆', blurb: 'Live — 48 teams, in progress',
   },
   {

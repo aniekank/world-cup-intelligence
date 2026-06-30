@@ -116,6 +116,11 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   if (id === 'live-2026' && !snap.matches.some((m) => (m.teamStats?.[m.homeTeamId]?.xG ?? 0) > 0)) {
     void enrichLiveXg().catch(() => {});
   }
+  // Future matches (played after the frozen-overlay capture) carry no tactical
+  // stats — fill them from API-Football off the critical path.
+  if (id === 'live-2026' && snap.matches.some((m) => m.status === 'FINISHED' && !(m.teamStats?.[m.homeTeamId]?.possession))) {
+    void enrichLiveMatchStats().catch(() => {});
+  }
   return snap;
 }
 
@@ -259,19 +264,17 @@ let rebuilding = false;
  */
 export async function rebuildLiveSnapshot(): Promise<void> {
   if (rebuilding || getActiveTournamentId() !== 'live-2026') return;
-  const key = process.env.SPORTMONKS_KEY ?? process.env.SPORTSMONKS_KEY ?? process.env.SPORTMONK_KEY;
-  if (!key) return;
+  if (!process.env.API_FOOTBALL_KEY) return;
   rebuilding = true;
   try {
-    const { fetchSportMonksSnapshot } = await import('./providers/sportmonks');
-    const snap = await fetchSportMonksSnapshot(key);
+    // Re-fetch via the registry path (API-Football snapshot + frozen overlay).
+    const snap = await loadTournamentSnapshot('live-2026');
     if (isHealthyLive(snap) && getActiveTournamentId() === 'live-2026') {
       const t = getTournament('live-2026');
       setDataset(snap, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
-      void enrichLiveTvListings().catch(() => {});
-      void enrichLiveH2H().catch(() => {});
-      void enrichLiveCoaches().catch(() => {});
-      void enrichLiveXg().catch(() => {}); // re-overlay xG (a fresh fetch drops it)
+      void enrichLiveTvListings().catch(() => {}); // no-op without a SportMonks key (graceful)
+      void enrichLiveXg().catch(() => {}); // re-overlay real team xG (a fresh fetch drops it)
+      void enrichLiveMatchStats().catch(() => {}); // tactical stats for matches past the freeze
       console.log('[data] Live snapshot rebuilt — player stats re-aggregated.');
     }
   } catch (e) {
@@ -312,7 +315,18 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
     const key = process.env.API_FOOTBALL_KEY;
     if (!key) throw new Error('API_FOOTBALL_KEY not set');
     const { fetchApiFootballSnapshot } = await import('./providers/apiFootball');
-    return fetchApiFootballSnapshot(key);
+    const snap = await fetchApiFootballSnapshot(key);
+    // Overlay the frozen SportMonks gap data (foot, advanced player metrics,
+    // coach careers, played-match tactical stats) — a synchronous in-memory
+    // merge, no network. Future matches fall through to enrichLiveMatchStats.
+    try {
+      const { applyFrozenOverlay } = await import('./providers/frozenOverlay');
+      const o = await applyFrozenOverlay(snap);
+      console.log(`[data] Frozen overlay: ${o.feet} feet, ${o.stats} player stat lines, ${o.coaches} coaches, ${o.matches} match stat sets.`);
+    } catch (e) {
+      console.warn('[data] Frozen overlay skipped (non-fatal):', e);
+    }
+    return snap;
   }
 
   throw new Error(`Unsupported source: ${t.source}`);
@@ -385,5 +399,26 @@ export async function enrichLiveXg(): Promise<void> {
     }
   } catch (e) {
     console.warn('[data] xG enrichment failed; xG stays absent.', e);
+  }
+}
+
+/**
+ * Fill per-match tactical stats (possession, shots, passes), formations and the
+ * referee for FINISHED live matches that don't already carry them — i.e. games
+ * played AFTER the SportMonks freeze, which have no frozen overlay row. Pulls
+ * from API-Football's /fixtures/statistics + /fixtures/lineups. These are
+ * display-only fields read by force-dynamic match pages, so we mutate in place
+ * (no engine rebuild). Best-effort — a failure just leaves them absent.
+ */
+export async function enrichLiveMatchStats(): Promise<void> {
+  if (getActiveTournamentId() !== 'live-2026') return;
+  const key = process.env.API_FOOTBALL_KEY;
+  if (!key) return;
+  try {
+    const { attachApiFootballMatchStats } = await import('./providers/apiFootball');
+    const n = await attachApiFootballMatchStats(getMatches(), getTeams(), key);
+    if (n > 0) console.log(`[data] Match tactical stats attached to ${n} match(es) (API-Football).`);
+  } catch (e) {
+    console.warn('[data] Match-stats enrichment failed; tactical stats stay absent.', e);
   }
 }
