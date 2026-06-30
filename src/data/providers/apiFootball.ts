@@ -361,6 +361,8 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
         } else if (fullName) {
           p.name = fullName; // upgrade abbreviated squad name → full name
         }
+        // Headshot (free on API-Football; squad feed doesn't carry it, this page does).
+        if (row.player.photo) p.photo = row.player.photo;
         const ps = playerStats[pid] ?? emptyStats(pid);
         ps.minutes = stat.games.minutes ?? 0;
         ps.appearances = stat.games.appearences ?? 0;
