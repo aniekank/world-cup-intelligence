@@ -121,6 +121,14 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   if (id === 'live-2026' && snap.matches.some((m) => m.status === 'FINISHED' && !(m.teamStats?.[m.homeTeamId]?.possession))) {
     void enrichLiveMatchStats().catch(() => {});
   }
+  // A fresh boot loads the raw provider aggregate (which lags a just-finished
+  // match), so scorer tallies would read low until the periodic refresh happens.
+  // Kick an immediate refresh so events backfill + the reconcile run within
+  // seconds of boot, not minutes — otherwise every redeploy briefly shows stale
+  // goal counts (e.g. Mbappé 4 instead of 6). (WC-055)
+  if (id === 'live-2026') {
+    void refreshLiveScores().catch(() => {});
+  }
   return snap;
 }
 
@@ -195,7 +203,9 @@ export async function refreshLiveScores(): Promise<boolean> {
   // burst that could trip a per-minute rate limit.
   const eventsByMatch = new Map<string, MatchEvent[]>();
   await Promise.all(
-    cur.matches.filter(wantEvents).slice(0, 8).map(async (m) => {
+    // Newest matches first: a just-finished game (whose goals the scorer reconcile
+    // needs, and whose aggregate lags) gets its events before older backfill. (WC-055)
+    cur.matches.filter(wantEvents).sort((a, b) => b.kickoff.localeCompare(a.kickoff)).slice(0, 8).map(async (m) => {
       const fixtureId = Number(m.id.replace('m-', ''));
       if (!Number.isFinite(fixtureId)) return;
       const raw = await fetchEventsFn(fixtureId);
