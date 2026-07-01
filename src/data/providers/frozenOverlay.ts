@@ -20,7 +20,7 @@
  * frozen value just backfills the gap. Future matches (played after the freeze)
  * have no frozen row and fall through to the API-Football match-stats enrichment.
  */
-import type { DatasetSnapshot, PlayerStats, MatchTeamStats, Coach, Foot, Position } from '@/domain/types';
+import type { DatasetSnapshot, PlayerStats, MatchTeamStats, Coach, Foot, Position, Match, Player, Team } from '@/domain/types';
 
 interface FrozenPlayer {
   team: string; // team CODE in the frozen snapshot
@@ -195,4 +195,83 @@ export async function applyFrozenOverlay(snap: DatasetSnapshot): Promise<{ feet:
 
   if (snap.meta) snap.meta.hasAdvancedMetrics = true;
   return { feet, stats, coaches, matches };
+}
+
+/**
+ * Reconcile player goal/assist tallies for accuracy on the live tournament.
+ * API-Football's WC feed is unreliable two ways at once: its per-player season
+ * aggregate LAGS a just-finished match, and its event feed DROPS some earlier
+ * goals — so neither stream alone is right (Mbappé read 4 when he had 6). The
+ * frozen SportMonks capture holds an ACCURATE baseline as of capture time, and the
+ * live event feed is accurate for matches played SINCE. So:
+ *
+ *   goals = max( AF aggregate, frozenBaseline + goals-from-events-in-newer-matches )
+ *
+ * "Newer" = matches NOT present in the frozen capture's finished set. The two terms
+ * of the inner sum cover disjoint time windows (baseline through capture, events
+ * after), and the outer max never sums whole totals — so no double-count, and it
+ * can only ever raise a tally, never lower it. Shootout kicks (minute>120) and
+ * missed penalties (already PENALTY_MISS) are excluded. Copy-on-write. (WC-055)
+ */
+export async function reconcileScorers(
+  matches: Match[],
+  players: Player[],
+  teams: Team[],
+  base: Record<string, PlayerStats>,
+): Promise<{ playerStats: Record<string, PlayerStats>; changed: boolean }> {
+  const frozen = await loadFrozen();
+  if (!frozen) return { playerStats: base, changed: false };
+
+  const liveCodeToCanon = new Map(teams.map((t) => [t.id, canon(t.name)]));
+  const frozenCodeToCanon = new Map(frozen.teams.map((t) => [t.id, canon(t.name)]));
+
+  // Frozen goal/assist baseline, keyed for the cross-provider join (team+shirt, then surname).
+  const baseByShirt = new Map<string, { g: number; a: number }>();
+  const baseBySurname = new Map<string, { g: number; a: number }>();
+  for (const fp of frozen.players) {
+    const ct = frozenCodeToCanon.get(fp.team) ?? canon(fp.team);
+    const v = { g: fp.stats?.goals ?? 0, a: fp.stats?.assists ?? 0 };
+    if (fp.shirt > 0) baseByShirt.set(`${ct}|${fp.shirt}`, v);
+    baseBySurname.set(`${ct}|${surnameKey(fp.name)}`, v);
+  }
+
+  // The matches already counted in that baseline — so their goals aren't re-added.
+  const counted = new Set<string>();
+  for (const fm of frozen.matches) {
+    const hc = frozenCodeToCanon.get(fm.home) ?? canon(fm.home);
+    const ac = frozenCodeToCanon.get(fm.away) ?? canon(fm.away);
+    counted.add(`${pair(hc, ac)}|${fm.date}`);
+  }
+
+  // Goals/assists from events in matches played SINCE the capture (not in `counted`).
+  const newG = new Map<string, number>();
+  const newA = new Map<string, number>();
+  for (const m of matches) {
+    const hc = liveCodeToCanon.get(m.homeTeamId) ?? canon(m.homeTeamId);
+    const ac = liveCodeToCanon.get(m.awayTeamId) ?? canon(m.awayTeamId);
+    if (counted.has(`${pair(hc, ac)}|${m.kickoff.slice(0, 10)}`)) continue;
+    for (const e of m.events ?? []) {
+      if ((e.type === 'GOAL' || e.type === 'PENALTY_GOAL') && e.minute <= 120 && e.playerId) {
+        newG.set(e.playerId, (newG.get(e.playerId) ?? 0) + 1);
+        if (e.relatedPlayerId) newA.set(e.relatedPlayerId, (newA.get(e.relatedPlayerId) ?? 0) + 1);
+      }
+    }
+  }
+
+  let ps = base;
+  let changed = false;
+  for (const p of players) {
+    const s = base[p.id];
+    if (!s) continue;
+    const ct = liveCodeToCanon.get(p.teamId) ?? canon(p.teamId);
+    const b = (p.shirtNumber > 0 ? baseByShirt.get(`${ct}|${p.shirtNumber}`) : undefined) ?? baseBySurname.get(`${ct}|${surnameKey(p.name)}`);
+    const goals = Math.max(s.goals, (b?.g ?? 0) + (newG.get(p.id) ?? 0));
+    const assists = Math.max(s.assists, (b?.a ?? 0) + (newA.get(p.id) ?? 0));
+    if (goals !== s.goals || assists !== s.assists) {
+      if (ps === base) ps = { ...base }; // copy-on-write — never mutate the cached snapshot
+      ps[p.id] = { ...s, goals, assists };
+      changed = true;
+    }
+  }
+  return { playerStats: ps, changed };
 }

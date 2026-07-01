@@ -238,11 +238,20 @@ export async function refreshLiveScores(): Promise<boolean> {
   });
   if (!changed) return false;
 
+  // Keep scorer tallies accurate: API-Football's aggregate lags/omits goals, so
+  // reconcile against the accurate frozen SportMonks baseline plus live events for
+  // matches played since (WC-055). A fresh players-array identity busts the
+  // memoized player-view cache so the golden boot / scorer lists pick up the bump
+  // (the detail page reads stats live and updates regardless).
+  const { reconcileScorers } = await import('./providers/frozenOverlay');
+  const recon = await reconcileScorers(matches, cur.players, cur.teams, cur.playerStats);
+  const players = recon.changed ? cur.players.slice() : cur.players;
+
   // New snapshot object (not an in-place mutation) so the store's snapshot-keyed
   // indexes + analytics engine rebuild against the fresh scores.
   // Only rebuild the (expensive) forecast engine when a match status flips —
   // routine score/minute ticks reuse the cached engine so renders stay fast.
-  setDataset({ ...cur, matches, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId(), { rebuildEngine: statusChanged });
+  setDataset({ ...cur, matches, players, playerStats: recon.playerStats, generatedAt: new Date().toISOString() }, sourceLabel(activeT!), getActiveTournamentId(), { rebuildEngine: statusChanged });
   console.log(`[data] Live refresh: ${changed} fixture(s) updated.`);
 
   // When a match has just FINISHED, the score/timeline updated above but the
@@ -271,7 +280,14 @@ export async function rebuildLiveSnapshot(): Promise<void> {
     const snap = await loadTournamentSnapshot('live-2026');
     if (isHealthyLive(snap) && getActiveTournamentId() === 'live-2026') {
       const t = getTournament('live-2026');
-      setDataset(snap, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
+      // Carry the backfilled event timelines from the current snapshot into the
+      // fresh one (a re-fetch starts with empty events), so the goal reconcile and
+      // the match timelines survive the rebuild. (WC-055)
+      const prevEvents = new Map(getMatches().map((m) => [m.id, m.events]));
+      const matches = snap.matches.map((m) => { const ev = prevEvents.get(m.id); return ev && ev.length ? { ...m, events: ev } : m; });
+      const { reconcileScorers } = await import('./providers/frozenOverlay');
+      const recon = await reconcileScorers(matches, snap.players, snap.teams, snap.playerStats);
+      setDataset({ ...snap, matches, playerStats: recon.playerStats }, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
       void enrichLiveTvListings().catch(() => {}); // no-op without a SportMonks key (graceful)
       void enrichLiveXg().catch(() => {}); // re-overlay real team xG (a fresh fetch drops it)
       void enrichLiveMatchStats().catch(() => {}); // tactical stats for matches past the freeze
