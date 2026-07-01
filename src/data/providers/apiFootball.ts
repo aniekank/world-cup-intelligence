@@ -326,11 +326,19 @@ export async function fetchApiFootballSnapshot(apiKey: string): Promise<DatasetS
   // granular slot. Map each role to its representative detailed position so the
   // label is at least correct for the line — never a goalkeeper shown as 'CM'.
   const DETAIL: Record<Position, DetailedPosition> = { GK: 'GK', DF: 'CB', MF: 'CM', FW: 'ST' };
-  const newPlayer = (pid: string, name: string, tid: string, num: number, pos: Position, age: number, height: number): Player => ({
-    id: pid, name, teamId: tid, shirtNumber: num, position: pos, detailedPosition: DETAIL[pos],
-    age, heightCm: height, foot: 'right', club: '—', marketValueEur: 0,
-    rating: { overall: 78, pace: 78, shooting: 78, passing: 78, dribbling: 78, defending: 78, physical: 78 },
-  });
+  const newPlayer = (pid: string, name: string, tid: string, num: number, pos: Position, age: number, height: number): Player => {
+    // API-Football carries no FIFA-style per-attribute ratings. Don't fabricate
+    // them (a flat 78 across the board) — omit the six so the player page shows
+    // the real Match Rating card instead, and seed `overall` from a team-strength
+    // prior (the frozen overlay upgrades it to the real match rating). Mirrors the
+    // SportMonks path; the migration had regressed this to a flat 78. (WC-023 / WC-056)
+    const e = enrichTeam(tid.toUpperCase());
+    return {
+      id: pid, name, teamId: tid, shirtNumber: num, position: pos, detailedPosition: DETAIL[pos],
+      age, heightCm: height, foot: 'right', club: '—', marketValueEur: 0,
+      rating: { overall: Math.round((e.attackRating + e.defenseRating) / 2) },
+    };
+  };
 
   // 1) Complete rosters from per-team squads (so EVERY player is present and
   //    searchable, not just those who've already played). Chunked to respect
