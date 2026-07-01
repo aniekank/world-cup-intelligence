@@ -179,6 +179,7 @@ export async function refreshLiveScores(): Promise<boolean> {
     const ko = new Date(m.kickoff).getTime();
     const inWindow = now >= ko - LIVE_WINDOW_BEFORE_MS && now <= ko + LIVE_WINDOW_AFTER_MS;
     if (m.status !== 'FINISHED' && inWindow) return true; // in play or about to start
+    if (m.status !== 'FINISHED' && now > ko + LIVE_WINDOW_AFTER_MS) return true; // stale-live past its window → force-finish it (WC-057)
     if (m.status === 'FINISHED' && m.events.length === 0 && !eventsFetched.has(m.id)) return true; // backfill timeline once
     return false;
   });
@@ -221,13 +222,17 @@ export async function refreshLiveScores(): Promise<boolean> {
   const matches = cur.matches.map((m) => {
     const u = byId.get(m.id);
     const ev = eventsByMatch.get(m.id);
+    // A match still flagged live long after its play window is stale feed data
+    // (the provider lagged marking it finished, then we fell out of the refresh
+    // window). Force it finished so it stops showing a phantom live clock. (WC-057)
+    const staleLive = m.status !== 'FINISHED' && now > new Date(m.kickoff).getTime() + LIVE_WINDOW_AFTER_MS && (!u || u.status !== 'FINISHED');
     const scoreChanged =
       !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute
         || u.livePhase !== m.livePhase || (u.penalties?.home ?? -1) !== (m.penalties?.home ?? -1) || (u.penalties?.away ?? -1) !== (m.penalties?.away ?? -1));
-    if (u && u.status !== m.status) statusChanged = true; // kickoff / full-time → forecasts worth rebuilding
-    if (u && u.status === 'FINISHED' && m.status !== 'FINISHED') newlyFinished = true; // → re-aggregate player stats
+    if ((u && u.status !== m.status) || staleLive) statusChanged = true; // kickoff / full-time → forecasts worth rebuilding
+    if ((u && u.status === 'FINISHED' && m.status !== 'FINISHED') || staleLive) newlyFinished = true; // → re-aggregate player stats
     const eventsChanged = !!ev && ev.length !== m.events.length;
-    if (!scoreChanged && !eventsChanged) return m;
+    if (!scoreChanged && !eventsChanged && !staleLive) return m;
     changed++;
     return {
       ...m,
@@ -243,6 +248,8 @@ export async function refreshLiveScores(): Promise<boolean> {
             penalties: u.penalties,
           }
         : {}),
+      // Coerce a stale-live match to finished (overrides a stale feed status). (WC-057)
+      ...(staleLive ? { status: 'FINISHED' as const, minute: 90, livePhase: undefined } : {}),
       ...(ev ? { events: ev } : {}),
     };
   });
