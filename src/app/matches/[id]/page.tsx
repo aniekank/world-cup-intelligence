@@ -6,7 +6,7 @@ import { PageHeader, Panel, Badge, LiveDot, ProbBar } from '@/components/ui';
 import { ShotMap } from '@/components/charts/ShotMap';
 import { TeamBadge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
-import { stageName } from '@/lib/format';
+import { stageName, advanceProbabilities } from '@/lib/format';
 import { LocalTime } from '@/components/LocalTime';
 import { WhereToWatch } from '@/components/WhereToWatch';
 import { KnockoutHistoryPanel } from '@/components/match/KnockoutHistoryPanel';
@@ -110,12 +110,29 @@ export default function MatchPage({ params }: { params: { id: string } }) {
 
         {!finished && prediction && (
           <div className="model-only mx-auto mt-6 max-w-md">
-            <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
-            <div className="mt-1 flex justify-between text-xs tnum text-terminal-muted">
-              <span>{home.code} {(prediction.homeWin * 100).toFixed(0)}%</span>
-              <span>Draw {(prediction.draw * 100).toFixed(0)}%</span>
-              <span>{away.code} {(prediction.awayWin * 100).toFixed(0)}%</span>
-            </div>
+            {match.stage !== 'GROUP' ? (() => {
+              // Knockout: fold the draw into each side's chance to advance (ET + pens).
+              const adv = advanceProbabilities(prediction);
+              return (
+                <>
+                  <ProbBar home={adv.home} draw={0} away={adv.away} />
+                  <div className="mt-1 flex justify-between text-xs tnum text-terminal-muted">
+                    <span>{home.code} {(adv.home * 100).toFixed(0)}%</span>
+                    <span className="uppercase tracking-wide text-[10px] text-terminal-muted/70">to advance</span>
+                    <span>{away.code} {(adv.away * 100).toFixed(0)}%</span>
+                  </div>
+                </>
+              );
+            })() : (
+              <>
+                <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
+                <div className="mt-1 flex justify-between text-xs tnum text-terminal-muted">
+                  <span>{home.code} {(prediction.homeWin * 100).toFixed(0)}%</span>
+                  <span>Draw {(prediction.draw * 100).toFixed(0)}%</span>
+                  <span>{away.code} {(prediction.awayWin * 100).toFixed(0)}%</span>
+                </div>
+              </>
+            )}
             <div className="mt-2 flex justify-center gap-2">
               <Badge>xG {prediction.expectedGoals.home} – {prediction.expectedGoals.away}</Badge>
               <Badge tone="blue">O2.5 {(prediction.over25Prob * 100).toFixed(0)}%</Badge>

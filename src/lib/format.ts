@@ -39,6 +39,16 @@ export const stageName: Record<string, string> = {
   THIRD_PLACE: 'Third-place Play-off',
 };
 
+/** Knockout ties can't end level — a 90' draw goes to extra time + penalties and
+ * one side advances. Fold the model's draw probability into each team's chance to
+ * ADVANCE, split by their normal-time win ratio (the stronger side is likelier to
+ * win over ET + pens; 50/50 on a dead heat). Sums to 1. Group games keep W/D/L. */
+export const advanceProbabilities = (p: { homeWin: number; draw: number; awayWin: number }): { home: number; away: number } => {
+  const decisive = p.homeWin + p.awayWin;
+  const homeShare = decisive > 0 ? p.homeWin / decisive : 0.5;
+  return { home: p.homeWin + p.draw * homeShare, away: p.awayWin + p.draw * (1 - homeShare) };
+};
+
 /** Map a 0..100 metric to a color along the artwork ramp: teal→lime→orange→pink. */
 export const ratingColor = (v: number): string => {
   if (v >= 75) return '#1fe5c4'; // teal

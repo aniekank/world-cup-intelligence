@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Match, MatchPrediction, Team } from '@/domain/types';
 import { Badge, LiveDot, ProbBar } from '@/components/ui';
 import { LocalTime } from '@/components/LocalTime';
-import { stageName } from '@/lib/format';
+import { stageName, advanceProbabilities } from '@/lib/format';
 
 export function MatchCard({
   match,
@@ -57,12 +57,31 @@ export function MatchCard({
 
       {!finished && prediction && (
         <div className="model-only mt-3 space-y-1">
-          <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
-          <div className="flex justify-between text-[10px] tnum text-terminal-muted">
-            <span>{(prediction.homeWin * 100).toFixed(0)}%</span>
-            <span>Draw {(prediction.draw * 100).toFixed(0)}%</span>
-            <span>{(prediction.awayWin * 100).toFixed(0)}%</span>
-          </div>
+          {match.stage !== 'GROUP' ? (
+            // Knockout: a draw isn't a final result — show each side's chance to advance.
+            (() => {
+              const adv = advanceProbabilities(prediction);
+              return (
+                <>
+                  <ProbBar home={adv.home} draw={0} away={adv.away} />
+                  <div className="flex justify-between text-[10px] tnum text-terminal-muted">
+                    <span>{(adv.home * 100).toFixed(0)}%</span>
+                    <span className="uppercase tracking-wide text-[9px] text-terminal-muted/70">to advance</span>
+                    <span>{(adv.away * 100).toFixed(0)}%</span>
+                  </div>
+                </>
+              );
+            })()
+          ) : (
+            <>
+              <ProbBar home={prediction.homeWin} draw={prediction.draw} away={prediction.awayWin} />
+              <div className="flex justify-between text-[10px] tnum text-terminal-muted">
+                <span>{(prediction.homeWin * 100).toFixed(0)}%</span>
+                <span>Draw {(prediction.draw * 100).toFixed(0)}%</span>
+                <span>{(prediction.awayWin * 100).toFixed(0)}%</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
