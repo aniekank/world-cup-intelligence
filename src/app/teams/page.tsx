@@ -17,7 +17,7 @@ export default function TeamsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="32 Nations · 48 Teams"
+        kicker="48 Nations · 12 Groups"
         title="Teams"
         description="All 48 qualified nations ranked by championship probability, with live power ratings and group context. Click any team for squad, fixtures, form, and tournament outlook."
       />
