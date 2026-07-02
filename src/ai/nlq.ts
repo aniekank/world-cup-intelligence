@@ -17,7 +17,7 @@ import { RUNS } from '@/analytics/simulate';
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
-import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage } from '@/domain/types';
+import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage, Match } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
   xg: { key: 'xG', label: 'xG', source: 'stat' },
@@ -908,21 +908,69 @@ function playerLookup(q: string, p: PlayerView): NLQueryResult {
   };
 }
 
+const KO_ORDER: MatchStage[] = ['R32', 'R16', 'QF', 'SF', 'FINAL'];
+const STAGE_LABEL: Record<MatchStage, string> = {
+  GROUP: 'group stage', R32: 'round of 32', R16: 'round of 16', QF: 'quarter-finals',
+  SF: 'semi-finals', FINAL: 'final', THIRD_PLACE: 'third-place play-off',
+};
+
+// Did `teamId` win this finished match (goals, then penalties for a KO draw)?
+function teamWonMatch(m: Match, teamId: string): boolean | null {
+  if (m.status !== 'FINISHED') return null;
+  const home = m.homeTeamId === teamId;
+  const gf = home ? m.homeScore : m.awayScore;
+  const ga = home ? m.awayScore : m.homeScore;
+  if (gf !== ga) return gf > ga;
+  if (m.penalties) return (home ? m.penalties.home : m.penalties.away) > (home ? m.penalties.away : m.penalties.home);
+  return null;
+}
+
+/**
+ * A present-tense-correct status line for a team. During the group phase this is
+ * the live group standing; once any knockout match has kicked off, the group
+ * table is final (history) and the team's actual status is its knockout run —
+ * so "Currently 1st in Group H" during the R16 was just wrong. (WC-062)
+ */
+function teamStatusLine(teamId: string, s: { rank: number; groupId: string; points: number } | undefined): string {
+  const koStarted = getMatches().some((m) => m.stage !== 'GROUP' && m.status !== 'SCHEDULED');
+  if (!koStarted) {
+    return s ? `Currently ${ordinal(s.rank)} in Group ${s.groupId} with ${s.points} pts.` : '';
+  }
+  const groupFinish = s ? `Finished ${ordinal(s.rank)} in Group ${s.groupId}` : 'Out of the group stage';
+  const ko = getTeamMatches(teamId).filter((m) => m.stage !== 'GROUP' && m.stage !== 'THIRD_PLACE');
+  if (!ko.length) return `${groupFinish} — eliminated at the group stage.`;
+
+  const liveM = ko.find((m) => m.status === 'LIVE' || m.status === 'HALFTIME');
+  if (liveM) return `${groupFinish}; playing their ${STAGE_LABEL[liveM.stage]} tie right now.`;
+  const upcoming = ko.find((m) => m.status === 'SCHEDULED');
+  if (upcoming) return `${groupFinish}; into the ${STAGE_LABEL[upcoming.stage]}.`;
+
+  const last = ko[ko.length - 1]!;
+  const won = teamWonMatch(last, teamId);
+  if (won === false) return `${groupFinish}; eliminated in the ${STAGE_LABEL[last.stage]}.`;
+  if (won === true) {
+    if (last.stage === 'FINAL') return `${groupFinish}; World Cup champions.`;
+    const next = KO_ORDER[KO_ORDER.indexOf(last.stage) + 1];
+    return next ? `${groupFinish}; through to the ${STAGE_LABEL[next]}.` : `${groupFinish}; won their ${STAGE_LABEL[last.stage]} tie.`;
+  }
+  return `${groupFinish}; in the knockout rounds.`;
+}
+
 function teamLookup(q: string, teamId: string): NLQueryResult {
   const eng = engine();
   const t = getTeam(teamId)!;
   const f = eng.forecasts.get(teamId);
   const s = eng.standingsByTeam.get(teamId);
   const pr = eng.powerRankings.find((r) => r.teamId === teamId);
+  const status = teamStatusLine(teamId, s);
   return {
     query: q,
     intent: 'team-lookup',
-    answer: `${t.name} — power rank #${pr?.rank ?? '—'}, ${f ? pct(f.winTitle) + ' to win the title' : ''}. ${
-      s ? `Currently ${ordinal(s.rank)} in Group ${s.groupId} with ${s.points} pts.` : ''
-    }`,
+    answer: `${t.name} — power rank #${pr?.rank ?? '—'}, ${f ? pct(f.winTitle) + ' to win the title' : ''}. ${status}`,
     columns: ['Metric', 'Value'],
     rows: [
-      ['Group position', s ? `${ordinal(s.rank)} (Group ${s.groupId})` : '—'],
+      ['Status', status || '—'],
+      ['Group finish', s ? `${ordinal(s.rank)} (Group ${s.groupId})` : '—'],
       ['Points', s?.points ?? '—'],
       ['Power rating', pr?.powerRating ?? '—'],
       ['Momentum', pr ? signed(pr.momentum) : '—'],

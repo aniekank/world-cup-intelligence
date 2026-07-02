@@ -188,6 +188,23 @@ describe('AI layer', () => {
     expect(r.answer.toLowerCase()).toContain('round of 16'); // stage filter applied, not the global list
   });
 
+  it('team lookup reports knockout status once the KO stage begins, not a stale group standing (WC-062)', () => {
+    const [team, opponent] = getTeams();
+    const matches = dataset().matches;
+    const base = matches.find((m) => m.homeTeamId === team!.id || m.awayTeamId === team!.id)!;
+    const synthetic = { ...base, id: 'synthetic-ko', stage: 'R32', status: 'FINISHED', homeTeamId: team!.id, awayTeamId: opponent!.id, homeScore: 2, awayScore: 0, penalties: null };
+    matches.push(synthetic as typeof base);
+    try {
+      const r = answerQuery(team!.name);
+      expect(r.answer).not.toContain('Currently'); // group table is history once KO begins
+      expect(r.answer).toContain('Finished');
+      expect(r.answer.toLowerCase()).toContain('round of 16'); // won the R32 -> through to the R16
+    } finally {
+      const i = matches.findIndex((m) => m.id === 'synthetic-ko');
+      if (i >= 0) matches.splice(i, 1);
+    }
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.
