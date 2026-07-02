@@ -344,7 +344,7 @@ function groupStandingsQuery(q: string): NLQueryResult {
   const top = rows[0] ? getTeam(rows[0].teamId) : undefined;
   return {
     query: q, intent: 'group-standings',
-    answer: top && rows[0] ? `${top.name} top ${group.name} with ${rows[0].points} pts from ${rows[0].played}.` : `${group.name} hasn't kicked off yet.`,
+    answer: top && rows[0] ? `${top.name} ${knockoutsBegun() ? 'won' : 'top'} ${group.name} with ${rows[0].points} pts from ${rows[0].played}.` : `${group.name} hasn't kicked off yet.`,
     columns: ['#', 'Team', 'P', 'W', 'D', 'L', 'GD', 'Pts', ''],
     rows: rows.map((r) => { const t = getTeam(r.teamId); return [r.rank, t ? `${t.flag} ${t.name}` : r.teamId, r.played, r.won, r.drawn, r.lost, signed(r.goalDifference), r.points, r.status ?? '']; }),
     entityType: 'team', vizHint: 'table',
@@ -1004,8 +1004,14 @@ function teamWonMatch(m: Match, teamId: string): boolean | null {
  * table is final (history) and the team's actual status is its knockout run —
  * so "Currently 1st in Group H" during the R16 was just wrong. (WC-062)
  */
+// True once any knockout match has kicked off — at which point the group tables
+// are final history, not live standings, so present-tense phrasing goes stale. (WC-062/WC-067)
+function knockoutsBegun(): boolean {
+  return getMatches().some((m) => m.stage !== 'GROUP' && m.status !== 'SCHEDULED');
+}
+
 function teamStatusLine(teamId: string, s: { rank: number; groupId: string; points: number } | undefined): string {
-  const koStarted = getMatches().some((m) => m.stage !== 'GROUP' && m.status !== 'SCHEDULED');
+  const koStarted = knockoutsBegun();
   if (!koStarted) {
     return s ? `Currently ${ordinal(s.rank)} in Group ${s.groupId} with ${s.points} pts.` : '';
   }

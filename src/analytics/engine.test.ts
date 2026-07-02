@@ -274,6 +274,21 @@ describe('AI layer', () => {
     }
   });
 
+  it('reads group standings present-tense in the group phase, past-tense in the knockouts (WC-067)', () => {
+    const before = answerQuery('group A standings');
+    if (before.intent !== 'group-standings' || !before.answer.includes('Group A')) return; // no Group A leader in seed
+    expect(before.answer).toContain(' top '); // group phase (seed has no KO matches) → present tense
+    const matches = dataset().matches;
+    const synth = { ...matches[0]!, id: 'synth-ko-2', stage: 'R32', status: 'FINISHED' };
+    matches.push(synth as typeof matches[0]);
+    try {
+      expect(answerQuery('group A standings').answer).toContain(' won '); // once KO begins → past tense
+    } finally {
+      const i = matches.findIndex((m) => m.id === 'synth-ko-2');
+      if (i >= 0) matches.splice(i, 1);
+    }
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.
