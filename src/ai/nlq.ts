@@ -17,7 +17,7 @@ import { RUNS } from '@/analytics/simulate';
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
-import type { NLQueryResult, PlayerView, Position, Confederation } from '@/domain/types';
+import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
   xg: { key: 'xG', label: 'xG', source: 'stat' },
@@ -25,6 +25,10 @@ const METRICS: Record<string, { key: string; label: string; per90?: boolean; sou
   xa: { key: 'xA', label: 'xA', source: 'stat' },
   'expected assists': { key: 'xA', label: 'xA', source: 'stat' },
   goals: { key: 'goals', label: 'Goals', source: 'stat' },
+  scored: { key: 'goals', label: 'Goals', source: 'stat' },
+  scorers: { key: 'goals', label: 'Goals', source: 'stat' },
+  goalscorers: { key: 'goals', label: 'Goals', source: 'stat' },
+  'goal scorers': { key: 'goals', label: 'Goals', source: 'stat' },
   assists: { key: 'assists', label: 'Assists', source: 'stat' },
   playmaker: { key: 'assists', label: 'Assists', source: 'stat' },
   playmakers: { key: 'assists', label: 'Assists', source: 'stat' },
@@ -158,6 +162,74 @@ function detectScope(q: string): Scope | null {
     }
   }
   return detectClubScope(lower);
+}
+
+// ── Stage-scoped, event-derived counting ─────────────────────────────────────
+// "which players got red cards in the round of 32" needs two things the aggregate
+// leaderboard can't do: filter by match STAGE, and read from the live event
+// timeline (the per-player season aggregate lags/omits — e.g. Balogun's R32 red
+// card is in the events but not yet his card tally). So for countable events
+// (goals, cards, assists) with a stage in the query, we tally straight from the
+// match events of that stage. (WC-060)
+const KO_STAGES: MatchStage[] = ['R32', 'R16', 'QF', 'SF', 'THIRD_PLACE', 'FINAL'];
+function detectStage(lower: string): { stages: Set<MatchStage>; label: string } | null {
+  if (/round of 32|last 32|\br32\b/.test(lower)) return { stages: new Set(['R32']), label: 'in the Round of 32' };
+  if (/round of 16|last 16|\br16\b/.test(lower)) return { stages: new Set(['R16']), label: 'in the Round of 16' };
+  if (/quarter[- ]?final|\bqf\b/.test(lower)) return { stages: new Set(['QF']), label: 'in the quarter-finals' };
+  if (/semi[- ]?final|\bsf\b/.test(lower)) return { stages: new Set(['SF']), label: 'in the semi-finals' };
+  if (/third[- ]?place/.test(lower)) return { stages: new Set(['THIRD_PLACE']), label: 'in the third-place play-off' };
+  if (/knockout|playoff/.test(lower)) return { stages: new Set(KO_STAGES), label: 'in the knockouts' };
+  if (/group stage|group phase|\bgroups\b/.test(lower)) return { stages: new Set(['GROUP']), label: 'in the group stage' };
+  if (/\bfinal\b/.test(lower)) return { stages: new Set(['FINAL']), label: 'in the final' };
+  return null;
+}
+
+// metric key → event predicate. Only these are countable from the timeline.
+const EVENT_COUNT: Record<string, (e: MatchEvent) => boolean> = {
+  goals: (e) => (e.type === 'GOAL' || e.type === 'PENALTY_GOAL') && e.minute <= 120,
+  redCards: (e) => e.type === 'RED_CARD' || e.type === 'SECOND_YELLOW',
+  yellowCards: (e) => e.type === 'YELLOW_CARD',
+  assists: (e) => e.type === 'GOAL' || e.type === 'PENALTY_GOAL',
+};
+
+function stageEventLeaderboard(
+  q: string,
+  metric: { key: string; label: string },
+  stage: { stages: Set<MatchStage>; label: string },
+  scope: Scope | null,
+  pos: Position | null,
+): NLQueryResult {
+  const counter = EVENT_COUNT[metric.key]!;
+  const isAssist = metric.key === 'assists';
+  const views = new Map(getPlayerViews().map((p) => [p.id, p]));
+  const counts = new Map<string, number>();
+  for (const m of getMatches()) {
+    if (!stage.stages.has(m.stage)) continue;
+    for (const e of m.events ?? []) {
+      if (!counter(e)) continue;
+      const pid = isAssist ? e.relatedPlayerId : e.playerId;
+      if (pid) counts.set(pid, (counts.get(pid) ?? 0) + 1);
+    }
+  }
+  let ranked = [...counts.entries()]
+    .map(([id, v]) => ({ p: views.get(id), v }))
+    .filter((x): x is { p: PlayerView; v: number } => !!x.p);
+  if (pos) ranked = ranked.filter((x) => x.p.position === pos);
+  if (scope) ranked = ranked.filter((x) => scope.filter(x.p));
+  ranked.sort((a, b) => b.v - a.v);
+  const top = ranked.slice(0, 12);
+  const scopeLabel = scope ? ` ${scope.label}` : '';
+  const posLabel = pos ? ` ${posName(pos)}` : '';
+  const answer = top[0]
+    ? `${top[0].p.name} (${top[0].p.team.code}) leads${posLabel} ${metric.label} ${stage.label}${scopeLabel} with ${top[0].v}.`
+    : `No ${metric.label.toLowerCase()} recorded ${stage.label}${scopeLabel} yet.`;
+  return {
+    query: q, intent: 'leaderboard', answer,
+    columns: ['#', 'Player', 'Team', metric.label],
+    rows: top.map((r, i) => [i + 1, r.p.name, r.p.team.code, r.v]),
+    entityType: 'player', vizHint: 'bar',
+    followUps: ['Who has the most goals?', 'Most yellow cards in the knockouts', 'Show under-the-radar breakout players'],
+  };
 }
 
 // Entity detection delegates to the shared resolver (src/ai/query/resolver) — the
@@ -495,6 +567,11 @@ function leaderboardQuery(q: string, metric: { key: string; label: string; sourc
   const asc = /\bfewest\b|\bleast\b|\blowest\b|\bbottom\b/.test(lower); // ascending sort (WC-059)
   const per90 = lower.includes('per 90') || lower.includes('per90');
   const minMinutes = per90 ? 180 : 1;
+
+  // Stage-scoped countable events (goals / cards / assists "in the round of 32")
+  // → tally straight from the timeline, which the season aggregate can't do. (WC-060)
+  const stage = detectStage(lower);
+  if (stage && EVENT_COUNT[metric.key] && !per90) return stageEventLeaderboard(q, metric, stage, scope, pos);
 
   let pool = getPlayerViews().filter((p) => p.stats.minutes >= minMinutes);
   if (pos) pool = pool.filter((p) => p.position === pos);

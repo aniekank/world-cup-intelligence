@@ -181,6 +181,12 @@ describe('AI layer', () => {
     for (const row of r.rows) expect(row[2]).toBe(team.code); // every ranked row is that nation
   });
 
+  it('routes a stage-scoped card query to a filtered leaderboard (WC-060)', () => {
+    const r = answerQuery('which players got red cards in the round of 16');
+    expect(r.intent).toBe('leaderboard');
+    expect(r.answer.toLowerCase()).toContain('round of 16'); // stage filter applied, not the global list
+  });
+
   it('routes a topic it has no data for to a help message, not a wrong page', () => {
     expect(answerQuery('is Mbappe injured').intent).toBe('unsupported');
   });
