@@ -5,6 +5,7 @@ import { engine } from '@/analytics';
 import { predictMatch, scoreMatrix } from '@/analytics/poisson';
 import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
 import { answerQuery } from '@/ai/nlq';
+import { extractTeams } from '@/ai/query/resolver';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport } from '@/ai/narratives';
 
@@ -203,6 +204,27 @@ describe('AI layer', () => {
       const i = matches.findIndex((m) => m.id === 'synthetic-ko');
       if (i >= 0) matches.splice(i, 1);
     }
+  });
+
+  it('answers "team\'s goalkeeper" as a roster-by-position query (WC-063)', () => {
+    const team = getTeams().find((t) => getPlayerViews().some((p) => p.teamId === t.id && p.position === 'GK'));
+    if (!team) return; // no keeper in seed
+    const r = answerQuery(`who is ${team.name}'s goalkeeper`);
+    expect(r.intent).toBe('team-position');
+    expect(r.answer.toLowerCase()).toContain('goalkeeper');
+    // "captain" is not a position — must NOT mis-fire into the position branch
+    expect(answerQuery(`who is ${team.name}'s captain`).intent).not.toBe('team-position');
+  });
+
+  it('resolves a distinctive single token of a multi-word team name (WC-063)', () => {
+    const teams = getTeams();
+    const norm = (s: string) => s.toLowerCase();
+    const counts = new Map<string, number>();
+    for (const t of teams) for (const tok of new Set(norm(t.name).split(/\s+/))) if (tok.length >= 4) counts.set(tok, (counts.get(tok) ?? 0) + 1);
+    let hit: { team: (typeof teams)[number]; tok: string } | null = null;
+    for (const t of teams) for (const tok of new Set(norm(t.name).split(/\s+/))) if (tok.length >= 4 && counts.get(tok) === 1 && norm(t.name) !== tok) { hit = { team: t, tok }; break; }
+    if (!hit) return; // seed has only single-word team names — nothing to test
+    expect(extractTeams(hit.tok, 1)[0]?.id).toBe(hit.team.id); // "congo" -> "Congo DR"
   });
 
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {

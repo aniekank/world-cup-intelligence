@@ -210,6 +210,27 @@ export function extractTeams(sentence: string, limit = 2): Team[] {
       }
     if (s > 0) scored.push({ t, s });
   }
+  // Fallback: a distinctive token of a multi-word name — "Congo" for "Congo DR",
+  // "Korea" for "Korea Republic", "Verde" for "Cape Verde Islands" — but only
+  // when that token belongs to exactly one team, so we never guess between
+  // ambiguous names. (WC-063)
+  if (!scored.length) {
+    const owners = new Map<string, Team[]>();
+    for (const t of getTeams())
+      for (const tok of new Set(normalize(t.name).split(' ').filter(Boolean)))
+        if (tok.length >= 4) {
+          const a = owners.get(tok) ?? [];
+          a.push(t);
+          owners.set(tok, a);
+        }
+    for (const tok of sTokens) {
+      const os = owners.get(tok);
+      if (os && os.length === 1) {
+        scored.push({ t: os[0]!, s: tok.length });
+        break;
+      }
+    }
+  }
   scored.sort((a, b) => b.s - a.s);
   return scored.slice(0, limit).map((x) => x.t);
 }

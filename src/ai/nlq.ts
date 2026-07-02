@@ -507,6 +507,14 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return leaderboardQuery(q, metric);
   }
 
+  // ── A team's players at a position: "who is England's goalkeeper", "Belgium's
+  //    strikers", "tell me about Congo's keeper". Team + position, no metric. ──
+  {
+    const teamForPos = detectTeam(q);
+    const posForTeam = findPosition(lower);
+    if (teamForPos && posForTeam) return teamPositionQuery(q, teamForPos.id, posForTeam);
+  }
+
   // ── Topics we genuinely don't hold data for → say so, don't mis-route ──
   if (/injur|fitness|suspend|\bbanned\b|transfer|\bsigning\b|\bsold\b|salary|wage|contract|ticket|broadcast|kit\b|jersey/.test(lower)) {
     return {
@@ -954,6 +962,40 @@ function teamStatusLine(teamId: string, s: { rank: number; groupId: string; poin
     return next ? `${groupFinish}; through to the ${STAGE_LABEL[next]}.` : `${groupFinish}; won their ${STAGE_LABEL[last.stage]} tie.`;
   }
   return `${groupFinish}; in the knockout rounds.`;
+}
+
+// "Who is England's goalkeeper" / "Belgium's strikers" — a team's players at a
+// position, ordered by minutes so the first-choice (most-used) name leads. (WC-063)
+function teamPositionQuery(q: string, teamId: string, pos: Position): NLQueryResult {
+  const t = getTeam(teamId)!;
+  const squad = getPlayerViews()
+    .filter((p) => p.teamId === teamId && p.position === pos)
+    .sort((a, b) => b.stats.minutes - a.stats.minutes);
+  const label = posName(pos).toLowerCase();
+  if (!squad.length) {
+    return {
+      query: q, intent: 'team-position',
+      answer: `I don't have any ${label} listed for ${t.name}.`,
+      columns: [], rows: [], entityType: 'team', vizHint: 'none',
+      followUps: [`${t.name} path to the final`, 'Who is most likely to win the tournament?', 'Strongest attack in the tournament'],
+    };
+  }
+  const isGK = pos === 'GK';
+  const starter = squad[0]!;
+  const others = squad.length - 1;
+  const answer = isGK
+    ? `${starter.name} is ${t.name}'s first-choice goalkeeper (${starter.stats.minutes} min this tournament)${others > 0 ? `, ahead of ${others} other keeper${others > 1 ? 's' : ''} in the squad` : ''}.`
+    : `${t.name}'s ${label}s by minutes played: ${squad.slice(0, 3).map((p) => p.name).join(', ')}${squad.length > 3 ? `, +${squad.length - 3} more` : ''}.`;
+  const columns = isGK ? ['Goalkeeper', 'Mins', 'Saves', 'Clean sheets'] : [posName(pos), 'Mins', 'Goals', 'Assists'];
+  const rows = squad.map((p): (string | number)[] => (isGK
+    ? [p.name, p.stats.minutes, p.stats.saves, p.stats.cleanSheets]
+    : [p.name, p.stats.minutes, p.stats.goals, p.stats.assists]));
+  return {
+    query: q, intent: 'team-position',
+    answer, columns, rows,
+    entityType: 'player', vizHint: 'table',
+    followUps: [`${t.name} path to the final`, isGK ? 'Who has kept the most clean sheets?' : `Top scorer for ${t.name}`, 'Who is most likely to win the tournament?'],
+  };
 }
 
 function teamLookup(q: string, teamId: string): NLQueryResult {
