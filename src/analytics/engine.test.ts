@@ -172,6 +172,15 @@ describe('AI layer', () => {
     expect(answerQuery('youngest player at the tournament').intent).toBe('age');
   });
 
+  it('scopes "most goals" by nationality demonym, not the global golden boot (WC-059)', () => {
+    const demo: Record<string, string> = { belgium: 'belgian', spain: 'spanish', brazil: 'brazilian', france: 'french', germany: 'german', argentina: 'argentine', mexico: 'mexican', croatia: 'croatian', england: 'english', portugal: 'portuguese' };
+    const team = getTeams().find((t) => demo[t.name.toLowerCase()]);
+    if (!team) return; // no demonym-mappable nation in this seed
+    const r = answerQuery(`which ${demo[team.name.toLowerCase()]} player has the most goals`);
+    expect(r.intent).toBe('leaderboard'); // rerouted from golden-boot by the scope
+    for (const row of r.rows) expect(row[2]).toBe(team.code); // every ranked row is that nation
+  });
+
   it('routes a topic it has no data for to a help message, not a wrong page', () => {
     expect(answerQuery('is Mbappe injured').intent).toBe('unsupported');
   });

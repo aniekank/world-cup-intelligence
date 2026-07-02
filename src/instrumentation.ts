@@ -97,6 +97,8 @@ export async function register() {
       await tournamentSummaries();
       const { warmKnockoutHistory } = await import('@/server/knockoutHistory');
       await warmKnockoutHistory(); // index past WCs for the live knockout-context panels
+      const { getClubKeyMap } = await import('@/data/clubAffiliations');
+      await getClubKeyMap(); // warm the club crosswalk so "Ask the data" club filters work first try (WC-059)
     } catch {
       /* non-fatal — the pages will compute it lazily on first visit */
     }

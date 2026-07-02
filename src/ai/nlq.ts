@@ -15,8 +15,9 @@ import { getPlayerViews, getTeams, getTeam, getGroups, getMatches, getTeamMatche
 import { engine } from '@/analytics';
 import { RUNS } from '@/analytics/simulate';
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
+import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
-import type { NLQueryResult, PlayerView, Position } from '@/domain/types';
+import type { NLQueryResult, PlayerView, Position, Confederation } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
   xg: { key: 'xG', label: 'xG', source: 'stat' },
@@ -25,6 +26,8 @@ const METRICS: Record<string, { key: string; label: string; per90?: boolean; sou
   'expected assists': { key: 'xA', label: 'xA', source: 'stat' },
   goals: { key: 'goals', label: 'Goals', source: 'stat' },
   assists: { key: 'assists', label: 'Assists', source: 'stat' },
+  playmaker: { key: 'assists', label: 'Assists', source: 'stat' },
+  playmakers: { key: 'assists', label: 'Assists', source: 'stat' },
   shots: { key: 'shots', label: 'Shots', source: 'stat' },
   'shots on target': { key: 'shotsOnTarget', label: 'SoT', source: 'stat' },
   'key passes': { key: 'keyPasses', label: 'Key passes', source: 'stat' },
@@ -36,10 +39,13 @@ const METRICS: Record<string, { key: string; label: string; per90?: boolean; sou
   minutes: { key: 'minutes', label: 'Minutes', source: 'stat' },
   saves: { key: 'saves', label: 'Saves', source: 'stat' },
   'clean sheets': { key: 'cleanSheets', label: 'Clean sheets', source: 'stat' },
+  shutouts: { key: 'cleanSheets', label: 'Clean sheets', source: 'stat' },
   'yellow cards': { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
   yellows: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
   'red cards': { key: 'redCards', label: 'Red cards', source: 'stat' },
   bookings: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  booked: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
+  dirtiest: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
   cards: { key: 'yellowCards', label: 'Yellow cards', source: 'stat' },
   fouls: { key: 'foulsCommitted', label: 'Fouls', source: 'stat' },
   'pass accuracy': { key: 'passAccuracy', label: 'Pass %', source: 'per90' },
@@ -47,9 +53,10 @@ const METRICS: Record<string, { key: string; label: string; per90?: boolean; sou
 };
 
 const POSITIONS: Record<string, Position> = {
-  midfielder: 'MF', midfielders: 'MF', midfield: 'MF',
+  midfielder: 'MF', midfielders: 'MF', midfield: 'MF', mids: 'MF',
   forward: 'FW', forwards: 'FW', striker: 'FW', strikers: 'FW', attacker: 'FW', attackers: 'FW', winger: 'FW', wingers: 'FW',
-  defender: 'DF', defenders: 'DF', 'centre-back': 'DF', 'center-back': 'DF', 'full-back': 'DF',
+  defender: 'DF', defenders: 'DF', 'centre-back': 'DF', 'center-back': 'DF', 'centre backs': 'DF', 'center backs': 'DF',
+  'full-back': 'DF', fullback: 'DF', fullbacks: 'DF', backs: 'DF',
   goalkeeper: 'GK', goalkeepers: 'GK', keeper: 'GK', goalie: 'GK',
 };
 
@@ -58,6 +65,99 @@ function metricValue(p: PlayerView, m: { key: string; source: 'stat' | 'per90' }
     return (p.per90[m.key] as number) ?? (p.stats as unknown as Record<string, number>)[m.key] ?? 0;
   }
   return (p.stats as unknown as Record<string, number>)[m.key] ?? 0;
+}
+
+// ── Player-scope semantic maps ───────────────────────────────────────────────
+// The leaderboard/extreme queries can filter a player pool, but the detector only
+// knew team names, codes and a few noun aliases. These maps let a question scope
+// the pool by nationality adjective, region/confederation, or club/league, so
+// "which spanish player has the most goals" filters to Spain. (WC-059)
+
+// Nationality adjective → the nation as the shared resolver knows it.
+const DEMONYMS: Record<string, string> = {
+  spanish: 'spain', brazilian: 'brazil', argentine: 'argentina', argentinian: 'argentina',
+  german: 'germany', french: 'france', english: 'england', portuguese: 'portugal', italian: 'italy',
+  dutch: 'netherlands', belgian: 'belgium', croatian: 'croatia', mexican: 'mexico', american: 'united states',
+  japanese: 'japan', korean: 'south korea', 'south korean': 'south korea', moroccan: 'morocco',
+  senegalese: 'senegal', ghanaian: 'ghana', nigerian: 'nigeria', egyptian: 'egypt', algerian: 'algeria',
+  ivorian: 'ivory coast', cameroonian: 'cameroon', tunisian: 'tunisia', 'south african': 'south africa',
+  uruguayan: 'uruguay', colombian: 'colombia', chilean: 'chile', ecuadorian: 'ecuador', peruvian: 'peru',
+  paraguayan: 'paraguay', bolivian: 'bolivia', venezuelan: 'venezuela',
+  swiss: 'switzerland', austrian: 'austria', polish: 'poland', danish: 'denmark', swedish: 'sweden',
+  norwegian: 'norway', serbian: 'serbia', welsh: 'wales', scottish: 'scotland', irish: 'ireland',
+  czech: 'czech republic', turkish: 'turkey', ukrainian: 'ukraine', greek: 'greece', russian: 'russia',
+  australian: 'australia', canadian: 'canada', 'new zealander': 'new zealand',
+  saudi: 'saudi arabia', qatari: 'qatar', iranian: 'iran', iraqi: 'iraq', jordanian: 'jordan', uzbek: 'uzbekistan',
+  jamaican: 'jamaica', panamanian: 'panama', 'costa rican': 'costa rica', honduran: 'honduras',
+  'cape verdean': 'cape verde', bosnian: 'bosnia', congolese: 'dr congo', curacaoan: 'curacao',
+};
+
+// Region / confederation words → confederation code.
+const CONFEDERATIONS: Record<string, Confederation> = {
+  european: 'UEFA', europe: 'UEFA', uefa: 'UEFA',
+  'south american': 'CONMEBOL', 'south america': 'CONMEBOL', conmebol: 'CONMEBOL',
+  african: 'CAF', africa: 'CAF', caf: 'CAF',
+  asian: 'AFC', asia: 'AFC', afc: 'AFC',
+  'north american': 'CONCACAF', 'central american': 'CONCACAF', concacaf: 'CONCACAF',
+  oceanian: 'OFC', oceania: 'OFC', ofc: 'OFC',
+};
+const REGION_LABEL: Record<Confederation, string> = {
+  UEFA: 'European', CONMEBOL: 'South American', CONCACAF: 'CONCACAF', CAF: 'African', AFC: 'Asian', OFC: 'Oceanian',
+};
+
+type Scope = { filter: (p: PlayerView) => boolean; label: string };
+
+/** A player's club affiliation via the surname+dob crosswalk (live edition only). */
+function playerClub(p: PlayerView, keyMap: Map<string, ClubAffiliation>): ClubAffiliation | undefined {
+  for (const k of clubMatchKeys(p.fullName ?? p.name, p.birthDate)) { const a = keyMap.get(k); if (a) return a; }
+  return undefined;
+}
+
+/** The club-affiliation map is loaded async + cached on globalThis. Read it
+ *  synchronously (answerQuery is sync); if it isn't warm yet, kick off a load for
+ *  next time and skip club scoping this call rather than block. */
+function currentClubKeyMap(): Map<string, ClubAffiliation> | null {
+  const g = globalThis as unknown as { __wcClubsByKey?: Map<string, ClubAffiliation> };
+  if (g.__wcClubsByKey) return g.__wcClubsByKey;
+  void getClubKeyMap().catch(() => {}); // warm for next time
+  return null;
+}
+
+/** A club or league named in the query → a player filter. */
+function detectClubScope(lower: string): Scope | null {
+  const keyMap = currentClubKeyMap();
+  if (!keyMap || !keyMap.size) return null;
+  const clubs = new Set<string>();
+  const leagues = new Set<string>();
+  for (const a of keyMap.values()) { clubs.add(a.club); if (a.leagueShort) leagues.add(a.leagueShort); if (a.league) leagues.add(a.league); }
+  const longest = (names: Set<string>): string | null => {
+    let best: string | null = null;
+    for (const n of names) { const ln = n.toLowerCase(); if (ln.length >= 4 && lower.includes(ln) && (!best || n.length > best.length)) best = n; }
+    return best;
+  };
+  const club = longest(clubs);
+  if (club) return { filter: (p) => playerClub(p, keyMap)?.club === club, label: `at ${club}` };
+  const league = longest(leagues);
+  if (league) return { filter: (p) => { const a = playerClub(p, keyMap); return a?.league === league || a?.leagueShort === league; }, label: `in the ${league}` };
+  return null;
+}
+
+/** Resolve a player scope from the query: team (name/code/demonym), region/
+ *  confederation, or club/league. Used to filter any player leaderboard. */
+function detectScope(q: string): Scope | null {
+  const lower = q.toLowerCase();
+  const team = detectTeam(q);
+  if (team) return { filter: (p) => p.teamId === team.id, label: `for ${team.name}` };
+  for (const [adj, nation] of Object.entries(DEMONYMS)) {
+    if (new RegExp(`\\b${adj}\\b`).test(lower)) { const t = extractTeam(nation); if (t) return { filter: (p) => p.teamId === t.id, label: `for ${t.name}` }; }
+  }
+  for (const [word, conf] of Object.entries(CONFEDERATIONS)) {
+    if (new RegExp(`\\b${word}\\b`).test(lower)) {
+      const ids = new Set(getTeams().filter((t) => t.confederation === conf).map((t) => t.id));
+      if (ids.size) return { filter: (p) => ids.has(p.teamId), label: `among ${REGION_LABEL[conf]} teams` };
+    }
+  }
+  return detectClubScope(lower);
 }
 
 // Entity detection delegates to the shared resolver (src/ai/query/resolver) — the
@@ -209,10 +309,12 @@ function fixtureQuery(q: string): NLQueryResult {
 
 function extremeQuery(q: string, field: 'age' | 'heightCm', dir: 'min' | 'max'): NLQueryResult {
   const pos = findPosition(q.toLowerCase());
+  const scope = detectScope(q);
   const valOf = (p: PlayerView) => (field === 'age' ? p.age : p.heightCm);
   const valid = (p: PlayerView) => (field === 'age' ? p.age >= 14 && p.age <= 55 : p.heightCm >= 140 && p.heightCm <= 220);
   let pool = getPlayerViews().filter((p) => valid(p) && p.stats.minutes >= 1);
   if (pos) pool = pool.filter((p) => p.position === pos);
+  if (scope) pool = pool.filter(scope.filter);
   const intent = field === 'age' ? 'age' : 'height';
   if (pool.length === 0) {
     return { query: q, intent, answer: `Player ${field === 'age' ? 'ages' : 'heights'} aren't available for this edition.`, columns: [], rows: [], entityType: 'player', vizHint: 'none', followUps: ['Who has the most goals?', 'Show under-the-radar breakout players'] };
@@ -223,7 +325,7 @@ function extremeQuery(q: string, field: 'age' | 'heightCm', dir: 'min' | 'max'):
   const show = (p: PlayerView) => (field === 'age' ? `${p.age}` : `${p.heightCm}cm`);
   return {
     query: q, intent,
-    answer: `${lead.name} (${lead.team.code}) is the ${word}${pos ? ` ${posName(pos)}` : ''} on the pitch at ${show(lead)}.`,
+    answer: `${lead.name} (${lead.team.code}) is the ${word}${pos ? ` ${posName(pos)}` : ''}${scope ? ` ${scope.label}` : ' on the pitch'} at ${show(lead)}.`,
     columns: ['#', 'Player', 'Team', field === 'age' ? 'Age' : 'Height'],
     rows: sorted.map((p, i) => [i + 1, p.name, p.team.code, show(p)]),
     entityType: 'player', vizHint: 'table',
@@ -290,6 +392,10 @@ export function answerQuery(rawQuery: string): NLQueryResult {
 
   // ── Golden boot ──
   if (lower.includes('golden boot') || lower.includes('top scorer') || lower.includes('most goals')) {
+    // A scoped or positional "most goals" ("which Spanish player…", "top scoring
+    // midfielder") is a filtered goals leaderboard, not the global golden-boot
+    // race. Route it to the leaderboard so the scope/position actually applies. (WC-059)
+    if (detectScope(q) || findPosition(lower)) return leaderboardQuery(q, METRICS['goals']!);
     return goldenBootQuery(q);
   }
 
@@ -385,25 +491,28 @@ function findPosition(lower: string): Position | null {
 function leaderboardQuery(q: string, metric: { key: string; label: string; source: 'stat' | 'per90' }): NLQueryResult {
   const lower = q.toLowerCase();
   const pos = findPosition(lower);
-  const team = detectTeam(q);
+  const scope = detectScope(q);
+  const asc = /\bfewest\b|\bleast\b|\blowest\b|\bbottom\b/.test(lower); // ascending sort (WC-059)
   const per90 = lower.includes('per 90') || lower.includes('per90');
   const minMinutes = per90 ? 180 : 1;
 
   let pool = getPlayerViews().filter((p) => p.stats.minutes >= minMinutes);
   if (pos) pool = pool.filter((p) => p.position === pos);
-  if (team) pool = pool.filter((p) => p.teamId === team.id);
+  if (scope) pool = pool.filter(scope.filter);
 
   const ranked = pool
     .map((p) => ({ p, v: metricValue(p, metric, per90) }))
-    .sort((a, b) => b.v - a.v)
+    .sort((a, b) => (asc ? a.v - b.v : b.v - a.v))
     .slice(0, 10);
 
   const top = ranked[0];
-  const posLabel = pos ? ` ${posName(pos)}` : '';
-  const teamLabel = team ? ` for ${team.name}` : '';
-  const answer = top
-    ? `${top.p.name} (${top.p.team.code}) leads all${posLabel}s${teamLabel} with ${fmt(top.v)} ${metric.label}${per90 ? ' per 90' : ''}.`
-    : 'No players match that filter yet.';
+  const noun = pos ? `${posName(pos)}s` : 'players';
+  const scopeLabel = scope ? ` ${scope.label}` : '';
+  const answer = !top
+    ? 'No players match that filter yet.'
+    : asc
+      ? `${top.p.name} (${top.p.team.code}) has the fewest ${metric.label}${scopeLabel} at ${fmt(top.v)}${per90 ? ' per 90' : ''}.`
+      : `${top.p.name} (${top.p.team.code}) leads all ${noun}${scopeLabel} with ${fmt(top.v)} ${metric.label}${per90 ? ' per 90' : ''}.`;
 
   return {
     query: q,
