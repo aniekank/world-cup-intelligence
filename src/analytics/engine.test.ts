@@ -6,6 +6,7 @@ import { predictMatch, scoreMatrix } from '@/analytics/poisson';
 import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
 import { answerQuery } from '@/ai/nlq';
 import { extractTeams } from '@/ai/query/resolver';
+import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport } from '@/ai/narratives';
 
@@ -232,6 +233,29 @@ describe('AI layer', () => {
     expect(answerQuery('hardest path to the final').intent).toBe('hardest-path'); // was stolen by the "path"+"final" catch-all
     expect(answerQuery('most likely to win the golden boot').intent).toBe('golden-boot'); // not 'title-odds'
     expect(answerQuery('who will win the world cup').intent).toBe('title-odds'); // control, still the title race
+  });
+
+  it('derives keeper clean sheets from shutout results (WC-065)', () => {
+    const snap = {
+      matches: [
+        { status: 'FINISHED', homeTeamId: 'a', awayTeamId: 'b', homeScore: 2, awayScore: 0 }, // A shutout
+        { status: 'FINISHED', homeTeamId: 'a', awayTeamId: 'c', homeScore: 1, awayScore: 0 }, // A shutout
+        { status: 'FINISHED', homeTeamId: 'a', awayTeamId: 'd', homeScore: 0, awayScore: 1 }, // A conceded
+      ],
+      players: [{ id: 'gkA', teamId: 'a', position: 'GK' }, { id: 'gkA2', teamId: 'a', position: 'GK' }],
+      playerStats: { gkA: { minutes: 270, cleanSheets: 0 }, gkA2: { minutes: 0, cleanSheets: 0 } },
+    } as unknown as Parameters<typeof deriveCleanSheets>[0];
+    expect(deriveCleanSheets(snap)).toBe(1);
+    expect(snap.playerStats.gkA!.cleanSheets).toBe(2); // both shutouts → first-choice keeper
+    expect(snap.playerStats.gkA2!.cleanSheets).toBe(0); // backup gets none
+  });
+
+  it('routes today/fixture queries and scales attack/defense to 0-100 (WC-065)', () => {
+    expect(answerQuery('who plays today').intent).toBe('fixture');
+    expect(answerQuery(`does ${getTeams()[0]!.name} play today`).intent).toBe('fixture'); // "play today" now routes
+    const r = answerQuery('strongest attack in the tournament');
+    expect(r.intent).toBe('best-attack');
+    expect(r.rows[0]![1]).toBe(100); // leader rescaled to field-relative 100, not a raw ~34
   });
 
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {

@@ -353,9 +353,10 @@ export async function loadTournamentSnapshot(id: string): Promise<DatasetSnapsho
     // coach careers, played-match tactical stats) — a synchronous in-memory
     // merge, no network. Future matches fall through to enrichLiveMatchStats.
     try {
-      const { applyFrozenOverlay } = await import('./providers/frozenOverlay');
+      const { applyFrozenOverlay, deriveCleanSheets } = await import('./providers/frozenOverlay');
       const o = await applyFrozenOverlay(snap);
-      console.log(`[data] Frozen overlay: ${o.feet} feet, ${o.stats} player stat lines, ${o.coaches} coaches, ${o.matches} match stat sets.`);
+      const cs = deriveCleanSheets(snap); // API-Football has no clean-sheet field — derive from results (WC-065)
+      console.log(`[data] Frozen overlay: ${o.feet} feet, ${o.stats} player stat lines, ${o.coaches} coaches, ${o.matches} match stat sets; ${cs} keeper clean-sheet tallies derived.`);
     } catch (e) {
       console.warn('[data] Frozen overlay skipped (non-fatal):', e);
     }

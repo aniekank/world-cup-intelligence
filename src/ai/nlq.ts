@@ -356,9 +356,21 @@ function fixtureKick(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
 }
 function fixtureQuery(q: string): NLQueryResult {
+  const lower = q.toLowerCase();
+  const todayOnly = /\btoday\b|\btonight\b/.test(lower); // "who plays today" should mean today, not the next 8 (WC-065)
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = (m: Match) => m.kickoff.slice(0, 10) === today;
+  const upNext = (m: Match) => m.status === 'SCHEDULED' || m.status === 'LIVE' || m.status === 'HALFTIME';
+
   const team = detectTeam(q);
   if (team) {
-    const next = getTeamMatches(team.id).filter((mm) => mm.status === 'SCHEDULED').sort((a, b) => a.kickoff.localeCompare(b.kickoff))[0];
+    const next = getTeamMatches(team.id).filter(upNext).sort((a, b) => a.kickoff.localeCompare(b.kickoff))[0];
+    if (todayOnly) {
+      const answer = next && isToday(next)
+        ? `Yes — ${team.name} play ${getTeam(next.homeTeamId === team.id ? next.awayTeamId : next.homeTeamId)?.name ?? '?'} today (${fixtureKick(next.kickoff)}).`
+        : `${team.name} do not play today.`;
+      return { query: q, intent: 'fixture', answer, columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: [`When does ${team.name} play next?`, 'Who plays today?'] };
+    }
     if (!next) {
       return { query: q, intent: 'fixture', answer: `${team.name} have no upcoming fixtures in the data — their group games are done (knockout ties are drawn once the group stage finishes).`, columns: [], rows: [], entityType: 'team', vizHint: 'none', followUps: [`${team.name}'s playing style`, 'Who is most likely to win the tournament?'] };
     }
@@ -366,12 +378,14 @@ function fixtureQuery(q: string): NLQueryResult {
     const venue = next.venue && next.venue !== 'TBD' ? ` at ${next.venue}` : '';
     return { query: q, intent: 'fixture', answer: `${team.name} next play ${opp?.name ?? '?'} on ${fixtureKick(next.kickoff)}${venue}.`, columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: [`${team.name}'s playing style`, opp ? `${opp.name}'s playing style` : 'Who is most likely to win the tournament?'] };
   }
-  const upcoming = getMatches().filter((mm) => mm.status === 'SCHEDULED').sort((a, b) => a.kickoff.localeCompare(b.kickoff)).slice(0, 8);
+  let pool = getMatches().filter(upNext).sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+  if (todayOnly) pool = pool.filter(isToday);
+  const upcoming = pool.slice(0, todayOnly ? 24 : 8);
   if (upcoming.length === 0) {
-    return { query: q, intent: 'fixture', answer: 'No upcoming fixtures are scheduled in the data right now.', columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: ['Who is most likely to win the tournament?'] };
+    return { query: q, intent: 'fixture', answer: todayOnly ? 'No matches are scheduled for today.' : 'No upcoming fixtures are scheduled in the data right now.', columns: [], rows: [], entityType: 'match', vizHint: 'none', followUps: ['Who is most likely to win the tournament?'] };
   }
   return {
-    query: q, intent: 'fixture', answer: `The next ${upcoming.length} fixtures:`,
+    query: q, intent: 'fixture', answer: todayOnly ? `Today's ${upcoming.length} match${upcoming.length === 1 ? '' : 'es'}:` : `The next ${upcoming.length} fixtures:`,
     columns: ['Match', 'Kickoff', 'Stage'],
     rows: upcoming.map((mm) => { const h = getTeam(mm.homeTeamId), a = getTeam(mm.awayTeamId); return [`${h?.flag ?? ''} ${h?.name ?? '?'} v ${a?.name ?? '?'} ${a?.flag ?? ''}`.trim(), fixtureKick(mm.kickoff), mm.stage === 'GROUP' ? `MD${mm.matchday}` : mm.stage]; }),
     entityType: 'match', vizHint: 'table',
@@ -482,7 +496,7 @@ export function answerQuery(rawQuery: string): NLQueryResult {
   }
 
   // ── Fixtures / schedule: "when does X play next", "next fixtures" ──
-  if (lower.includes('next match') || lower.includes('next game') || lower.includes('next fixture') || lower.includes('fixtures') || lower.includes('schedule') || ((lower.includes('when') || lower.includes('next')) && lower.includes('play')) || (lower.includes('who plays') && lower.includes('today'))) {
+  if (lower.includes('next match') || lower.includes('next game') || lower.includes('next fixture') || lower.includes('fixtures') || lower.includes('schedule') || ((lower.includes('when') || lower.includes('next')) && lower.includes('play')) || ((lower.includes('today') || lower.includes('tonight')) && (lower.includes('play') || lower.includes('fixture') || lower.includes('match')))) {
     return fixtureQuery(q);
   }
 
@@ -886,6 +900,17 @@ function titleQuery(q: string): NLQueryResult {
 
 function teamUnitQuery(q: string, unit: 'offense' | 'defense'): NLQueryResult {
   const eng = engine();
+  // The raw offense/defense ratings feed the Poisson model, but they land on
+  // different effective scales when xG data is sparse (offense compresses low,
+  // defense inflates high) — so "strongest attack rated 34/100" read weirdly next
+  // to a 100/100 defense. Rescale to a field-relative 0-100 for DISPLAY ONLY, so
+  // both units share one scale and the leader reads as 100. (WC-065)
+  const offs = eng.powerRankings.map((r) => r.offenseRating);
+  const defs = eng.powerRankings.map((r) => r.defenseRating);
+  const scale = (v: number, arr: number[]) => {
+    const mn = Math.min(...arr), mx = Math.max(...arr);
+    return mx > mn ? Math.round(((v - mn) / (mx - mn)) * 100) : 50;
+  };
   const ranked = [...eng.powerRankings]
     .sort((a, b) => (unit === 'offense' ? b.offenseRating - a.offenseRating : b.defenseRating - a.defenseRating))
     .slice(0, 10);
@@ -894,11 +919,11 @@ function teamUnitQuery(q: string, unit: 'offense' | 'defense'): NLQueryResult {
   return {
     query: q,
     intent: unit === 'offense' ? 'best-attack' : 'best-defense',
-    answer: `${leadTeam.name} have the tournament's strongest ${unit}, rated ${unit === 'offense' ? lead.offenseRating : lead.defenseRating}/100.`,
+    answer: `${leadTeam.name} have the tournament's strongest ${unit}, rated ${scale(unit === 'offense' ? lead.offenseRating : lead.defenseRating, unit === 'offense' ? offs : defs)}/100.`,
     columns: ['Team', 'Offense', 'Defense', 'Power', 'Momentum'],
     rows: ranked.map((r) => {
       const t = getTeam(r.teamId)!;
-      return [`${t.flag} ${t.name}`, r.offenseRating, r.defenseRating, r.powerRating, signed(r.momentum)];
+      return [`${t.flag} ${t.name}`, scale(r.offenseRating, offs), scale(r.defenseRating, defs), r.powerRating, signed(r.momentum)];
     }),
     entityType: 'team',
     vizHint: 'bar',

@@ -198,6 +198,42 @@ export async function applyFrozenOverlay(snap: DatasetSnapshot): Promise<{ feet:
 }
 
 /**
+ * Clean sheets aren't in the API-Football player feed, so the leaderboard read 0
+ * for every keeper. Derive them from results: count each team's finished matches
+ * with a shutout and credit them to that team's first-choice (most-minutes)
+ * goalkeeper. An approximation — it attributes all of a team's clean sheets to
+ * its #1 keeper, which is exactly right when one keeper plays every game (the
+ * usual case) and slightly generous when they rotate. Mutates snap.playerStats in
+ * place (the snapshot is freshly fetched). Returns how many keepers were credited. (WC-065)
+ */
+export function deriveCleanSheets(snap: DatasetSnapshot): number {
+  const teamCS = new Map<string, number>();
+  for (const m of snap.matches) {
+    if (m.status !== 'FINISHED') continue;
+    if (m.awayScore === 0) teamCS.set(m.homeTeamId, (teamCS.get(m.homeTeamId) ?? 0) + 1);
+    if (m.homeScore === 0) teamCS.set(m.awayTeamId, (teamCS.get(m.awayTeamId) ?? 0) + 1);
+  }
+  const topGk = new Map<string, { id: string; minutes: number }>();
+  for (const p of snap.players) {
+    if (p.position !== 'GK') continue;
+    const mins = snap.playerStats[p.id]?.minutes ?? 0;
+    const cur = topGk.get(p.teamId);
+    if (!cur || mins > cur.minutes) topGk.set(p.teamId, { id: p.id, minutes: mins });
+  }
+  let credited = 0;
+  for (const [teamId, cs] of teamCS) {
+    if (cs === 0) continue;
+    const gk = topGk.get(teamId);
+    const st = gk ? snap.playerStats[gk.id] : undefined;
+    if (st && (st.cleanSheets ?? 0) < cs) {
+      st.cleanSheets = cs;
+      credited++;
+    }
+  }
+  return credited;
+}
+
+/**
  * Reconcile player goal/assist tallies for accuracy on the live tournament.
  * API-Football's WC feed is unreliable two ways at once: its per-player season
  * aggregate LAGS a just-finished match, and its event feed DROPS some earlier
