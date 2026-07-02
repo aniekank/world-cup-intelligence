@@ -618,7 +618,7 @@ function leaderboardQuery(q: string, metric: { key: string; label: string; sourc
   const answer = !top
     ? 'No players match that filter yet.'
     : noData
-      ? `No ${metric.label.toLowerCase()}${scopeLabel} recorded yet.`
+      ? `No ${metric.label.startsWith('x') ? metric.label : metric.label.toLowerCase()}${scopeLabel} recorded yet.`
       : asc
         ? `${top.p.name} (${top.p.team.code}) has the fewest ${metric.label}${scopeLabel} at ${fmt(top.v)}${per90 ? ' per 90' : ''}.`
         : `${top.p.name} (${top.p.team.code}) leads all ${noun}${scopeLabel} with ${fmt(top.v)} ${metric.label}${per90 ? ' per 90' : ''}.`;
@@ -935,6 +935,7 @@ function goldenBootQuery(q: string): NLQueryResult {
   const eng = engine();
   const views = new Map(getPlayerViews().map((p) => [p.id, p]));
   const ranked = eng.goldenBoot.slice(0, 12);
+  const hasXg = ranked.some((r) => r.currentXG > 0); // player xG absent on the live feed → hide the column (WC-066)
   const leadView = ranked[0] ? views.get(ranked[0].playerId) : undefined;
   return {
     query: q,
@@ -942,10 +943,14 @@ function goldenBootQuery(q: string): NLQueryResult {
     answer: leadView
       ? `${leadView.name} (${leadView.team.code}) leads the Golden Boot race with ${ranked[0]!.currentGoals} goals, projected to finish on ${ranked[0]!.projectedGoals} (${pct(ranked[0]!.winProbability)} to win it).`
       : 'No scorers yet.',
-    columns: ['#', 'Player', 'Team', 'Goals', 'xG', 'Proj.', 'Win%'],
+    // Player xG isn't in the API-Football feed (0 for everyone), so drop the
+    // column rather than show a 6-goal striker with "0 xG". The projection is
+    // pace-based, not xG-based, so it's unaffected. (WC-066)
+    columns: hasXg ? ['#', 'Player', 'Team', 'Goals', 'xG', 'Proj.', 'Win%'] : ['#', 'Player', 'Team', 'Goals', 'Proj.', 'Win%'],
     rows: ranked.map((r, i) => {
       const v = views.get(r.playerId);
-      return [i + 1, v?.name ?? r.playerId, v?.team.code ?? '', r.currentGoals, r.currentXG, r.projectedGoals, pct(r.winProbability)];
+      const base = [i + 1, v?.name ?? r.playerId, v?.team.code ?? '', r.currentGoals];
+      return hasXg ? [...base, r.currentXG, r.projectedGoals, pct(r.winProbability)] : [...base, r.projectedGoals, pct(r.winProbability)];
     }),
     entityType: 'player',
     vizHint: 'bar',
@@ -958,13 +963,14 @@ function playerLookup(q: string, p: PlayerView): NLQueryResult {
   return {
     query: q,
     intent: 'player-lookup',
-    answer: `${p.name} — ${posName(p.position)} for ${p.team.name}. ${s.goals}G ${s.assists}A, ${fmt(s.xG)} xG in ${s.minutes} minutes. Form index ${s.formIndex}.`,
+    // xG is absent on the live feed (0), so only mention/show it when real. (WC-066)
+    answer: `${p.name} — ${posName(p.position)} for ${p.team.name}. ${s.goals}G ${s.assists}A${s.xG > 0 ? `, ${fmt(s.xG)} xG` : ''} in ${s.minutes} minutes. Form index ${s.formIndex}.`,
     columns: ['Metric', 'Value', 'Percentile (pos)'],
     rows: [
       ['Goals', s.goals, p.percentiles.goals ?? '—'],
       ['Assists', s.assists, p.percentiles.assists ?? '—'],
-      ['xG', fmt(s.xG), p.percentiles.xG ?? '—'],
-      ['xA', fmt(s.xA), p.percentiles.xA ?? '—'],
+      ...(s.xG > 0 ? [['xG', fmt(s.xG), p.percentiles.xG ?? '—'] as (string | number)[]] : []),
+      ...(s.xA > 0 ? [['xA', fmt(s.xA), p.percentiles.xA ?? '—'] as (string | number)[]] : []),
       ['Shots', s.shots, p.percentiles.shots ?? '—'],
       ['Key passes', s.keyPasses, p.percentiles.keyPasses ?? '—'],
       ['Prog. passes', s.progressivePasses, p.percentiles.progressivePasses ?? '—'],

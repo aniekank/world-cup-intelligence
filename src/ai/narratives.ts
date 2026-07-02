@@ -185,7 +185,8 @@ export function generateInsights(): Insight[] {
       title: pick(breakoutTitles(x.p.name), i),
       // Market value is only present on the seeded edition; omit the clause on
       // live/historical rather than printing "€0m". (WC-026)
-      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name}${x.p.marketValueEur > 0 ? ` on a €${x.p.marketValueEur}m valuation` : ''} — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality.`,
+      // xG is absent on the live feed (0) — don't claim "outscoring an xG of 0.0". (WC-066)
+      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name}${x.p.marketValueEur > 0 ? ` on a €${x.p.marketValueEur}m valuation` : ''}${x.p.stats.xG > 0 ? ` — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality` : ''}.`,
       entityType: 'player',
       entityId: x.p.id,
       metrics: [
@@ -946,8 +947,11 @@ function archetypeStory(p: PlayerView, key: ArchKey): { archetype: string; tag: 
   switch (key) {
     case 'keeper':
       return { archetype: 'wall', tag: 'The Last Line', accent: 'cyan', blurb: `${p.name} has been ${team}'s wall — ${s.saves} saves and ${s.cleanSheets} clean sheet${s.cleanSheets === 1 ? '' : 's'} keeping them in the hunt. Knockout football turns on goalkeepers like this.` };
-    case 'breakout':
-      return { archetype: 'breakout', tag: 'Breakout Star', accent: 'violet', blurb: `At just ${p.age}, ${p.name} is the breakout name for ${team} — ${s.goals}G ${s.assists}A already, sitting in the ${ordinalSafe(p.percentiles.xG)} percentile of ${posFull(p.position)}s for shot quality. A tournament can make a career.` };
+    case 'breakout': {
+      // xG-based shot-quality percentile is meaningless when the feed has no xG. (WC-066)
+      const shotQ = s.xG > 0 ? `, sitting in the ${ordinalSafe(p.percentiles.xG)} percentile of ${posFull(p.position)}s for shot quality` : '';
+      return { archetype: 'breakout', tag: 'Breakout Star', accent: 'violet', blurb: `At just ${p.age}, ${p.name} is the breakout name for ${team} — ${s.goals}G ${s.assists}A already${shotQ}. A tournament can make a career.` };
+    }
     case 'creator':
       return { archetype: 'creator', tag: 'Creator-in-Chief', accent: 'amber', blurb: `${p.name} is ${team}'s creative engine — ${s.assists} assist${s.assists === 1 ? '' : 's'}, ${fmt(s.xA)} xA and ${s.keyPasses} key passes. Everything good runs through ${last}.` };
     case 'inform':

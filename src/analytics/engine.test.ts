@@ -258,6 +258,22 @@ describe('AI layer', () => {
     expect(r.rows[0]![1]).toBe(100); // leader rescaled to field-relative 100, not a raw ~34
   });
 
+  it('hides player xG in a lookup when the player has none, shows it when present (WC-066)', () => {
+    const noXg = getPlayerViews().find((p) => p.position === 'GK' && p.stats.xG === 0);
+    if (noXg) {
+      const r = answerQuery(noXg.name);
+      if (r.intent === 'player-lookup') {
+        expect(r.rows.some((row) => row[0] === 'xG')).toBe(false);
+        expect(r.answer).not.toContain('xG');
+      }
+    }
+    const withXg = getPlayerViews().find((p) => p.stats.xG > 0);
+    if (withXg) {
+      const r = answerQuery(withXg.name);
+      if (r.intent === 'player-lookup') expect(r.rows.some((row) => row[0] === 'xG')).toBe(true);
+    }
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.
