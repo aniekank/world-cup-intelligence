@@ -5,6 +5,7 @@ import { engine } from '@/analytics';
 import { predictMatch, scoreMatrix } from '@/analytics/poisson';
 import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
 import { answerQuery } from '@/ai/nlq';
+import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport } from '@/ai/narratives';
 
 describe('data generation', () => {
@@ -185,6 +186,20 @@ describe('AI layer', () => {
     const r = answerQuery('which players got red cards in the round of 16');
     expect(r.intent).toBe('leaderboard');
     expect(r.answer.toLowerCase()).toContain('round of 16'); // stage filter applied, not the global list
+  });
+
+  it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
+    // The LLM translator is a strict upgrade to the fallback: with no key it must
+    // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      for (const q of ['most yellow cards', 'which team has the easiest path to the final', 'blorp zorp nonsense']) {
+        expect((await smartAnswer(q)).intent).toBe(answerQuery(q).intent);
+      }
+    } finally {
+      if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
+    }
   });
 
   it('routes a topic it has no data for to a help message, not a wrong page', () => {
