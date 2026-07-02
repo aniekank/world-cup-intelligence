@@ -227,6 +227,13 @@ describe('AI layer', () => {
     expect(extractTeams(hit.tok, 1)[0]?.id).toBe(hit.team.id); // "congo" -> "Congo DR"
   });
 
+  it('routes hardest-path and golden-boot queries correctly (WC-064)', () => {
+    expect(answerQuery('easiest path to the final').intent).toBe('easiest-path');
+    expect(answerQuery('hardest path to the final').intent).toBe('hardest-path'); // was stolen by the "path"+"final" catch-all
+    expect(answerQuery('most likely to win the golden boot').intent).toBe('golden-boot'); // not 'title-odds'
+    expect(answerQuery('who will win the world cup').intent).toBe('title-odds'); // control, still the title race
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.

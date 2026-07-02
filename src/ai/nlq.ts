@@ -17,7 +17,7 @@ import { RUNS } from '@/analytics/simulate';
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
-import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage, Match } from '@/domain/types';
+import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage, Match, BracketNode } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
   xg: { key: 'xG', label: 'xG', source: 'stat' },
@@ -437,19 +437,24 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return breakoutQuery(q);
   }
 
-  // ── Easiest / hardest path ──
+  // ── Easiest / hardest path (check HARDEST first — it also matches the generic
+  //    "path"+"final" catch-all below, which would otherwise steal it). (WC-064) ──
+  if (lower.includes('hardest path') || lower.includes('toughest path') || (lower.includes('path') && lower.includes('final') && (lower.includes('hard') || lower.includes('tough')))) {
+    return pathQuery(q, 'hard');
+  }
   if (lower.includes('easiest path') || lower.includes('easy path') || (lower.includes('path') && lower.includes('final'))) {
     return pathQuery(q, 'easy');
-  }
-  if (lower.includes('hardest path') || lower.includes('toughest path')) {
-    return pathQuery(q, 'hard');
   }
 
   // ── Title / who will win (incl. "odds"/"chances to win") ──
   if (
-    (lower.includes('win') && (lower.includes('tournament') || lower.includes('world cup') || lower.includes('title') || lower.includes('trophy'))) ||
-    lower.includes('favourite') || lower.includes('favorite') || lower.includes('most likely to win') ||
-    ((lower.includes('odds') || lower.includes('chance')) && (lower.includes('win') || lower.includes('title') || lower.includes('trophy') || !!detectTeam(q)))
+    // "most likely to win the golden boot" is a scorer race, not the title. (WC-064)
+    !lower.includes('golden boot') && !lower.includes('scorer') &&
+    (
+      (lower.includes('win') && (lower.includes('tournament') || lower.includes('world cup') || lower.includes('title') || lower.includes('trophy'))) ||
+      lower.includes('favourite') || lower.includes('favorite') || lower.includes('most likely to win') ||
+      ((lower.includes('odds') || lower.includes('chance')) && (lower.includes('win') || lower.includes('title') || lower.includes('trophy') || !!detectTeam(q)))
+    )
   ) {
     return titleQuery(q);
   }
@@ -593,18 +598,23 @@ function leaderboardQuery(q: string, metric: { key: string; label: string; sourc
   const top = ranked[0];
   const noun = pos ? `${posName(pos)}s` : 'players';
   const scopeLabel = scope ? ` ${scope.label}` : '';
+  // A descending leaderboard whose leader sits on 0 means nobody has any — say so
+  // rather than crowning someone "with 0" (e.g. clean sheets not yet in the feed). (WC-064)
+  const noData = !!top && !asc && top.v === 0;
   const answer = !top
     ? 'No players match that filter yet.'
-    : asc
-      ? `${top.p.name} (${top.p.team.code}) has the fewest ${metric.label}${scopeLabel} at ${fmt(top.v)}${per90 ? ' per 90' : ''}.`
-      : `${top.p.name} (${top.p.team.code}) leads all ${noun}${scopeLabel} with ${fmt(top.v)} ${metric.label}${per90 ? ' per 90' : ''}.`;
+    : noData
+      ? `No ${metric.label.toLowerCase()}${scopeLabel} recorded yet.`
+      : asc
+        ? `${top.p.name} (${top.p.team.code}) has the fewest ${metric.label}${scopeLabel} at ${fmt(top.v)}${per90 ? ' per 90' : ''}.`
+        : `${top.p.name} (${top.p.team.code}) leads all ${noun}${scopeLabel} with ${fmt(top.v)} ${metric.label}${per90 ? ' per 90' : ''}.`;
 
   return {
     query: q,
     intent: 'leaderboard',
     answer,
     columns: ['#', 'Player', 'Team', metric.label + (per90 ? '/90' : ''), 'Mins'],
-    rows: ranked.map((r, i) => [i + 1, r.p.name, r.p.team.code, fmt(r.v), r.p.stats.minutes]),
+    rows: noData ? [] : ranked.map((r, i) => [i + 1, r.p.name, r.p.team.code, fmt(r.v), r.p.stats.minutes]),
     entityType: 'player',
     vizHint: 'bar',
     followUps: [
@@ -791,20 +801,16 @@ function breakoutQuery(q: string): NLQueryResult {
 function pathQuery(q: string, mode: 'easy' | 'hard'): NLQueryResult {
   const eng = engine();
   const teamMap = new Map(getTeams().map((t) => [t.id, t]));
-  // Path difficulty = expected aggregate ELO of projected opponents to the final
-  const difficulty = new Map<string, { opponents: number; sumElo: number }>();
-  for (const node of eng.bracket) {
-    if (node.homeTeamId) addPath(difficulty, node.homeTeamId, node.awayTeamId, teamMap);
-    if (node.awayTeamId) addPath(difficulty, node.awayTeamId, node.homeTeamId, teamMap);
-  }
+  const eloOf = (id: string | null) => (id ? teamMap.get(id)?.elo ?? 1700 : 1700);
   const ranked = getTeams()
     .map((t) => {
+      const route = routeToFinal(eng.bracket, t.id, eloOf);
+      if (!route || !route.length) return null; // eliminated or never qualified — no path to rank
+      const avgOpp = route.reduce((s, r) => s + r.oppElo, 0) / route.length;
       const f = eng.forecasts.get(t.id);
-      const d = difficulty.get(t.id);
-      const avgOpp = d && d.opponents ? d.sumElo / d.opponents : 1700;
-      return { t, f, avgOpp, reachFinal: f?.reachFinal ?? 0 };
+      return { t, f, avgOpp, rounds: route.length, reachFinal: f?.reachFinal ?? 0 };
     })
-    .filter((x) => x.reachFinal > 0.01)
+    .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => (mode === 'easy' ? a.avgOpp - b.avgOpp : b.avgOpp - a.avgOpp))
     .slice(0, 8);
   const lead = ranked[0];
@@ -812,22 +818,50 @@ function pathQuery(q: string, mode: 'easy' | 'hard'): NLQueryResult {
     query: q,
     intent: mode === 'easy' ? 'easiest-path' : 'hardest-path',
     answer: lead
-      ? `${lead.t.name} have the ${mode === 'easy' ? 'easiest' : 'toughest'} projected route — average projected knockout opponent ELO of ${Math.round(lead.avgOpp)}, reaching the final ${pct(lead.reachFinal)} of simulations.`
-      : 'Bracket not yet determined.',
-    columns: ['Team', 'Avg opp ELO', 'Reach final%', 'Win title%'],
-    rows: ranked.map((x) => [`${x.t.flag} ${x.t.name}`, Math.round(x.avgOpp), pct(x.reachFinal), pct(x.f?.winTitle ?? 0)]),
+      ? `${lead.t.name} have the ${mode === 'easy' ? 'easiest' : 'toughest'} remaining route to the final — ${lead.rounds} game${lead.rounds > 1 ? 's' : ''} to go, average projected opponent ELO ${Math.round(lead.avgOpp)}, reaching the final ${pct(lead.reachFinal)} of simulations.`
+      : 'The knockout bracket is not set yet.',
+    columns: ['Team', 'Games left', 'Avg opp ELO', 'Reach final%', 'Win title%'],
+    rows: ranked.map((x) => [`${x.t.flag} ${x.t.name}`, x.rounds, Math.round(x.avgOpp), pct(x.reachFinal), pct(x.f?.winTitle ?? 0)]),
     entityType: 'team',
     vizHint: 'bar',
     followUps: ['Who is most likely to win the tournament?', 'Which teams are outperforming expectations?', 'Show the bracket'],
   };
 }
 
-function addPath(map: Map<string, { opponents: number; sumElo: number }>, teamId: string, oppId: string | null, teams: Map<string, { elo: number }>): void {
-  if (!oppId) return;
-  const entry = map.get(teamId) ?? { opponents: 0, sumElo: 0 };
-  entry.opponents++;
-  entry.sumElo += teams.get(oppId)?.elo ?? 1700;
-  map.set(teamId, entry);
+// The projected opponents a STILL-ALIVE team would face from its current
+// position all the way to the final — one per remaining round, each taken from
+// the sibling sub-bracket's projected winner. Returns null if the team is out
+// or never made the bracket, so an eliminated (or non-qualifying) side can't be
+// crowned with an "easy path". This replaces the old measure, which averaged
+// opponent ELO only over the rounds a team actually appeared in — so a side
+// projected to lose in the R32 had a one-game "path" and looked easiest of all,
+// exactly backwards. (WC-064)
+function routeToFinal(bracket: BracketNode[], teamId: string, eloOf: (id: string | null) => number): { stage: MatchStage; oppElo: number }[] | null {
+  const rank: Record<MatchStage, number> = { GROUP: -1, R32: 0, R16: 1, QF: 2, SF: 3, FINAL: 4, THIRD_PLACE: 5 };
+  const mine = bracket
+    .filter((n) => n.homeTeamId === teamId || n.awayTeamId === teamId)
+    .sort((a, b) => rank[a.stage] - rank[b.stage]);
+  if (!mine.length) return null; // never made the bracket
+  if (mine.some((n) => n.decided && n.winnerTeamId && n.winnerTeamId !== teamId)) return null; // lost a real tie → out
+
+  const bySlot = new Map(bracket.map((n) => [n.slot, n]));
+  const kidsOf = new Map<string, BracketNode[]>();
+  for (const n of bracket) if (n.feedsInto) { const a = kidsOf.get(n.feedsInto) ?? []; a.push(n); kidsOf.set(n.feedsInto, a); }
+
+  // Entry = the earliest node that isn't already a decided win (their next test).
+  let node = mine.find((n) => !(n.decided && n.winnerTeamId === teamId)) ?? mine[mine.length - 1]!;
+  const out: { stage: MatchStage; oppElo: number }[] = [];
+  out.push({ stage: node.stage, oppElo: eloOf(node.homeTeamId === teamId ? node.awayTeamId : node.homeTeamId) });
+  let branch = node.slot;
+  while (node.feedsInto) {
+    const parent = bySlot.get(node.feedsInto);
+    if (!parent) break;
+    const sibling = (kidsOf.get(parent.slot) ?? []).find((k) => k.slot !== branch);
+    out.push({ stage: parent.stage, oppElo: eloOf(sibling?.winnerTeamId ?? null) }); // projected winner of the other sub-bracket
+    branch = parent.slot;
+    node = parent;
+  }
+  return out;
 }
 
 function titleQuery(q: string): NLQueryResult {
