@@ -362,6 +362,18 @@ describe('AI layer', () => {
     }
   });
 
+  it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
+    expect(answerQuery('which african team goes the farthest').intent).toBe('farthest');
+    const g = answerQuery('which team goes the farthest');
+    expect(g.intent).toBe('farthest');
+    expect(g.rows.length).toBeGreaterThan(0);
+    // expectedFinish is a real rank now (1 = best), not the old inverted 49-rank
+    // that handed the title favourite a 48th-place "expected finish".
+    const e = engine();
+    const fav = getTeams().map((t) => ({ t, f: e.forecasts.get(t.id) })).filter((x) => x.f).sort((a, b) => b.f!.winTitle - a.f!.winTitle)[0]!;
+    expect(fav.f!.expectedFinish).toBeLessThanOrEqual(10);
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.

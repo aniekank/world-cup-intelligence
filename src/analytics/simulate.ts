@@ -254,7 +254,7 @@ export function runSimulation(teamsArr: Team[], groups: Group[], matches: Match[
       reachFinal: p(tal.final),
       winTitle: p(tal.title),
       groupWin: p(tal.groupWin),
-      expectedFinish: Math.round((49 - powerRank.get(t.id)!) / 1) || 1,
+      expectedFinish: powerRank.get(t.id)!, // expected finishing rank, 1 = best (was inverted: 49-rank gave the strongest side 48th). (WC-070)
       titleProbabilityDelta: Math.round((winTitle - t.preTournamentTitleOdds) * 1000) / 1000,
       powerRating: Math.round((winTitle * 100 + tal.final / RUNS * 30 + t.elo / 30) * 10) / 10,
       powerRank: powerRank.get(t.id)!,

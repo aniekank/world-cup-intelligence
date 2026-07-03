@@ -18,7 +18,7 @@ import { comebackWins, possessionUpsets, clutchGoals, type ClutchGoal } from '@/
 import { extractPlayers, extractTeam, bestPlayer } from '@/ai/query/resolver';
 import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
 import { tacticalProfile, tacticalBoard } from '@/server/tactics';
-import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage, Match, BracketNode } from '@/domain/types';
+import type { NLQueryResult, PlayerView, Position, Confederation, MatchEvent, MatchStage, Match, BracketNode, Team } from '@/domain/types';
 
 const METRICS: Record<string, { key: string; label: string; per90?: boolean; source: 'stat' | 'per90' }> = {
   xg: { key: 'xG', label: 'xG', source: 'stat' },
@@ -484,6 +484,12 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return pathQuery(q, 'easy');
   }
 
+  // ── Who goes the farthest — projected tournament depth, optionally scoped to a
+  //    confederation ("which African team goes the farthest"). (WC-070) ──
+  if (lower.includes('farthest') || lower.includes('furthest') || lower.includes('deepest') || lower.includes('go the far') || lower.includes('advance the fur') || lower.includes('deepest run')) {
+    return farthestQuery(q);
+  }
+
   // ── Title / who will win (incl. "odds"/"chances to win") ──
   if (
     // "most likely to win the golden boot" is a scorer race, not the title. (WC-064)
@@ -905,6 +911,51 @@ function clutchQuery(q: string): NLQueryResult {
     }),
     entityType: 'player', vizHint: 'table',
     followUps: ['Which teams came from behind to win?', 'Who won with less possession?', 'Who is most likely to win the tournament?'],
+  };
+}
+
+// "Which African team will go the farthest?" — rank teams by projected depth
+// (expected finishing rank; lower = farther), optionally scoped to a
+// confederation. Eliminated sides fall to the bottom (their forecast reflects
+// their actual exit). (WC-070)
+function farthestQuery(q: string): NLQueryResult {
+  const eng = engine();
+  const lower = q.toLowerCase();
+  let filter: (t: Team) => boolean = () => true;
+  let scopeLabel = '';
+  for (const [word, conf] of Object.entries(CONFEDERATIONS)) {
+    if (new RegExp(`\\b${word}\\b`).test(lower)) { filter = (t) => t.confederation === conf; scopeLabel = ` among ${REGION_LABEL[conf]} sides`; break; }
+  }
+  // Depth = expected knockout rounds survived (sum of stage-reach probabilities) —
+  // robust and directly from the Monte Carlo, unlike the (inverted) expectedFinish.
+  type F = NonNullable<ReturnType<typeof eng.forecasts.get>>;
+  const depth = (f: F) => f.reachR32 + f.reachR16 + f.reachQF + f.reachSF + f.reachFinal + f.winTitle;
+  const modalRound = (f: F) =>
+    f.winTitle >= 0.5 ? 'win the tournament' : f.reachFinal >= 0.5 ? 'reach the final' : f.reachSF >= 0.5 ? 'reach the semi-finals'
+    : f.reachQF >= 0.5 ? 'reach the quarter-finals' : f.reachR16 >= 0.5 ? 'reach the round of 16' : f.reachR32 >= 0.5 ? 'reach the round of 32' : null;
+
+  const ranked = getTeams()
+    .map((t) => ({ t, f: eng.forecasts.get(t.id) }))
+    .filter((x): x is { t: Team; f: F } => Boolean(x.f) && filter(x.t))
+    .sort((a, b) => depth(b.f) - depth(a.f))
+    .slice(0, 10);
+  const lead = ranked[0];
+  if (!lead) {
+    return {
+      query: q, intent: 'farthest',
+      answer: `I couldn't find any teams${scopeLabel} with a forecast to compare.`,
+      columns: [], rows: [], entityType: 'team', vizHint: 'none',
+      followUps: ['Who is most likely to win the tournament?', 'Which team has the easiest path to the final?'],
+    };
+  }
+  const mr = modalRound(lead.f);
+  return {
+    query: q, intent: 'farthest',
+    answer: `${lead.t.name} are the model's pick to go the farthest${scopeLabel} — ${mr ? `most likely to ${mr}` : 'the deepest projected run of the group'}: ${pct(lead.f.reachQF)} to the quarter-finals, ${pct(lead.f.reachSF)} the semis, ${pct(lead.f.reachFinal)} the final.`,
+    columns: ['Team', 'Reach R16%', 'Reach QF%', 'Reach SF%', 'Reach final%', 'Win%'],
+    rows: ranked.map((x) => [`${x.t.flag} ${x.t.name}`, pct(x.f.reachR16), pct(x.f.reachQF), pct(x.f.reachSF), pct(x.f.reachFinal), pct(x.f.winTitle)]),
+    entityType: 'team', vizHint: 'bar',
+    followUps: ['Who is most likely to win the tournament?', 'Which team has the easiest path to the final?', 'Which teams are outperforming expectations?'],
   };
 }
 
