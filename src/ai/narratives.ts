@@ -287,8 +287,11 @@ export function generateInsights(): Insight[] {
   if (streak) insights.push(streak);
 
   // Momentum stories — biggest comeback, starkest possession upset, latest clutch
-  // goal. Tournament-wide superlatives (stable "story of the tournament" cards). (ENH-5)
-  const cb = comebackWins(finishedAll)[0];
+  // goal. Recency-gated like every other match-based insight card, so a group-stage
+  // result doesn't headline the daily briefing for weeks. (The "Ask the data"
+  // momentum queries stay tournament-wide — this gating is only for the cards.) (ENH-5/WC-069)
+  const recentFinished = finishedAll.filter(isRecent);
+  const cb = comebackWins(recentFinished)[0];
   if (cb) {
     const m = cb.match, wHome = cb.winnerId === m.homeTeamId;
     const w = teamMap.get(cb.winnerId), opp = teamMap.get(wHome ? m.awayTeamId : m.homeTeamId);
@@ -303,7 +306,7 @@ export function generateInsights(): Insight[] {
       createdAt: m.kickoff,
     });
   }
-  const up = possessionUpsets(finishedAll)[0];
+  const up = possessionUpsets(recentFinished)[0];
   if (up) {
     const m = up.match, wHome = up.winnerId === m.homeTeamId;
     const w = teamMap.get(up.winnerId), opp = teamMap.get(wHome ? m.awayTeamId : m.homeTeamId);
@@ -317,7 +320,7 @@ export function generateInsights(): Insight[] {
       createdAt: m.kickoff,
     });
   }
-  const clutch = clutchGoals(finishedAll)[0];
+  const clutch = clutchGoals(recentFinished)[0];
   if (clutch) {
     const m = clutch.match, t = teamMap.get(clutch.teamId), opp = teamMap.get(clutch.teamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId);
     const who = clutch.playerId ? (getPlayer(clutch.playerId)?.name ?? 'A late strike') : 'An own goal';
@@ -606,6 +609,13 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
     if (!v) { v = { gf: 0, ga: 0, pld: 0, cs: 0 }; tally.set(id, v); }
     return v;
   };
+  // Single-match highlights (rout, goal-fest) are a DAILY briefing item, so they
+  // must reflect recent games — otherwise a group-stage thrashing (Germany 7-1)
+  // headlines for the rest of the tournament. Cumulative team tallies below still
+  // run over every finished match. (WC-069)
+  const latestTs = Math.max(0, ...finished.map((m) => Date.parse(m.kickoff)));
+  const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+  const isRecent = (m: Match) => latestTs - Date.parse(m.kickoff) <= RECENT_MS;
   let rout: { margin: number; label: string } | null = null;
   let goalFest: { total: number; label: string } | null = null;
   for (const m of finished) {
@@ -614,6 +624,7 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
     const th = bump(h.id), ta = bump(a.id);
     th.gf += m.homeScore; th.ga += m.awayScore; th.pld++; if (m.awayScore === 0) th.cs++;
     ta.gf += m.awayScore; ta.ga += m.homeScore; ta.pld++; if (m.homeScore === 0) ta.cs++;
+    if (!isRecent(m)) continue; // rout / goal-fest: recent games only
     const margin = Math.abs(m.homeScore - m.awayScore), total = m.homeScore + m.awayScore;
     const hi = Math.max(m.homeScore, m.awayScore), lo = Math.min(m.homeScore, m.awayScore);
     const winner = m.homeScore >= m.awayScore ? h : a, loser = m.homeScore >= m.awayScore ? a : h;
@@ -659,8 +670,8 @@ export function generateDailyBriefing(): { headline: string; body: string; bulle
     `${gbName} leads the Golden Boot race on ${gb.currentGoals}, projected to finish on ${gb.projectedGoals}.`);
   else add(38, 'Golden Boot race wide open');
 
-  if (rout) add(78, `Biggest rout: ${rout.label}`, `The most emphatic result so far: ${rout.label}.`);
-  if (goalFest && (!rout || goalFest.label !== rout.label)) add(56, `Goal fest: ${goalFest.label} (${goalFest.total})`);
+  if (rout) add(78, `Recent rout: ${rout.label}`, `The most emphatic result of the last few days: ${rout.label}.`);
+  if (goalFest && (!rout || goalFest.label !== rout.label)) add(56, `Recent goal fest: ${goalFest.label} (${goalFest.total})`);
 
   const tallies = [...tally.entries()]
     .map(([id, v]) => ({ t: teamMap.get(id), ...v }))
@@ -841,10 +852,14 @@ export function generateBriefingDeck(): BriefingCard[] {
     });
   }
 
-  // 7) Results-derived: meanest defense + biggest rout.
+  // 7) Results-derived: meanest defense (cumulative) + biggest RECENT rout — the
+  //    rout card is recency-gated so a group-stage thrashing doesn't headline for
+  //    the rest of the tournament. (WC-069)
   type Tally = { ga: number; pld: number; cs: number };
   const tally = new Map<string, Tally>();
   const bump = (id: string): Tally => { let v = tally.get(id); if (!v) { v = { ga: 0, pld: 0, cs: 0 }; tally.set(id, v); } return v; };
+  const latestTs = Math.max(0, ...finished.map((m) => Date.parse(m.kickoff)));
+  const isRecent = (m: Match) => latestTs - Date.parse(m.kickoff) <= 3 * 24 * 60 * 60 * 1000;
   let rout: { margin: number; m: Match } | null = null;
   for (const m of finished) {
     const h = teamMap.get(m.homeTeamId), a = teamMap.get(m.awayTeamId);
@@ -852,6 +867,7 @@ export function generateBriefingDeck(): BriefingCard[] {
     const th = bump(h.id), ta = bump(a.id);
     th.ga += m.awayScore; th.pld++; if (m.awayScore === 0) th.cs++;
     ta.ga += m.homeScore; ta.pld++; if (m.homeScore === 0) ta.cs++;
+    if (!isRecent(m)) continue; // rout: recent games only
     const margin = Math.abs(m.homeScore - m.awayScore);
     if (margin >= 2 && (!rout || margin > rout.margin)) rout = { margin, m };
   }

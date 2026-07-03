@@ -9,7 +9,7 @@ import { extractTeams } from '@/ai/query/resolver';
 import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
 import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
 import { smartAnswer } from '@/ai/llmParse';
-import { generateInsights, generateMatchSummary, generateScoutingReport } from '@/ai/narratives';
+import { generateInsights, generateMatchSummary, generateScoutingReport, generateDailyBriefing } from '@/ai/narratives';
 
 describe('data generation', () => {
   const ds = generateDataset();
@@ -341,6 +341,25 @@ describe('AI layer', () => {
     const ins = generateInsights(); // seed has event timelines + comebacks
     expect(ins.some((i) => i.kind === 'comeback')).toBe(true);
     expect(ins.some((i) => i.kind === 'clutch')).toBe(true);
+  });
+
+  it('daily briefing does not headline a stale (weeks-old) blowout (WC-069)', () => {
+    const matches = dataset().matches;
+    const [A, B] = getTeams();
+    const oldBlowout = {
+      ...matches[0]!, id: 'synth-old-rout', status: 'FINISHED', stage: 'GROUP',
+      homeTeamId: A!.id, awayTeamId: B!.id, homeScore: 9, awayScore: 0,
+      kickoff: '2026-06-01T00:00:00.000Z', events: [],
+    } as unknown as typeof matches[0];
+    matches.push(oldBlowout);
+    try {
+      const b = generateDailyBriefing();
+      const text = b.headline + b.body + b.bullets.join(' ');
+      expect(text).not.toContain('9-0'); // a 3-week-old thrashing must not surface as a "recent" rout/goal-fest
+    } finally {
+      const i = matches.findIndex((m) => m.id === 'synth-old-rout');
+      if (i >= 0) matches.splice(i, 1);
+    }
   });
 
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
