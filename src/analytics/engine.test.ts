@@ -8,6 +8,7 @@ import { answerQuery } from '@/ai/nlq';
 import { extractTeams } from '@/ai/query/resolver';
 import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
 import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
+import { shouldForceFinish } from '@/data/loadTournament';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport, generateDailyBriefing } from '@/ai/narratives';
 
@@ -360,6 +361,22 @@ describe('AI layer', () => {
       const i = matches.findIndex((m) => m.id === 'synth-old-rout');
       if (i >= 0) matches.splice(i, 1);
     }
+  });
+
+  it('does not force-finish a live extra-time / penalty match past the window (WC-071)', () => {
+    const WINDOW = 210 * 60_000;
+    const ko = 1_700_000_000_000;
+    const past = ko + WINDOW + 60_000; // a knockout tie deep into pens, past the play window
+    // Feed still reports it live → trust it (this was the bug: coerced to a phantom 0-0 FT)
+    expect(shouldForceFinish('LIVE', ko, past, 'LIVE', WINDOW)).toBe(false);
+    expect(shouldForceFinish('HALFTIME', ko, past, 'HALFTIME', WINDOW)).toBe(false);
+    // Feed dropped the match → genuinely stale → force finish
+    expect(shouldForceFinish('LIVE', ko, past, undefined, WINDOW)).toBe(true);
+    // Feed says finished → leave it to the normal update path
+    expect(shouldForceFinish('LIVE', ko, past, 'FINISHED', WINDOW)).toBe(false);
+    // Within the window, or already finished → never coerce
+    expect(shouldForceFinish('LIVE', ko, ko + 60_000, undefined, WINDOW)).toBe(false);
+    expect(shouldForceFinish('FINISHED', ko, past, undefined, WINDOW)).toBe(false);
   });
 
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {

@@ -132,9 +132,32 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   return snap;
 }
 
-/** Window around kickoff in which a match is plausibly being played (minutes). */
+/** Window around kickoff in which a match is plausibly being played (minutes).
+ *  A knockout tie that goes to extra time + penalties runs ~2.5-3h from kickoff
+ *  (90 + stoppage + 30' ET + a long shootout + VAR/injury delays), so the "after"
+ *  window is 3.5h — a match still live past that is genuinely stuck feed. (WC-071) */
 const LIVE_WINDOW_BEFORE_MS = 10 * 60_000;
-const LIVE_WINDOW_AFTER_MS = 150 * 60_000;
+const LIVE_WINDOW_AFTER_MS = 210 * 60_000;
+
+/**
+ * Should a match still flagged live be force-finished as stale feed data? Yes only
+ * once it's past its play window AND the live feed is NOT still reporting it live —
+ * a tie in extra time or a penalty shootout legitimately runs long, and the feed
+ * says so, so we must trust it rather than coerce a phantom 0-0 full-time. (WC-071)
+ */
+export function shouldForceFinish(
+  matchStatus: Match['status'],
+  kickoffMs: number,
+  now: number,
+  feedStatus: Match['status'] | undefined,
+  windowMs: number = LIVE_WINDOW_AFTER_MS,
+): boolean {
+  if (matchStatus === 'FINISHED') return false;
+  if (now <= kickoffMs + windowMs) return false;
+  if (feedStatus === 'LIVE' || feedStatus === 'HALFTIME') return false; // genuinely in play (ET / pens)
+  if (feedStatus === 'FINISHED') return false; // the normal update path finishes it
+  return true; // feed dropped the match (or stuck pre-kickoff) past the window → stale
+}
 
 /**
  * Re-poll the fixtures feed and merge current status/score/minute into the
@@ -225,7 +248,7 @@ export async function refreshLiveScores(): Promise<boolean> {
     // A match still flagged live long after its play window is stale feed data
     // (the provider lagged marking it finished, then we fell out of the refresh
     // window). Force it finished so it stops showing a phantom live clock. (WC-057)
-    const staleLive = m.status !== 'FINISHED' && now > new Date(m.kickoff).getTime() + LIVE_WINDOW_AFTER_MS && (!u || u.status !== 'FINISHED');
+    const staleLive = shouldForceFinish(m.status, new Date(m.kickoff).getTime(), now, u?.status, LIVE_WINDOW_AFTER_MS);
     const scoreChanged =
       !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute
         || u.livePhase !== m.livePhase || (u.penalties?.home ?? -1) !== (m.penalties?.home ?? -1) || (u.penalties?.away ?? -1) !== (m.penalties?.away ?? -1));

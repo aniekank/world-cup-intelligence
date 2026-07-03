@@ -169,10 +169,10 @@ export const getTeamMatches = (teamId: ID): Match[] =>
     .filter((m) => m.homeTeamId === teamId || m.awayTeamId === teamId)
     .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
 
-// A match can't plausibly still be live more than ~2.5h after kickoff — guard
-// against a stale live status the refresh hasn't corrected yet, so a finished
-// game never shows as live / counts toward the live badge. (WC-057)
-const MAX_LIVE_MS = 150 * 60_000;
+// Guard against a stale live status the refresh hasn't corrected yet, so a
+// finished game never shows as live / counts toward the live badge. Window is
+// 3.5h to cover a knockout tie that runs to extra time + penalties. (WC-057/WC-071)
+const MAX_LIVE_MS = 210 * 60_000;
 export const getLiveMatches = (): Match[] =>
   getMatches().filter(
     (m) => (m.status === 'LIVE' || m.status === 'HALFTIME') && Date.now() - Date.parse(m.kickoff) < MAX_LIVE_MS,

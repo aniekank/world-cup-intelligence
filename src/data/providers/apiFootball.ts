@@ -135,6 +135,15 @@ function mapStatus(short: string): Match['status'] {
   return 'SCHEDULED';
 }
 
+// Live phase of an in-play knockout tie, so the UI can label extra time / the
+// shootout instead of a bare "LIVE" at a phantom minute. (WC-071)
+function mapLivePhase(short: string): FixtureUpdate['livePhase'] {
+  if (short === 'P') return 'PEN'; // penalty shootout in progress
+  if (short === 'ET') return 'ET'; // extra time
+  if (short === 'BT') return 'BREAK'; // break before ET / between periods
+  return undefined;
+}
+
 /** A single fixture's live state, keyed by our match id (`m-<fixtureId>`). */
 export interface FixtureUpdate {
   id: string;
@@ -200,6 +209,7 @@ export async function fetchApiFootballFixtures(apiKey: string): Promise<FixtureU
       homeScoreHT: f.score.halftime.home ?? 0,
       awayScoreHT: f.score.halftime.away ?? 0,
       penalties: f.score.penalty.home != null ? { home: f.score.penalty.home, away: f.score.penalty.away ?? 0 } : null,
+      livePhase: mapLivePhase(f.fixture.status.short),
     };
   });
 }
