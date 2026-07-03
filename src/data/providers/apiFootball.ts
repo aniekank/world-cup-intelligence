@@ -30,6 +30,31 @@ const SEASON = 2026;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Thrown when API-Football reports a rate/quota limit. Retrying immediately just
+ * spends more of an already-exhausted budget (and a full snapshot fans out to
+ * ~60 endpoints), so callers must stop rather than loop. (WC-073)
+ */
+export class ApiFootballRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiFootballRateLimitError';
+  }
+}
+
+// Once we hit a limit, pause heavy live fetches for a while and re-probe — so a
+// daily-quota reset is picked up within the window without hammering in between.
+const RATE_LIMIT_BACKOFF_MS = 15 * 60_000;
+
+export function noteApiRateLimit(now: number = Date.now()): void {
+  (globalThis as { __wcApiBackoffUntil?: number }).__wcApiBackoffUntil = now + RATE_LIMIT_BACKOFF_MS;
+}
+
+/** True while inside the post-rate-limit back-off window — skip heavy fetches. */
+export function apiBackoffActive(now: number = Date.now()): boolean {
+  return now < ((globalThis as { __wcApiBackoffUntil?: number }).__wcApiBackoffUntil ?? 0);
+}
+
+/**
  * API-Football fetch with rate-limit resilience. Retries on HTTP 429 and on the
  * provider's body-level rate-limit error (it sometimes returns 200 + an errors
  * object), with increasing backoff. Without this, a startup burst silently
@@ -42,11 +67,14 @@ async function af<T>(path: string, apiKey: string, attempt = 0): Promise<T> {
       next: { revalidate: 300 },
     });
     if (res.status === 429) {
-      if (attempt < 5) {
+      // Per-minute limit: a couple of quick retries can clear it. Beyond that,
+      // stop and back off rather than pile onto a spent budget. (WC-073)
+      if (attempt < 2) {
         await sleep(2000 * (attempt + 1));
         return af<T>(path, apiKey, attempt + 1);
       }
-      throw new Error('api-football 429 (rate limit)');
+      noteApiRateLimit();
+      throw new ApiFootballRateLimitError('api-football 429 (rate limit)');
     }
     if (!res.ok) {
       if (attempt < 3) {
@@ -57,13 +85,22 @@ async function af<T>(path: string, apiKey: string, attempt = 0): Promise<T> {
     }
     const json = (await res.json()) as { response: T; errors?: unknown };
     const errs = json.errors;
+    // A `requests` error key is the daily quota ("reached the request limit for
+    // the day"): retrying can't help today and each retry spends more budget, so
+    // stop immediately and back off. This was the amplifier — 6 requests per
+    // endpoint × ~60 endpoints per snapshot, every 60s. (WC-073)
+    if (errs && typeof errs === 'object' && !Array.isArray(errs) && 'requests' in errs) {
+      noteApiRateLimit();
+      throw new ApiFootballRateLimitError(String((errs as { requests?: unknown }).requests ?? 'api-football request limit'));
+    }
     const hasErr = errs && (Array.isArray(errs) ? errs.length > 0 : Object.keys(errs as object).length > 0);
     if (hasErr && attempt < 5) {
-      await sleep(2000 * (attempt + 1)); // usually a rate-limit message
+      await sleep(2000 * (attempt + 1));
       return af<T>(path, apiKey, attempt + 1);
     }
     return json.response;
   } catch (e) {
+    if (e instanceof ApiFootballRateLimitError) throw e; // never retry a rate limit
     if (attempt < 3) {
       await sleep(600 * (attempt + 1));
       return af<T>(path, apiKey, attempt + 1);

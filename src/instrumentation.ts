@@ -19,7 +19,7 @@ export async function register() {
   // A loading flag (only for the live edition) lets the client show a "Loading
   // live data…" indicator during that window instead of silently rendering the
   // placeholder simulation.
-  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean };
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean; __wcApiBackoffUntil?: number };
   const trackLoading = id === 'live-2026';
   if (trackLoading) g.__wcLiveLoading = true;
   void (async () => {
@@ -59,12 +59,14 @@ export async function register() {
         const lt = await import('@/data/loadTournament');
         if (store.getActiveTournamentId() === 'live-2026') {
           await lt.refreshLiveScores();
-        } else if (!g.__wcLiveBooted) {
+        } else if (!g.__wcLiveBooted && Date.now() >= (g.__wcApiBackoffUntil ?? 0)) {
           // Live's boot load hasn't succeeded yet — keep retrying so a failed boot
           // can't strand us on the simulation placeholder. (WC-041) But once live
           // HAS loaded at least once, a non-live active tournament means the user
           // deliberately switched to a past edition (or the sim sandbox) — leave
           // their choice alone, or the loop yanks them back to 2026 mid-browse. (WC-046)
+          // And if the provider just rate-limited us, hold off — a full snapshot is
+          // ~60 requests; retrying every 60s into a spent quota only deepens it. (WC-073)
           g.__wcLiveLoading = true;
           try {
             await lt.activateTournament('live-2026');

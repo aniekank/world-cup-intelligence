@@ -9,6 +9,7 @@ import { extractTeams } from '@/ai/query/resolver';
 import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
 import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
 import { shouldForceFinish } from '@/data/loadTournament';
+import { noteApiRateLimit, apiBackoffActive } from '@/data/providers/apiFootball';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport, generateDailyBriefing } from '@/ai/narratives';
 
@@ -361,6 +362,30 @@ describe('AI layer', () => {
       const i = matches.findIndex((m) => m.id === 'synth-old-rout');
       if (i >= 0) matches.splice(i, 1);
     }
+  });
+
+  it('a quota error makes one request and throws — no retry storm (WC-073)', async () => {
+    const { fetchApiFootballFixtures, ApiFootballRateLimitError } = await import('@/data/providers/apiFootball');
+    let calls = 0;
+    const orig = global.fetch;
+    global.fetch = (async () => {
+      calls++;
+      return { status: 200, ok: true, json: async () => ({ response: [], errors: { requests: 'You have reached the request limit for the day' } }) } as unknown as Response;
+    }) as typeof fetch;
+    try {
+      await expect(fetchApiFootballFixtures('k')).rejects.toBeInstanceOf(ApiFootballRateLimitError);
+      expect(calls).toBe(1); // was 6 (initial + 5 retries) per endpoint before the fix
+    } finally {
+      global.fetch = orig;
+    }
+  });
+
+  it('rate-limit back-off pauses fetches for a window, then clears (WC-073)', () => {
+    const t0 = 1_700_000_000_000;
+    noteApiRateLimit(t0);
+    expect(apiBackoffActive(t0 + 60_000)).toBe(true); // 1 min after a limit → still backing off
+    expect(apiBackoffActive(t0 + 14 * 60_000)).toBe(true); // 14 min → still within the window
+    expect(apiBackoffActive(t0 + 16 * 60_000)).toBe(false); // 16 min → window elapsed, re-probe allowed
   });
 
   it('does not force-finish a live extra-time / penalty match past the window (WC-071)', () => {

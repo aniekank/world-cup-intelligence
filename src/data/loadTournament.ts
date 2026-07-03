@@ -159,6 +159,11 @@ export function shouldForceFinish(
   return true; // feed dropped the match (or stuck pre-kickoff) past the window → stale
 }
 
+// The API-Football adapter sets a global back-off timestamp when it hits a
+// rate/quota limit; honour it here so we don't keep re-fetching into a spent
+// budget (a full snapshot fans out to ~60 requests). (WC-073)
+const inApiBackoff = () => Date.now() < ((globalThis as { __wcApiBackoffUntil?: number }).__wcApiBackoffUntil ?? 0);
+
 /**
  * Re-poll the fixtures feed and merge current status/score/minute into the
  * active live snapshot, so in-play games flip to LIVE and scores update without
@@ -167,6 +172,7 @@ export function shouldForceFinish(
  * changed. Returns true if the dataset was updated. Safe to call on a timer.
  */
 export async function refreshLiveScores(): Promise<boolean> {
+  if (inApiBackoff()) return false; // rate-limited recently — don't spend more budget (WC-073)
   // Resolve the live provider's fetchers by the active source. Skip for offline
   // sources (simulation / StatsBomb) — nothing to poll.
   const activeT = getTournament(getActiveTournamentId());
@@ -314,6 +320,7 @@ let rebuilding = false;
 export async function rebuildLiveSnapshot(): Promise<void> {
   if (rebuilding || getActiveTournamentId() !== 'live-2026') return;
   if (!process.env.API_FOOTBALL_KEY) return;
+  if (inApiBackoff()) return; // rate-limited — a full re-fetch is ~60 requests; skip it (WC-073)
   rebuilding = true;
   try {
     // Re-fetch via the registry path (API-Football snapshot + frozen overlay).
