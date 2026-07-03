@@ -6,6 +6,7 @@ import { Topbar } from '@/components/layout/Topbar';
 import { ManifestoBackdrop } from '@/components/effects/ManifestoBackdrop';
 import { IntroSplash } from '@/components/effects/IntroSplash';
 import { BootGate } from '@/components/effects/BootGate';
+import { SiteBanner } from '@/components/layout/SiteBanner';
 import { liveStatus } from '@/server/queries';
 import { RUNS } from '@/analytics/simulate';
 
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `try{if(localStorage.getItem('wc:showModel')==='on')document.documentElement.dataset.showModel='on';}catch(e){}`,
           }}
         />
+        <SiteBanner />
         <BootGate initialBlocking={booting} />
         <IntroSplash />
         <ManifestoBackdrop />
