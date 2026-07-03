@@ -451,6 +451,20 @@ export function answerQuery(rawQuery: string): NLQueryResult {
     return breakoutQuery(q);
   }
 
+  // ── Comebacks: teams that came from behind to win (WC-068) ──
+  if (lower.includes('comeback') || lower.includes('came from behind') || lower.includes('come from behind') || lower.includes('came back to win') || lower.includes('fought back') || lower.includes('from behind')) {
+    return comebackQuery(q);
+  }
+
+  // ── Won against the run of play / with less possession (before tactics, which
+  //    owns the bare word "possession"). (WC-068) ──
+  if (
+    lower.includes('against the run of play') || lower.includes('run of play') || lower.includes('smash and grab') || lower.includes('without the ball') ||
+    (lower.includes('possession') && (lower.includes('less') || lower.includes('least') || lower.includes('fewer') || lower.includes('disadvantage') || lower.includes('despite') || lower.includes('without') || lower.includes('minority')))
+  ) {
+    return possessionUpsetQuery(q);
+  }
+
   // ── Easiest / hardest path (check HARDEST first — it also matches the generic
   //    "path"+"final" catch-all below, which would otherwise steal it). (WC-064) ──
   if (lower.includes('hardest path') || lower.includes('toughest path') || (lower.includes('path') && lower.includes('final') && (lower.includes('hard') || lower.includes('tough')))) {
@@ -809,6 +823,94 @@ function breakoutQuery(q: string): NLQueryResult {
     entityType: 'player',
     vizHint: 'scatter',
     followUps: ['Highest xG among forwards', 'Compare the top two breakout players', 'Golden Boot projection'],
+  };
+}
+
+// Did the winner come from behind? Uses the goal timeline when present (was the
+// winner ever behind on the running score?), else falls back to the halftime
+// score (trailed at the break). Shootout kicks (minute>120) excluded; own goals
+// credit the other side. Returns the overturned deficit, or null. (WC-068)
+function trailedThenWon(m: Match): { winnerId: string; deficit: number } | null {
+  const hWon = m.homeScore > m.awayScore, aWon = m.awayScore > m.homeScore;
+  if (!hWon && !aWon) return null; // level (incl. penalty-decided ties) — not a from-behind *win*
+  const winnerHome = hWon;
+  const winnerId = winnerHome ? m.homeTeamId : m.awayTeamId;
+  const goals = (m.events ?? [])
+    .filter((e) => (e.type === 'GOAL' || e.type === 'PENALTY_GOAL' || e.type === 'OWN_GOAL') && e.minute <= 120)
+    .sort((a, b) => a.minute - b.minute);
+  if (goals.length) {
+    let h = 0, a = 0, deficit = 0, behind = false;
+    for (const e of goals) {
+      const scorer = e.type === 'OWN_GOAL' ? (e.teamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId) : e.teamId;
+      if (scorer === m.homeTeamId) h++; else a++;
+      const ws = winnerHome ? h : a, os = winnerHome ? a : h;
+      if (ws < os) { behind = true; deficit = Math.max(deficit, os - ws); }
+    }
+    return behind ? { winnerId, deficit } : null;
+  }
+  const wHT = winnerHome ? m.homeScoreHT : m.awayScoreHT;
+  const oHT = winnerHome ? m.awayScoreHT : m.homeScoreHT;
+  return wHT < oHT ? { winnerId, deficit: oHT - wHT } : null;
+}
+
+const stageCell = (s: MatchStage) => (s === 'GROUP' ? 'Group' : STAGE_LABEL[s]);
+
+function comebackQuery(q: string): NLQueryResult {
+  const rows: { name: string; cell: string; opp: string; ht: string; ft: string; stage: MatchStage; deficit: number; kickoff: string }[] = [];
+  for (const m of getMatches()) {
+    if (m.status !== 'FINISHED') continue;
+    const c = trailedThenWon(m);
+    if (!c) continue;
+    const winnerHome = c.winnerId === m.homeTeamId;
+    const w = getTeam(c.winnerId), opp = getTeam(winnerHome ? m.awayTeamId : m.homeTeamId);
+    // Scores from the winner's perspective so "won 2-1" always reads as a win. (WC-068)
+    const wFT = winnerHome ? m.homeScore : m.awayScore, oFT = winnerHome ? m.awayScore : m.homeScore;
+    const wHT = winnerHome ? m.homeScoreHT : m.awayScoreHT, oHT = winnerHome ? m.awayScoreHT : m.homeScoreHT;
+    rows.push({
+      name: w?.name ?? c.winnerId, cell: w ? `${w.flag} ${w.name}` : c.winnerId, opp: opp?.name ?? '?',
+      ht: `${wHT}-${oHT}`, ft: `${wFT}-${oFT}`,
+      stage: m.stage, deficit: c.deficit, kickoff: m.kickoff,
+    });
+  }
+  rows.sort((a, b) => b.deficit - a.deficit || b.kickoff.localeCompare(a.kickoff));
+  const top = rows[0];
+  return {
+    query: q, intent: 'comebacks',
+    answer: top
+      ? `${rows.length} side${rows.length === 1 ? '' : 's'} have come from behind to win. The biggest: ${top.name} overturned a ${top.deficit}-goal deficit to win ${top.ft} against ${top.opp} in the ${stageCell(top.stage).toLowerCase() === 'group' ? 'group stage' : STAGE_LABEL[top.stage]}.`
+      : 'No come-from-behind wins recorded yet.',
+    columns: ['Winner', 'Opponent', 'HT', 'FT', 'Stage'],
+    rows: rows.slice(0, 12).map((r) => [r.cell, r.opp, r.ht, r.ft, stageCell(r.stage)]),
+    entityType: 'match', vizHint: 'table',
+    followUps: ['Who won with less possession?', 'Which team has the easiest path to the final?', 'Who is most likely to win the tournament?'],
+  };
+}
+
+function possessionUpsetQuery(q: string): NLQueryResult {
+  const possOf = (m: Match, id: string): number | null => m.teamStats?.[id]?.possession ?? null;
+  const rows: { name: string; cell: string; opp: string; poss: number; ft: string; stage: MatchStage }[] = [];
+  for (const m of getMatches()) {
+    if (m.status !== 'FINISHED') continue;
+    const winnerId = m.homeScore > m.awayScore ? m.homeTeamId : m.awayScore > m.homeScore ? m.awayTeamId : null;
+    if (!winnerId) continue;
+    const pw = possOf(m, winnerId);
+    if (pw === null || pw >= 50) continue; // won with a minority of the ball
+    const winnerHome = winnerId === m.homeTeamId;
+    const w = getTeam(winnerId), opp = getTeam(winnerHome ? m.awayTeamId : m.homeTeamId);
+    const wFT = winnerHome ? m.homeScore : m.awayScore, oFT = winnerHome ? m.awayScore : m.homeScore; // winner-perspective (WC-068)
+    rows.push({ name: w?.name ?? winnerId, cell: w ? `${w.flag} ${w.name}` : winnerId, opp: opp?.name ?? '?', poss: pw, ft: `${wFT}-${oFT}`, stage: m.stage });
+  }
+  rows.sort((a, b) => a.poss - b.poss);
+  const top = rows[0];
+  return {
+    query: q, intent: 'possession-upsets',
+    answer: top
+      ? `${rows.length} side${rows.length === 1 ? '' : 's'} won with a minority of the ball. The starkest: ${top.name} won ${top.ft} against ${top.opp} with just ${top.poss}% possession in the ${top.stage === 'GROUP' ? 'group stage' : STAGE_LABEL[top.stage]}.`
+      : 'No against-the-run-of-play wins found (possession data may be missing for these matches).',
+    columns: ['Winner', 'Opponent', 'Poss%', 'Score', 'Stage'],
+    rows: rows.slice(0, 12).map((r) => [r.cell, r.opp, `${r.poss}%`, r.ft, stageCell(r.stage)]),
+    entityType: 'match', vizHint: 'bar',
+    followUps: ['Which teams came from behind to win?', 'Most possession-dominant teams', 'Who is most likely to win the tournament?'],
   };
 }
 

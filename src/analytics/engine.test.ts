@@ -289,6 +289,31 @@ describe('AI layer', () => {
     }
   });
 
+  it('answers comeback and possession-upset momentum queries (WC-068)', () => {
+    expect(answerQuery('which teams came from behind to win').intent).toBe('comebacks');
+    expect(answerQuery('who won with less possession').intent).toBe('possession-upsets');
+    expect(answerQuery('most possession-dominant teams').intent).toBe('tactics'); // not stolen by the upset query
+
+    // Inject an extreme finished match (biggest deficit + lowest possession) so it
+    // sorts to rank #1 regardless of what comebacks the seed already contains:
+    // home trailed 0-3 at HT, won 4-3, with only 15% of the ball.
+    const matches = dataset().matches;
+    const [A, B] = getTeams();
+    const synth = {
+      ...matches[0]!, id: 'synth-cb', stage: 'GROUP', status: 'FINISHED',
+      homeTeamId: A!.id, awayTeamId: B!.id, homeScore: 4, awayScore: 3, homeScoreHT: 0, awayScoreHT: 3, events: [],
+      teamStats: { [A!.id]: { possession: 15 }, [B!.id]: { possession: 85 } },
+    } as unknown as typeof matches[0];
+    matches.push(synth);
+    try {
+      expect(answerQuery('biggest comebacks').rows.some((r) => String(r[0]).includes(A!.name))).toBe(true); // trailed then won
+      expect(answerQuery('who won against the run of play').rows.some((r) => String(r[0]).includes(A!.name) && r[2] === '15%')).toBe(true);
+    } finally {
+      const i = matches.findIndex((m) => m.id === 'synth-cb');
+      if (i >= 0) matches.splice(i, 1);
+    }
+  });
+
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {
     // The LLM translator is a strict upgrade to the fallback: with no key it must
     // be a pure passthrough — happy path untouched, unknowns stay unknown, no throw.
