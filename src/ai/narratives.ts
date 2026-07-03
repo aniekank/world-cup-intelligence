@@ -15,6 +15,7 @@ import { getTeams, getTeam, getPlayerViews, getMatch, getMatches, getPlayer, dat
 import { engine } from '@/analytics';
 import { RUNS } from '@/analytics/simulate';
 import { criticalMatches } from '@/ai/previews';
+import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
 import type { Match, PlayerView } from '@/domain/types';
 import type { Insight } from '@/domain/types';
 
@@ -284,6 +285,52 @@ export function generateInsights(): Insight[] {
   // Hot scoring streak — record watch
   const streak = scoringStreakInsight();
   if (streak) insights.push(streak);
+
+  // Momentum stories — biggest comeback, starkest possession upset, latest clutch
+  // goal. Tournament-wide superlatives (stable "story of the tournament" cards). (ENH-5)
+  const cb = comebackWins(finishedAll)[0];
+  if (cb) {
+    const m = cb.match, wHome = cb.winnerId === m.homeTeamId;
+    const w = teamMap.get(cb.winnerId), opp = teamMap.get(wHome ? m.awayTeamId : m.homeTeamId);
+    const wFT = wHome ? m.homeScore : m.awayScore, oFT = wHome ? m.awayScore : m.homeScore;
+    const wHT = wHome ? m.homeScoreHT : m.awayScoreHT, oHT = wHome ? m.awayScoreHT : m.homeScoreHT;
+    if (w && opp) insights.push({
+      id: `comeback-${m.id}`, kind: 'comeback', severity: cb.deficit >= 2 ? 'high' : 'medium',
+      title: `${w.name} come from behind`,
+      body: `${w.name} trailed ${wHT}-${oHT} at the break and fought back to beat ${opp.name} ${wFT}-${oFT} — the tournament's biggest comeback so far.`,
+      entityType: 'match', entityId: m.id,
+      metrics: [{ label: 'Half-time', value: `${wHT}-${oHT}` }, { label: 'Full-time', value: `${wFT}-${oFT}` }, { label: 'Overturned', value: `${cb.deficit} goal${cb.deficit === 1 ? '' : 's'}` }],
+      createdAt: m.kickoff,
+    });
+  }
+  const up = possessionUpsets(finishedAll)[0];
+  if (up) {
+    const m = up.match, wHome = up.winnerId === m.homeTeamId;
+    const w = teamMap.get(up.winnerId), opp = teamMap.get(wHome ? m.awayTeamId : m.homeTeamId);
+    const wFT = wHome ? m.homeScore : m.awayScore, oFT = wHome ? m.awayScore : m.homeScore;
+    if (w && opp) insights.push({
+      id: `poss-upset-${m.id}`, kind: 'upset', severity: up.possession <= 35 ? 'high' : 'medium',
+      title: `${w.name} win against the run of play`,
+      body: `${w.name} beat ${opp.name} ${wFT}-${oFT} with just ${up.possession}% of the ball — the tournament's starkest smash-and-grab.`,
+      entityType: 'match', entityId: m.id,
+      metrics: [{ label: 'Possession', value: `${up.possession}%` }, { label: 'Result', value: `${wFT}-${oFT}` }],
+      createdAt: m.kickoff,
+    });
+  }
+  const clutch = clutchGoals(finishedAll)[0];
+  if (clutch) {
+    const m = clutch.match, t = teamMap.get(clutch.teamId), opp = teamMap.get(clutch.teamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId);
+    const who = clutch.playerId ? (getPlayer(clutch.playerId)?.name ?? 'A late strike') : 'An own goal';
+    const moment = clutch.kind === 'winner' ? 'winner' : clutch.kind === 'equaliser' ? 'equaliser' : 'go-ahead goal';
+    if (t && opp) insights.push({
+      id: `clutch-${m.id}-${clutch.minute}`, kind: 'clutch', severity: clutch.kind === 'winner' && clutch.minute >= 90 ? 'high' : 'medium',
+      title: `${who} strikes late for ${t.name}`,
+      body: `${who} struck a ${clutch.minute}' ${moment} for ${t.name} against ${opp.name} — the standout late goal of the tournament.`,
+      entityType: clutch.playerId ? 'player' : 'match', entityId: clutch.playerId ?? m.id,
+      metrics: [{ label: 'Minute', value: `${clutch.minute}'` }, { label: 'Moment', value: moment.charAt(0).toUpperCase() + moment.slice(1) }],
+      createdAt: m.kickoff,
+    });
+  }
   } catch (err) {
     console.error('[narratives] generateInsights failed; serving partial insights.', err);
   }

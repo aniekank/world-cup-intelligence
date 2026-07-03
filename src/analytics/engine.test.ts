@@ -7,6 +7,7 @@ import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
 import { answerQuery } from '@/ai/nlq';
 import { extractTeams } from '@/ai/query/resolver';
 import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
+import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport } from '@/ai/narratives';
 
@@ -312,6 +313,34 @@ describe('AI layer', () => {
       const i = matches.findIndex((m) => m.id === 'synth-cb');
       if (i >= 0) matches.splice(i, 1);
     }
+  });
+
+  it('momentum detectors: comeback, possession upset, clutch goal (ENH-5)', () => {
+    const m = {
+      id: 'x', status: 'FINISHED', stage: 'R32', homeTeamId: 'a', awayTeamId: 'b',
+      homeScore: 2, awayScore: 1, homeScoreHT: 0, awayScoreHT: 1,
+      teamStats: { a: { possession: 40 }, b: { possession: 60 } },
+      events: [
+        { type: 'GOAL', minute: 30, teamId: 'b', playerId: 'b-1' },
+        { type: 'GOAL', minute: 70, teamId: 'a', playerId: 'a-1' }, // equalise (not late)
+        { type: 'GOAL', minute: 88, teamId: 'a', playerId: 'a-2' }, // 88' winner
+      ],
+    } as unknown as Parameters<typeof clutchGoals>[0][number];
+    const cb = comebackWins([m]);
+    expect(cb.length).toBe(1); expect(cb[0]!.winnerId).toBe('a'); expect(cb[0]!.deficit).toBe(1);
+    const up = possessionUpsets([m]);
+    expect(up.length).toBe(1); expect(up[0]!.possession).toBe(40);
+    const cl = clutchGoals([m]);
+    expect(cl.length).toBe(1); // only the 88' goal is late + decisive
+    expect(cl[0]!.minute).toBe(88); expect(cl[0]!.kind).toBe('winner'); expect(cl[0]!.playerId).toBe('a-2');
+  });
+
+  it('routes clutch queries and surfaces momentum insight cards (ENH-5)', () => {
+    expect(answerQuery('clutch goals').intent).toBe('clutch-goals');
+    expect(answerQuery('who scored the latest winners').intent).toBe('clutch-goals');
+    const ins = generateInsights(); // seed has event timelines + comebacks
+    expect(ins.some((i) => i.kind === 'comeback')).toBe(true);
+    expect(ins.some((i) => i.kind === 'clutch')).toBe(true);
   });
 
   it('smartAnswer without an API key mirrors the deterministic parser (WC-061)', async () => {

@@ -17,6 +17,8 @@ const KIND_TONE: Record<string, 'accent' | 'amber' | 'red' | 'blue' | 'violet' |
   tactical: 'default',
   wall: 'blue',
   prediction: 'blue',
+  comeback: 'amber',
+  clutch: 'violet',
 };
 
 function entityHref(i: Insight): string | null {

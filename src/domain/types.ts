@@ -453,7 +453,9 @@ export type InsightKind =
   | 'tactical'
   | 'wall'
   | 'milestone'
-  | 'prediction';
+  | 'prediction'
+  | 'comeback'
+  | 'clutch';
 
 export interface Insight {
   id: ID;
