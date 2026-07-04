@@ -500,10 +500,20 @@ export function generateMatchSummary(matchId: string): string {
       : penWinner
         ? `${penWinner.name} won on penalties (${penLine}) after a`
         : 'It finished level';
+  // Judge "deserved vs against the run" against the ACTUAL winner — including a
+  // penalty shootout. The old check compared xG to `homeScore > awayScore`, which
+  // is false for any pens-decided 1-1, so it never saw the shootout winner and the
+  // verdict came out backwards (e.g. Egypt beat Australia on pens yet it read "the
+  // better side won" when Australia had the xG edge). (WC-074)
+  const xgWinner = m.homeScore > m.awayScore ? home : m.homeScore < m.awayScore ? away : penWinner;
   const xgLine =
     hStat && aStat && (hStat.xG > 0 || aStat.xG > 0)
       ? ` Underlying numbers: ${home.code} ${fmt(hStat.xG)} xG, ${away.code} ${fmt(aStat.xG)} xG${
-          (hStat.xG > aStat.xG) === m.homeScore > m.awayScore ? ' — the better side won' : ', against the run of expected goals'
+          hStat.xG === aStat.xG || !xgWinner
+            ? ''
+            : (xgWinner === home) === (hStat.xG > aStat.xG)
+              ? ' — the better side won'
+              : ', against the run of expected goals'
         }.`
       : '';
   // WC-023/WC-027: SportMonks DOES provide team match stats (possession, shots,
@@ -516,7 +526,10 @@ export function generateMatchSummary(matchId: string): string {
           typeof hStat?.fieldTilt === 'number' ? ` with a field tilt of ${fmt(hStat.fieldTilt)}%` : ''
         }.`
       : '';
-  return `${result} ${m.homeScore}-${m.awayScore} at ${m.venue}. ${scorers ? 'Scorers: ' + scorers + '.' : 'A goalless affair.'}${xgLine}${possLine}`;
+  // Only call it "goalless" when it truly was 0-0 — a scored match with no scorer
+  // names just means the event timeline isn't in yet, not that nobody scored. (WC-074)
+  const scoreLine = scorers ? `Scorers: ${scorers}.` : m.homeScore + m.awayScore === 0 ? 'A goalless affair.' : '';
+  return `${result} ${m.homeScore}-${m.awayScore} at ${m.venue}.${scoreLine ? ' ' + scoreLine : ''}${xgLine}${possLine}`;
 }
 
 export function generateScoutingReport(playerId: string): { summary: string; strengths: string[]; weaknesses: string[] } {

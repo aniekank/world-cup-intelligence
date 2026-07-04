@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateDataset } from '@/data/generate';
-import { dataset, getPlayerViews, getTeams } from '@/data/store';
+import { dataset, getPlayerViews, getTeams, setDataset, getActiveTournamentId } from '@/data/store';
 import { engine } from '@/analytics';
 import { predictMatch, scoreMatrix } from '@/analytics/poisson';
 import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
@@ -377,6 +377,24 @@ describe('AI layer', () => {
       expect(calls).toBe(1); // was 6 (initial + 5 retries) per endpoint before the fix
     } finally {
       global.fetch = orig;
+    }
+  });
+
+  it('match summary judges "deserved vs against the run" by the penalty winner (WC-074)', () => {
+    const orig = dataset();
+    const [A, B] = getTeams();
+    // A 1-1, A had more xG (2.0 vs 0.5), but B wins the shootout 5-3.
+    const synth = { ...orig.matches[0]!, id: 'synth-pens', status: 'FINISHED', stage: 'R32', homeTeamId: A!.id, awayTeamId: B!.id, homeScore: 1, awayScore: 1, homeScoreHT: 0, awayScoreHT: 1, events: [], penalties: { home: 3, away: 5 }, teamStats: { [A!.id]: { xG: 2.0 }, [B!.id]: { xG: 0.5 } } } as unknown as typeof orig.matches[0];
+    // Swap the dataset (new identity) so the memoized match index picks up the tie.
+    setDataset({ ...orig, matches: [...orig.matches, synth] }, 'test', getActiveTournamentId());
+    try {
+      const s = generateMatchSummary('synth-pens');
+      expect(s).toContain(`${B!.name} won on penalties`); // shootout winner named
+      expect(s).toContain('against the run of expected goals'); // B won despite A's xG edge
+      expect(s).not.toContain('the better side won');
+      expect(s).not.toContain('goalless affair'); // 1-1 with no scorer data is not "goalless"
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
     }
   });
 
