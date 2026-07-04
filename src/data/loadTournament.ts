@@ -185,6 +185,22 @@ export function shouldForceFinish(
   return true; // feed dropped the match (or stuck pre-kickoff) past the window → stale
 }
 
+/**
+ * A started match can't revert to "not started". True when a single feed reading
+ * reports SCHEDULED for a match we already have live / at half-time within its
+ * play window — almost certainly provider jitter (a transient NS/TBD). Honouring
+ * it would flip the match to SCHEDULED and yank it out of the live view entirely
+ * until the next good tick, which reads as "the live match vanished". So we ignore
+ * that one reading and keep the in-play state. (WC-077)
+ */
+export function isSpuriousRevert(
+  matchStatus: Match['status'],
+  feedStatus: Match['status'] | undefined,
+  withinWindow: boolean,
+): boolean {
+  return withinWindow && feedStatus === 'SCHEDULED' && (matchStatus === 'LIVE' || matchStatus === 'HALFTIME');
+}
+
 // The API-Football adapter sets a global back-off timestamp when it hits a
 // rate/quota limit; honour it here so we don't keep re-fetching into a spent
 // budget (a full snapshot fans out to ~60 requests). (WC-073)
@@ -275,12 +291,18 @@ export async function refreshLiveScores(): Promise<boolean> {
   let statusChanged = false;
   let newlyFinished = false;
   const matches = cur.matches.map((m) => {
-    const u = byId.get(m.id);
+    const uRaw = byId.get(m.id);
     const ev = eventsByMatch.get(m.id);
+    // Ignore a single glitchy "not started" reading for a match that's already in
+    // play within its window — a started match can't un-start, and honouring it
+    // would drop the match out of the live view. (WC-077)
+    const withinWindow = now < new Date(m.kickoff).getTime() + LIVE_WINDOW_AFTER_MS;
+    const u = uRaw && isSpuriousRevert(m.status, uRaw.status, withinWindow) ? undefined : uRaw;
     // A match still flagged live long after its play window is stale feed data
     // (the provider lagged marking it finished, then we fell out of the refresh
     // window). Force it finished so it stops showing a phantom live clock. (WC-057)
-    const staleLive = shouldForceFinish(m.status, new Date(m.kickoff).getTime(), now, u?.status, LIVE_WINDOW_AFTER_MS);
+    // Uses the raw feed status so a genuine past-window drop still finishes.
+    const staleLive = shouldForceFinish(m.status, new Date(m.kickoff).getTime(), now, uRaw?.status, LIVE_WINDOW_AFTER_MS);
     const scoreChanged =
       !!u && (u.status !== m.status || u.homeScore !== m.homeScore || u.awayScore !== m.awayScore || u.minute !== m.minute
         || u.livePhase !== m.livePhase || (u.penalties?.home ?? -1) !== (m.penalties?.home ?? -1) || (u.penalties?.away ?? -1) !== (m.penalties?.away ?? -1));

@@ -8,7 +8,7 @@ import { answerQuery } from '@/ai/nlq';
 import { extractTeams } from '@/ai/query/resolver';
 import { deriveCleanSheets } from '@/data/providers/frozenOverlay';
 import { comebackWins, possessionUpsets, clutchGoals } from '@/analytics/momentum';
-import { shouldForceFinish } from '@/data/loadTournament';
+import { shouldForceFinish, isSpuriousRevert } from '@/data/loadTournament';
 import { noteApiRateLimit, apiBackoffActive } from '@/data/providers/apiFootball';
 import { smartAnswer } from '@/ai/llmParse';
 import { generateInsights, generateMatchSummary, generateScoutingReport, generateDailyBriefing } from '@/ai/narratives';
@@ -457,6 +457,19 @@ describe('AI layer', () => {
     // Within the window, or already finished → never coerce
     expect(shouldForceFinish('LIVE', ko, ko + 60_000, undefined, WINDOW)).toBe(false);
     expect(shouldForceFinish('FINISHED', ko, past, undefined, WINDOW)).toBe(false);
+  });
+
+  it('ignores a single spurious "not started" reading for an in-play match (WC-077)', () => {
+    // In-play match, glitchy feed tick says SCHEDULED, still within window → ignore it
+    expect(isSpuriousRevert('LIVE', 'SCHEDULED', true)).toBe(true);
+    expect(isSpuriousRevert('HALFTIME', 'SCHEDULED', true)).toBe(true);
+    // Legitimate transitions and readings must NOT be treated as glitches
+    expect(isSpuriousRevert('LIVE', 'HALFTIME', true)).toBe(false); // real HT
+    expect(isSpuriousRevert('LIVE', 'FINISHED', true)).toBe(false); // real FT
+    expect(isSpuriousRevert('HALFTIME', 'LIVE', true)).toBe(false); // second half
+    expect(isSpuriousRevert('SCHEDULED', 'SCHEDULED', true)).toBe(false); // not yet started
+    // A never-started match past its window (never went live) is genuinely stale, not a glitch
+    expect(isSpuriousRevert('LIVE', 'SCHEDULED', false)).toBe(false);
   });
 
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
