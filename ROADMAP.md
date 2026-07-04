@@ -35,12 +35,12 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **"What's at stake" match previews** | Rich preview on every scheduled match page (replaces the thin one-liner). |
 | ✅ | **Dynamic daily briefing** | Was frozen on "group stage climax"; now derives the real phase from fixtures, leads with the marquee match, reflects live state + momentum + golden boot. |
 | ✅ | **Rotating briefing deck** (BRIEF-2) | The home hero is now a deck that cycles a different story every 8s — title race, live recaps (with scorers, never declaring a live winner), recent-result recaps with xG context, golden boot, momentum, the meanest defense, biggest rout, upset, breakout, marquee fixtures. Progress bar + dot nav + prev/next + hover-pause + play/pause; auto-rotation off under reduced-motion. (`generateBriefingDeck` in `src/ai/narratives.ts`, `src/components/home/BriefingDeck.tsx`) |
-| 🔨 | **Manager stories** | Tactical identity from the team's offense/defense/possession profile + over/under-achievement vs the pre-tournament market. *Installment 2.* |
+| ✅ | **Manager stories** (2573984) | Manager card on team pages — photo, career/honours, and line-up change tracking (rotation vs a settled XI) from the coaches feed. The over/under-achievement-vs-market angle wasn't the delivered form; the card + rotation read is. |
 | 🔨 | **Elite player form arcs** | Scoring streaks, involvement trending up/down, over/under-xG, milestone watches — built on the live event timelines. *Installment 2.* |
 | 📋 | **Claude-authored prose** | Wire the existing `narrate()` hook across briefing, previews, and stories so grounded structured output becomes genuinely editorial prose. Activates by setting `ANTHROPIC_API_KEY` in Render; deterministic stays the fallback. *Installment 3.* |
 | ✅ | **Match-preview enrichment** (PREV-1) | Upcoming-match previews now fold in three layers: **qualification scenarios** ("X must win to survive; Y are through with a draw or better" — sound final-round group maths), the **tactical matchup** (styles contrast + real formations, e.g. "4-4-2 v 4-2-3-1"), and **head-to-head** history (real cross-tournament meetings via the SportMonks H2H endpoint, fetched off the boot path). Surfaced on the home "matches that matter" cards and the match page. (`src/ai/previews.ts` · `sportmonks.ts` attachHeadToHead) |
 | 📋 | **Bracket knock-on analysis** | "If Brazil win this, Argentina's path to the final hardens" — downstream effects of a result. |
-| 📋 | **Milestone / record watch** | Players within reach of tournament records (goals, assists, clean sheets). |
+| ✅ | **Milestone / record watch** (0e4ea10) | Golden-boot milestone insight + a hot-scoring-streak "record watch" card (a player scoring in N straight matches) in AI Insights + the briefing. (`scoringStreakInsight` in `src/ai/narratives.ts`) |
 
 ## 1b. Clash of the Civilizations — regional lens (`/civilizations`)
 *How every part of the world is faring, aggregated by confederation.*
@@ -59,8 +59,9 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **Unified entity resolver** | One shared matcher behind search + NLQ — full name / surname / flipped / "F. Last" / accents / prefix / typo / team codes + aliases. Verified by a generative corpus (`src/ai/query/resolver.ts`). |
 | ✅ | **LLM query-understanding layer** (ENH-3) | Shipped `b1a01c9`. `smartAnswer` (`src/ai/llmParse.ts`) runs the deterministic parser first; only on an `unknown` intent does it call Claude (Haiku, structured output, key-gated) as a **translator, not an answerer** — it normalizes the free-form question into a canonical query string that re-runs through `answerQuery`, so answers stay grounded in real numbers (no hallucinated stats). Deterministic path is the fallback with no key. Verified live in prod. |
+| ✅ | **NLQ breadth + hardening** (WC-059…067, ENH-4/5) | The deterministic "Ask the data" engine gained scope filters (nationality / region / club), stage-scoped event stats, phase-aware team status ("was 1st in Group H", not "currently"), short-name + goalkeeper resolution, derived clean sheets, and momentum queries (comebacks, possession upsets, clutch late goals) shared with the insight cards. (`src/ai/nlq.ts`, `src/analytics/momentum.ts`) |
 | 🧊 | **Embeddings / concept search** | Vector search for fuzzy concepts ("clinical poacher", "ball-playing CB"). Deferred — structured + LLM covers ~90% of this for a stats-rich dataset; revisit only if needed. |
-| 📋 | **Search ranking polish** (WC-014) | Tighten multi-word runner-up noise (e.g. "lionel messi" → a weak #2 via the initial match). Cosmetic. See `BUGS.md`. |
+| ✅ | **Search ranking polish** (WC-014) | Shipped 246f186 — multi-word runner-up noise killed ("lionel messi" no longer surfaces a weak initial-match #2). |
 
 ## 3. Live match experience
 
@@ -68,9 +69,10 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 |--------|---------|--------------|
 | ✅ | **Live fixtures refresh** | Polls the feed every 60s during match windows; games flip to LIVE and scores update server-side. |
 | ✅ | **Match event timelines** | Goals, cards, subs, VAR/offside — fetched per fixture and surfaced on the match page; backfilled for finished matches. |
+| ✅ | **Extra-time, penalties & live self-heal** (WC-050, WC-057, WC-071) | Knockout ties run through extra time and penalty shootouts (recaps + clashes register the shootout winner, not a draw); a match stuck showing LIVE past its window self-heals, and one still in ET/PENs is no longer force-finished as a goalless draw. |
 | ✅ | **Viewer-local kickoff times** | Kickoffs render in the viewer's own timezone (no more "tomorrow 1pm"). |
 | ✅ | **Client-side live auto-tick** (ENH-1) | Global `<LiveRefresh>` polls `/api/live-status` and calls `router.refresh()` on a snapshot-generation change, so every page updates in place without a reload (15s live / 60s idle, pauses on hidden tab). Freshness pill in the Topbar. Server poll made adaptive + env-tunable. |
-| 📋 | **Full-history event backfill** | Fetch timelines for all finished matches (currently capped to recent + on-demand), so older match pages show their full timeline. |
+| ✅ | **Full-history event backfill** | Every finished match with an empty timeline gets its events fetched once, capped per refresh tick so a backlog fills in gradually (newest first) instead of one quota-draining burst. (`src/data/loadTournament.ts`) |
 | 🟡 | **Knockout forecast — reality reconcile (done) + full re-sim (deferred)** | `reconcileForecastsWithResults` already pins known facts (eliminated → 0, confirmed advancers → reached) once real ties resolve. The remaining piece is a full real-bracket *re-simulation* — propagate still-alive teams through the **actual** draw (FIFA bracket tree reconstructed from SportMonks' "Winner Match N" linkage + best-third routing) instead of the seeded approximation, so deeper-run odds are computed on the true bracket. Fragile + unverifiable until the draw lands (2 Jul 2026); revisit then. |
 
 ## 4. Data pipeline & resilience
@@ -79,6 +81,9 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | Status | Feature | What it does |
 |--------|---------|--------------|
 | ✅ | **Hollow-feed fallback** | If the live API returns teams but no squads, serve the full simulation instead of going blank. |
+| ✅ | **Visitor status banner** (WC-072) | Warns visitors when the app is on cached/simulated data or under manual maintenance (`SITE_NOTICE` env), so nobody mistakes fallback data for live. Auto-hides on recovery. (`src/components/layout/SiteBanner.tsx`) |
+| ✅ | **Rate-limit fail-fast + backoff** (WC-073) | On a spent API-Football quota the adapter throws immediately (no 6× retry storm) and enters a 15-min backoff, so boot recovery + live refresh stop hammering a dead quota. (`ApiFootballRateLimitError` in `apiFootball.ts`) |
+| ✅ | **Last-known-good live cache** (WC-075) | Every healthy live load stashes a gzip snapshot in Upstash; a failed boot restores it ("cached") instead of dropping to the placeholder simulation. Survives Render's deploy-time disk wipe. Gated on Upstash env. (`src/server/liveSnapshotCache.ts`) |
 | 📋 | **Scheduled disk-cache refresh** | Cache the heavy live load to disk and refresh on a schedule (1–2×/day) instead of re-fetching ~114 requests on every boot — sips the API quota instead of gulping it. |
 | ✅ | **Defer heavy boot fetches** (PERF-1) | Load TV listings + the country map *off* the live-snapshot critical path so live boots faster and the brief "Simulated" cold-start window shrinks. Safer than blocking startup (which risks slow/failed cold starts on free tier). |
 | 📋 | **Fail-fast on bad key** | Detect auth failures and stop retrying immediately, so a dead key never bogs down boot (and never trips a deploy health-check rollback). |
@@ -115,6 +120,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Betting Edge guardrails** (WC-022) | Shrunk-EV + min-model-probability so longshot "troll" value bets don't top the list; imminent fixtures surfaced first. |
 | ✅ | **Track record — Phase 1** (FEAT-1) | `/track-record` grades every finished match against the model's pre-match probabilities (predictMatch runs off static ratings, so it's a fair pre-match read): hit rate, multiclass Brier vs a coin-flip baseline, Brier skill, log loss, best-call / biggest-miss highlights, and a per-match graded table. (`src/server/trackRecord.ts`) |
 | 🔌 | **Track record — Phase 2: vs the bookies** (FEAT-1b) | Built + gated, **awaiting Upstash config**. The live refresh snapshots every upcoming fixture's model + de-vigged market price to Upstash Redis (overwriting until kickoff = the closing line); `/track-record` joins finished results → model-vs-market Brier + a "beat the market" count. No-op without `UPSTASH_REDIS_REST_URL`/`TOKEN` (verified). Set those env vars on Render → snapshots accumulate before each kickoff (CLV can't be backfilled). (`src/server/predictionLog.ts`) |
+| ✅ | **Track record — phase-aware + calibration** (WC-076) | Knockout ties graded 2-way on which side the model backed to *advance* (penalty-shootout-aware via `advanceProbabilities`); group games stay 3-way H/D/A. Split into "Knockout calls" and "Group-stage calls" tables with a per-phase hit-rate split and a **calibration/reliability panel** (predicted vs observed hit rate per confidence band). (`src/server/trackRecord.ts`) |
 | 🧊 | **Multi-sport betting product** | Separate odds product for bettors, off the WC critical path. **Confirmed (2026-07-04)** as the home for the live forecasting/odds/Monte-Carlo engine after WC 2026 ends — a NEW repo, not a mutation of this app. See §11 for the WC app's own end-state. |
 
 ## 8. Live data quality
@@ -122,6 +128,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | Status | Feature | What it does |
 |--------|---------|--------------|
 | ✅ | **Live attribute + narrative honesty** (WC-023) | Player attributes show the real SportMonks match rating (no flat 76); match reports omit fabricated 50/50 possession / field tilt. |
+| ✅ | **Match-review verdict honesty** (WC-074) | A finished knockout's "deserved / against the run of play" read is judged by the **penalty-shootout winner** when level, not the drawn scoreline, and the recap only says "goalless" when it actually was 0-0. (`src/ai/narratives.ts`) |
 | ✅ | **Real player head-shots** (IMG-1) | SportMonks `image_path` photos render on player profile / discoveries / storylines, composited over the procedural portrait (which stays the fallback for seeded/historical or a failed load). (`src/components/brand/PlayerPortrait.tsx`) |
 | ✅ | **Advanced metrics graceful-degrade** (WC-016) | xG/xA/progressive passes/pressures read **0** across player pages, standings, analytics, golden boot on live data — the feed lacks them but the UI renders them. Hide/label like WC-023 did for attributes. **Biggest "live looks broken" gap.** See `BUGS.md`. |
 
