@@ -3,7 +3,7 @@
 A living tracker of bugs, their root causes, and fixes. Keep it next to the code so the
 record travels with the repo. Commit hashes let anyone see the exact change.
 
-**Last updated:** 2026-07-03 (WC-076)
+**Last updated:** 2026-07-04 (WC-077)
 
 ---
 
@@ -32,7 +32,16 @@ differently between the two.
 
 ## Open bugs
 
-_None — all tracked bugs and enhancements are resolved. New items go here using the template above._
+### WC-077 — Live match (Canada v Morocco) disappears from live view at halftime
+- **Area:** live view (home "Live & Upcoming" / /matches "Live now" / ticker), data source unknown
+- **Severity:** high
+- **Steps:** watch a live knockout match; at halftime it vanishes from the live surfaces
+- **Expected:** a match at HT stays in the live view labelled "HT"
+- **Actual:** the match disappears from the live view at halftime
+- **Investigation:** traced the full pipeline — `mapStatus('HT')→HALFTIME` (apiFootball), the refresh/merge, `shouldForceFinish` (returns false at HT and can't fire inside the 210-min window regardless), the store selectors (`getLiveMatches`), `matchesView`, `liveStatus`, the refresh loop, and `MatchCard`/`LiveTicker` — **all correctly treat HALFTIME as live.** A hermetic repro (synthetic HT knockout match kicked off 50 min ago) shows it stays in `getLiveMatches`, `matchesView`, and is NOT force-finished. So this is **not a status-filter bug in the code** — it's dynamic/environmental (site on a cached/sim fallback snapshot, or a transient feed omission). Added a quota-free diagnostic (`/api/live-status?debug=1`, `liveDebug()` in `src/server/queries.ts`) that dumps each in-play match's status/minute/kickoff-age/visibility + the cache/backoff flags, so the next occurrence is diagnosable without spending API budget. Minor related find (not the cause): `MiniMatchRow` (team/group pages) treats only `LIVE`, not `HALFTIME`, as live.
+- **Status:** 🟡 Investigating — awaiting a `?debug=1` capture during a live game
+
+_New items go below using the template above._
 
 ---
 

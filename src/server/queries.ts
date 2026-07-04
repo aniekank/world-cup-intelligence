@@ -60,6 +60,58 @@ export function liveStatus() {
   };
 }
 
+/**
+ * Quota-free live diagnostic (does NOT call the provider — pure reads over the
+ * in-memory snapshot). Hit `/api/live-status?debug=1` while a game is on to see
+ * exactly what the server thinks: every match near its play window with its
+ * status, minute, kickoff age, and whether each live surface would show it.
+ * Built to chase "a live match vanished" reports without burning API budget.
+ */
+export function liveDebug() {
+  const now = Date.now();
+  const WINDOW_MS = 210 * 60_000; // must mirror MAX_LIVE_MS in the store (WC-057/071)
+  const liveIds = new Set(getLiveMatches().map((m) => m.id));
+  const near = getMatches()
+    .filter((m) => {
+      const age = now - Date.parse(m.kickoff);
+      const inWindow = age > -10 * 60_000 && age < WINDOW_MS;
+      return m.status === 'LIVE' || m.status === 'HALFTIME' || inWindow;
+    })
+    .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+    .map((m) => {
+      const home = getTeam(m.homeTeamId);
+      const away = getTeam(m.awayTeamId);
+      const ageMin = Math.round((now - Date.parse(m.kickoff)) / 60_000);
+      return {
+        id: m.id,
+        match: `${home?.code ?? m.homeTeamId} v ${away?.code ?? m.awayTeamId}`,
+        teamsResolved: Boolean(home && away),
+        status: m.status,
+        minute: m.minute,
+        livePhase: m.livePhase ?? null,
+        score: `${m.homeScore}-${m.awayScore}`,
+        kickoff: m.kickoff,
+        minsSinceKickoff: ageMin,
+        withinLiveWindow: ageMin > -10 && ageMin < 210,
+        showsInLiveSurfaces: liveIds.has(m.id), // getLiveMatches() = home + live badge
+      };
+    });
+  const g = globalThis as unknown as { __wcApiBackoffUntil?: number; __wcLiveFromCache?: boolean; __wcLiveLoading?: boolean; __wcLiveBooted?: boolean };
+  return {
+    now: new Date(now).toISOString(),
+    generatedAt: dataset().generatedAt,
+    source: getActiveSource(),
+    tournamentId: getActiveTournamentId(),
+    fromCache: !!g.__wcLiveFromCache, // true → serving last-known-good, not fresh (WC-075)
+    loading: !!g.__wcLiveLoading,
+    booted: !!g.__wcLiveBooted,
+    apiBackoffActive: now < (g.__wcApiBackoffUntil ?? 0), // true → quota/rate-limit hold, no refresh (WC-073)
+    apiBackoffUntil: g.__wcApiBackoffUntil ? new Date(g.__wcApiBackoffUntil).toISOString() : null,
+    liveCount: liveIds.size,
+    nearWindow: near,
+  };
+}
+
 export function competition() {
   return getCompetition();
 }
