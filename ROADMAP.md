@@ -58,7 +58,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | Status | Feature | What it does |
 |--------|---------|--------------|
 | ✅ | **Unified entity resolver** | One shared matcher behind search + NLQ — full name / surname / flipped / "F. Last" / accents / prefix / typo / team codes + aliases. Verified by a generative corpus (`src/ai/query/resolver.ts`). |
-| 📋 | **LLM query-understanding layer** | Turn the search bar into "ask anything": Claude interprets a free-form question → structured filters over the analytics engine → an answer grounded in real numbers. Covers concept queries ("most overperforming young forward") without vector infrastructure. **Recommended next big AI step.** |
+| ✅ | **LLM query-understanding layer** (ENH-3) | Shipped `b1a01c9`. `smartAnswer` (`src/ai/llmParse.ts`) runs the deterministic parser first; only on an `unknown` intent does it call Claude (Haiku, structured output, key-gated) as a **translator, not an answerer** — it normalizes the free-form question into a canonical query string that re-runs through `answerQuery`, so answers stay grounded in real numbers (no hallucinated stats). Deterministic path is the fallback with no key. Verified live in prod. |
 | 🧊 | **Embeddings / concept search** | Vector search for fuzzy concepts ("clinical poacher", "ball-playing CB"). Deferred — structured + LLM covers ~90% of this for a stats-rich dataset; revisit only if needed. |
 | 📋 | **Search ranking polish** (WC-014) | Tighten multi-word runner-up noise (e.g. "lionel messi" → a weak #2 via the initial match). Cosmetic. See `BUGS.md`. |
 
