@@ -86,22 +86,48 @@ function isHealthyLive(snap: DatasetSnapshot): boolean {
 export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   const t = getTournament(id);
   if (!t) throw new Error(`Unknown tournament: ${id}`);
-  const snap = getCachedTournament(id) ?? (await loadTournamentSnapshot(id));
+  const isLive = t.source === 'apifootball' || t.source === 'sportmonks';
+  const g = globalThis as { __wcLiveFromCache?: boolean };
 
-  // If the live feed came back hollow, fall back to the complete built-in
-  // simulation (no external calls, always fully populated) rather than serving
-  // a broken dataset. It auto-upgrades to live on the next load once the feed
-  // is healthy again. The hollow snapshot is intentionally NOT cached, so a
-  // later switch re-fetches.
-  if ((t.source === 'apifootball' || t.source === 'sportmonks') && !isHealthyLive(snap)) {
-    const withSquad = snap.teams.filter((x) => (x.squadIds?.length ?? 0) > 0).length;
-    console.warn(`[data] Live feed incomplete (${snap.players.length} players, ${withSquad}/${snap.teams.length} squads) — serving the full simulation instead.`);
+  let snap: DatasetSnapshot | null = null;
+  try {
+    snap = getCachedTournament(id) ?? (await loadTournamentSnapshot(id));
+  } catch (e) {
+    if (!isLive) throw e; // non-live sources have nothing to fall back to
+    console.warn('[data] Live snapshot load failed:', e);
+  }
+
+  // Live feed failed or came back hollow. Serve the last-known-good CACHED live
+  // snapshot (real, if slightly stale) before dropping to the simulation — Render
+  // wipes disk on deploy, so the cache lives in Upstash. Auto-upgrades to fresh
+  // live once the feed heals (the refresh loop rebuilds). (WC-075/WC-057)
+  if (isLive && (!snap || !isHealthyLive(snap))) {
+    if (id === 'live-2026') {
+      const { restoreLiveSnapshot } = await import('@/server/liveSnapshotCache');
+      const cached = await restoreLiveSnapshot();
+      if (cached) {
+        g.__wcLiveFromCache = true;
+        setDataset(cached, `Live · cached (updated ${new Date(cached.generatedAt).toISOString().slice(11, 16)} UTC)`, 'live-2026');
+        console.log(`[data] Live feed unavailable — serving last-known-good snapshot from ${cached.generatedAt}.`);
+        void refreshLiveScores().catch(() => {});
+        return cached;
+      }
+    }
+    const withSquad = (snap?.teams ?? []).filter((x) => (x.squadIds?.length ?? 0) > 0).length;
+    console.warn(`[data] Live feed incomplete (${snap?.players.length ?? 0} players, ${withSquad}/${snap?.teams.length ?? 0} squads) — serving the full simulation instead.`);
     const sim = generateDataset();
     setDataset(sim, 'Simulation (live feed unavailable)', 'simulation');
     return sim;
   }
 
+  if (!snap) throw new Error(`Tournament ${id} produced no snapshot`); // unreachable for non-live (catch re-throws); narrows the type
+  g.__wcLiveFromCache = false; // fresh live data is active
   setDataset(snap, sourceLabel(t), id);
+  // Stash this healthy live snapshot as last-known-good (throttled, best-effort). (WC-075)
+  if (id === 'live-2026') {
+    const { persistLiveSnapshot } = await import('@/server/liveSnapshotCache');
+    void persistLiveSnapshot(snap);
+  }
   // Fill TV listings off the critical path (non-blocking) once live is active —
   // covers both boot and the runtime tournament switcher.
   if (id === 'live-2026' && !snap.matches.some((m) => m.tvListings?.length)) {
@@ -334,7 +360,11 @@ export async function rebuildLiveSnapshot(): Promise<void> {
       const matches = snap.matches.map((m) => { const ev = prevEvents.get(m.id); return ev && ev.length ? { ...m, events: ev } : m; });
       const { reconcileScorers } = await import('./providers/frozenOverlay');
       const recon = await reconcileScorers(matches, snap.players, snap.teams, snap.playerStats);
-      setDataset({ ...snap, matches, playerStats: recon.playerStats }, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
+      const rebuilt = { ...snap, matches, playerStats: recon.playerStats };
+      setDataset(rebuilt, sourceLabel(t!), 'live-2026', { rebuildEngine: true });
+      (globalThis as { __wcLiveFromCache?: boolean }).__wcLiveFromCache = false; // fresh full data replaced any cached snapshot (WC-075)
+      const { persistLiveSnapshot } = await import('@/server/liveSnapshotCache');
+      void persistLiveSnapshot(rebuilt); // refresh the last-known-good cache (WC-075)
       void enrichLiveTvListings().catch(() => {}); // no-op without a SportMonks key (graceful)
       void enrichLiveXg().catch(() => {}); // re-overlay real team xG (a fresh fetch drops it)
       void enrichLiveMatchStats().catch(() => {}); // tactical stats for matches past the freeze

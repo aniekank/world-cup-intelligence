@@ -19,7 +19,7 @@ export async function register() {
   // A loading flag (only for the live edition) lets the client show a "Loading
   // live data…" indicator during that window instead of silently rendering the
   // placeholder simulation.
-  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean; __wcApiBackoffUntil?: number };
+  const g = globalThis as unknown as { __wcLiveLoading?: boolean; __wcLiveBooted?: boolean; __wcApiBackoffUntil?: number; __wcLiveFromCache?: boolean };
   const trackLoading = id === 'live-2026';
   if (trackLoading) g.__wcLiveLoading = true;
   void (async () => {
@@ -58,6 +58,12 @@ export async function register() {
         const store = await import('@/data/store');
         const lt = await import('@/data/loadTournament');
         if (store.getActiveTournamentId() === 'live-2026') {
+          // If we're on a cached snapshot (failed boot), try a full rebuild once
+          // out of back-off to swap in fresh live data — refreshLiveScores only
+          // patches scores, not squads/stats. Clears the cache flag on success. (WC-075)
+          if (g.__wcLiveFromCache && Date.now() >= (g.__wcApiBackoffUntil ?? 0)) {
+            await lt.rebuildLiveSnapshot();
+          }
           await lt.refreshLiveScores();
         } else if (!g.__wcLiveBooted && Date.now() >= (g.__wcApiBackoffUntil ?? 0)) {
           // Live's boot load hasn't succeeded yet — keep retrying so a failed boot

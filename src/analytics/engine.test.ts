@@ -398,6 +398,23 @@ describe('AI layer', () => {
     }
   });
 
+  it('live snapshot cache round-trips losslessly and no-ops when unconfigured (WC-075)', async () => {
+    const { encodeSnapshot, decodeSnapshot, snapshotCacheConfigured, restoreLiveSnapshot, persistLiveSnapshot } = await import('@/server/liveSnapshotCache');
+    const snap = dataset();
+    const restored = decodeSnapshot(encodeSnapshot(snap)); // gzip + base64 round-trip
+    expect(restored.teams.length).toBe(snap.teams.length);
+    expect(restored.players.length).toBe(snap.players.length);
+    expect(restored.matches.length).toBe(snap.matches.length);
+    expect(restored.matches[0]?.id).toBe(snap.matches[0]?.id);
+    // Compresses meaningfully (a full snapshot is many MB of JSON).
+    expect(encodeSnapshot(snap).length).toBeLessThan(JSON.stringify(snap).length);
+    // With no Upstash env configured, cache ops are graceful no-ops (never throw).
+    if (!snapshotCacheConfigured()) {
+      expect(await restoreLiveSnapshot()).toBeNull();
+      await expect(persistLiveSnapshot(snap)).resolves.toBeUndefined();
+    }
+  });
+
   it('rate-limit back-off pauses fetches for a window, then clears (WC-073)', () => {
     const t0 = 1_700_000_000_000;
     noteApiRateLimit(t0);

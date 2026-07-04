@@ -24,6 +24,9 @@ export function SiteBanner() {
       const s = liveStatus();
       if (s.loading) {
         text = 'Loading live World Cup data…';
+      } else if (/cached/i.test(s.source)) {
+        text =
+          'Live updates are paused (feed temporarily unavailable) — showing the most recent data. Live scores resume automatically.';
       } else if (/live feed unavailable/i.test(s.source)) {
         text =
           'Live World Cup data is temporarily unavailable — showing simulated data in the meantime. Live scores resume automatically.';
