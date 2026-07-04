@@ -3,7 +3,7 @@
 Proposed features and enhancements, so good ideas don't get buried under bug-fixing.
 Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 
-**Last updated:** 2026-06-21
+**Last updated:** 2026-07-04
 
 **Status:** ✅ Shipped · 🔨 Building now · 📋 Proposed · 🧊 Deferred (revisit later)
 
@@ -115,7 +115,7 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Betting Edge guardrails** (WC-022) | Shrunk-EV + min-model-probability so longshot "troll" value bets don't top the list; imminent fixtures surfaced first. |
 | ✅ | **Track record — Phase 1** (FEAT-1) | `/track-record` grades every finished match against the model's pre-match probabilities (predictMatch runs off static ratings, so it's a fair pre-match read): hit rate, multiclass Brier vs a coin-flip baseline, Brier skill, log loss, best-call / biggest-miss highlights, and a per-match graded table. (`src/server/trackRecord.ts`) |
 | 🔌 | **Track record — Phase 2: vs the bookies** (FEAT-1b) | Built + gated, **awaiting Upstash config**. The live refresh snapshots every upcoming fixture's model + de-vigged market price to Upstash Redis (overwriting until kickoff = the closing line); `/track-record` joins finished results → model-vs-market Brier + a "beat the market" count. No-op without `UPSTASH_REDIS_REST_URL`/`TOKEN` (verified). Set those env vars on Render → snapshots accumulate before each kickoff (CLV can't be backfilled). (`src/server/predictionLog.ts`) |
-| 🧊 | **Multi-sport betting product** | Separate odds product for bettors, off the WC critical path. |
+| 🧊 | **Multi-sport betting product** | Separate odds product for bettors, off the WC critical path. **Confirmed (2026-07-04)** as the home for the live forecasting/odds/Monte-Carlo engine after WC 2026 ends — a NEW repo, not a mutation of this app. See §11 for the WC app's own end-state. |
 
 ## 8. Live data quality
 
@@ -133,6 +133,29 @@ Companion to `BUGS.md` (which tracks defects). Updated as items ship.
 | ✅ | **Defense showcase** (`/defense`) | "The Wall" — Meanest Defenses (goals/xG conceded + clean sheets), Golden Glove (saves / clean sheets / save %), Top Ball-Winners (tackles+interceptions+duels+pressures per 90). xGA and pressures hide gracefully where the source lacks them. (`src/server/defense.ts`) |
 | ✅ | **Defensive insight + briefing beat** (DEF-1) | A `wall` insight ("X has conceded just N — the meanest defense") in AI Insights, plus a meanest-defense beat in the daily briefing. Works on every source (results-based). |
 | ✅ | **Tactical identity profiles** (TAC-1) | "Tactical Identity" panel on team pages — a derived playing-style label from possession, press index (PPDA), field tilt and pass accuracy (seeded/historical). On **live**, a coarser **build-up read** from player passing (pass accuracy + final-third passes), honestly labelled, since the feed has no team possession/press. Plus a **"Styles" clash** line on match pages ("high press vs deep block", or "a tactical mirror"). No formations/spatial maps — the feed has no coordinates. (`src/server/tactics.ts`) |
+
+## 10. Post-tournament transition — the graceful freeze
+*Added 2026-07-04. When WC 2026 ends (final ~2026-07-19), the app gets a deliberate ending: it freezes into a permanent retrospective + DS showcase rather than limping on friendlies/qualifiers. Decision + rationale in the session memory `post-wc-freeze-plan`. Most of this is dormant-until-complete, so it can be built calmly ahead of time. **Not before today's live-testing / stabilization pass.***
+
+| Status | Feature | What it does |
+|--------|---------|--------------|
+| 📋 | **"Tournament complete" detection** (FREEZE-1) | One predicate — all matches `FINISHED` or `now > endDate` — that everything else keys off. Hermetically testable (inject a synthetic all-finished tournament). |
+| 📋 | **Retrospective landing + quiet chrome** (FREEZE-2) | On complete: home leads with the champion, the tournament's story, and the **Track Record / calibration as the hero** (the reckoning is a forecasting app's best moment). Live ticker + `SiteBanner` "scores resume" go quiet → "World Cup 2026 · Complete". |
+| 📋 | **Full freeze + decommission the live feed** (FREEZE-3) | Capture the final state to the frozen overlay so the app runs with **no live feed at all**, then cancel/downgrade API-Football (as with SportMonks). Zero feed cost, zero quota risk, permanent. A post-final one-liner of a decision, not a pre-build. |
+
+## 11. Quant Room — data-science hub (expansion of the Model Lab, §0)
+*Added 2026-07-04. A dedicated "for the nerds" section (working names: Quant Room / Data Lab / Engine Room) that grows the Model Lab into a fuller hub — the evergreen draw of the frozen retrospective. **Tabled** by the user (2026-07-04): ideas parked, nothing building until after the stabilization pass. Full pitch in memory `quant-room-idea-bank`. Note the Lab already ships a win-prob timeline (LAB-3), calibration, PCA style embedding, and Shapley — these build on that, they don't duplicate it.*
+
+| Status | Feature | What it does |
+|--------|---------|--------------|
+| 🧊 | **Leverage index + pivotal-moments ranking** (QR-1) | Extends the shipped win-prob timeline (LAB-3): score how much each moment swung the outcome, and rank a tournament's highest-leverage swings. ★ headline |
+| 🧊 | **The Luck Table** (QR-2) | Re-sim the tournament on xG-*deserved* results vs actual — who's here on merit vs riding variance (a regression-to-mean signal). ★ headline |
+| 🧊 | **Historical Analog Engine** (QR-3) | "This run rhymes with…" — nearest-neighbour over 90 years of WCs (the 1930–2015 archive) on ELO path / goals / upsets / seed. The app's unique moat. ★ headline |
+| 🧊 | **Model P&L / Kelly backtest** (QR-4) | Bankroll curve if you staked the model's edges vs the closing line, with Sharpe / max drawdown. Uses the closing-line log (FEAT-1b). |
+| 🧊 | **Bayesian strength ticker** (QR-5) | Each team's strength as a posterior with credible intervals, updating match by match. |
+| 🧊 | **Disagreement radar** (QR-6) | Where ELO vs market vs Monte-Carlo most disagree = the most mispriced matches. |
+| 🧊 | **Scenario solver** (QR-7) | Conditional Monte Carlo ("if Spain beat Brazil, the title picture becomes…"); builds on the Lab's what-if simulator. |
+| 🧊 | **Chaos timeline** (QR-8) | Shannon entropy of the title-odds distribution collapsing round by round, annotated with the upsets that reshaped the field. |
 
 ---
 
