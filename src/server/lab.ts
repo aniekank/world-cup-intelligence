@@ -107,7 +107,10 @@ export function labData() {
   const tr = trackRecord();
   const calPairs: CalPair[] = [];
   for (const r of tr.rows) {
-    (['H', 'D', 'A'] as const).forEach((cls) => calPairs.push({ p: r.probs[cls], y: r.actual === cls ? 1 : 0, cls }));
+    // Group games have H/D/A cells; knockout ties have 2 advance cells (home, away)
+    // → map them to H / A (no draw) so the H/D/A calibration filter still works.
+    const clsByMode: ('H' | 'D' | 'A')[] = r.mode === 'result' ? ['H', 'D', 'A'] : ['H', 'A'];
+    r.cells.forEach((c, i) => calPairs.push({ p: c.prob, y: c.actual ? 1 : 0, cls: clsByMode[i] ?? 'H' }));
   }
 
   // ── Model residuals: predicted (expected) goals vs actual, per side, for

@@ -380,6 +380,26 @@ describe('AI layer', () => {
     }
   });
 
+  it('track record grades knockout ties as 2-way advance calls, not H/D/A draws (WC-076)', async () => {
+    const { trackRecord } = await import('@/server/trackRecord');
+    const orig = dataset();
+    const [A, B] = getTeams();
+    // A 1-1 knockout tie, B advances on penalties (5-3).
+    const synth = { ...orig.matches[0]!, id: 'synth-tr', status: 'FINISHED', stage: 'R32', homeTeamId: A!.id, awayTeamId: B!.id, homeScore: 1, awayScore: 1, penalties: { home: 3, away: 5 }, events: [], teamStats: {} } as unknown as typeof orig.matches[0];
+    setDataset({ ...orig, matches: [...orig.matches, synth] }, 'test', getActiveTournamentId());
+    try {
+      const tr = trackRecord();
+      const row = tr.knockoutRows.find((r) => r.match.id === 'synth-tr');
+      expect(row?.mode).toBe('advance');
+      expect(row?.cells.length).toBe(2); // advance is 2-way — no draw cell
+      expect(row?.cells.some((c) => c.code === 'Draw')).toBe(false);
+      expect(row?.actualLabel).toBe(B!.name); // B advanced on penalties
+      expect(tr.byPhase.knockout.n).toBeGreaterThan(0);
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
+    }
+  });
+
   it('match summary judges "deserved vs against the run" by the penalty winner (WC-074)', () => {
     const orig = dataset();
     const [A, B] = getTeams();

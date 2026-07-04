@@ -1,21 +1,41 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { trackRecord, marketComparison, type TrackRow } from '@/server/trackRecord';
+import { trackRecord, marketComparison, type TrackRow, type TrackCell } from '@/server/trackRecord';
 import { PageHeader, Panel, Stat, Table, Th, Td, Badge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { pct } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Track Record' };
 
-const OUTCOME: Record<'H' | 'D' | 'A', string> = { H: 'home win', D: 'a draw', A: 'away win' };
-
 function highlight(r: TrackRow, kind: 'best' | 'miss') {
-  const o = r.actual;
-  const side = o === 'H' ? r.home : o === 'A' ? r.away : null;
-  const what = side ? `${side.name} to win` : 'a draw';
+  const outcome = r.mode === 'advance' ? `${r.actualLabel} to advance` : r.actualLabel === 'Draw' ? 'a draw' : `${r.actualLabel} to win`;
+  const p = pct(r.cells.find((c) => c.actual)?.prob ?? 0);
+  const line = `${r.home.code} ${r.score} ${r.away.code}`;
   return kind === 'best'
-    ? `Model gave ${pct(r.probs[o])} to ${what} — ${r.home.code} ${r.score} ${r.away.code}. Called it.`
-    : `Model gave ${what} just ${pct(r.probs[o])} — it happened (${r.home.code} ${r.score} ${r.away.code}).`;
+    ? `Model gave ${p} to ${outcome} — ${line}. Called it.`
+    : `Model gave ${outcome} just ${p} — it happened (${line}).`;
+}
+
+function probCell(cell: TrackCell, hit: boolean, key: number) {
+  return (
+    <Td key={key} align="right" className={`tnum ${cell.pick ? 'font-bold text-terminal-bright' : 'text-terminal-muted'} ${cell.pick && hit ? 'text-accent' : ''}`}>
+      {pct(cell.prob, 0)}
+    </Td>
+  );
+}
+
+function matchCell(r: TrackRow) {
+  return (
+    <Td>
+      <Link href={`/matches/${r.match.id}`} className="flex items-center gap-1.5 hover:text-accent">
+        <TeamCrest code={r.home.code} color={r.home.primaryColor} size={18} />
+        <span className="text-sm font-semibold text-terminal-bright">{r.home.code}</span>
+        <span className="text-xs text-terminal-muted">v</span>
+        <span className="text-sm font-semibold text-terminal-bright">{r.away.code}</span>
+        <TeamCrest code={r.away.code} color={r.away.primaryColor} size={18} />
+      </Link>
+    </Td>
+  );
 }
 
 export default async function TrackRecordPage() {
@@ -31,20 +51,61 @@ export default async function TrackRecordPage() {
     );
   }
 
+  const ko = tr.knockoutRows;
+  const gp = tr.groupRows;
+
   return (
     <div className="space-y-6">
       <PageHeader
         kicker="Track Record"
         title="Did the model call it?"
-        description="Every finished match graded against the model's pre-match probabilities — the honest scorecard. Predictions run off static team ratings, so this is a real pre-match read, not hindsight."
+        description="Every finished match graded against the model's pre-match probabilities. Group games are graded three ways (home / draw / away); knockout ties have no draw, so they're graded on which side the model backed to advance — penalty shootouts included."
       />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Results called" value={`${tr.correct}/${tr.n}`} sub={pct(tr.hitRate, 0)} accent="#1fe5c4" />
-        <Stat label="Brier score" value={tr.brier.toFixed(3)} sub={`coin-flip ${tr.baselineBrier.toFixed(3)}`} />
-        <Stat label="Skill vs coin-flip" value={pct(tr.skill, 0)} sub={tr.skill > 0 ? 'better' : 'worse'} accent={tr.skill > 0 ? '#1fe5c4' : '#ff8a1e'} />
+        <Stat label="Brier score" value={tr.brier.toFixed(3)} sub={`baseline ${tr.baselineBrier.toFixed(3)}`} />
+        <Stat label="Skill vs baseline" value={pct(tr.skill, 0)} sub={tr.skill > 0 ? 'better' : 'worse'} accent={tr.skill > 0 ? '#1fe5c4' : '#ff8a1e'} />
         <Stat label="Log loss" value={tr.logloss.toFixed(3)} sub="lower is better" />
       </section>
+
+      {tr.byPhase.group.n > 0 && tr.byPhase.knockout.n > 0 && (
+        <section className="grid grid-cols-2 gap-3">
+          <Stat label="Group stage (3-way)" value={`${tr.byPhase.group.correct}/${tr.byPhase.group.n}`} sub={`${pct(tr.byPhase.group.hitRate, 0)} called`} />
+          <Stat label="Knockouts (advance)" value={`${tr.byPhase.knockout.correct}/${tr.byPhase.knockout.n}`} sub={`${pct(tr.byPhase.knockout.hitRate, 0)} called`} accent="#1fe5c4" />
+        </section>
+      )}
+
+      {tr.calibration.length > 0 && (
+        <Panel title="Calibration" subtitle="When the model says N%, does it happen N% of the time?">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Confidence band</Th>
+                <Th align="right">Predictions</Th>
+                <Th align="right">Model said</Th>
+                <Th align="right">Actually happened</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tr.calibration.map((c) => {
+                const gap = Math.abs(c.predicted - c.observed);
+                return (
+                  <tr key={c.range} className="hover:bg-terminal-elevated">
+                    <Td className="text-terminal-text">{c.range}</Td>
+                    <Td align="right" className="tnum text-terminal-muted">{c.n}</Td>
+                    <Td align="right" className="tnum text-terminal-bright">{pct(c.predicted, 0)}</Td>
+                    <Td align="right" className={`tnum font-semibold ${gap <= 0.1 ? 'text-accent' : 'text-accent-amber'}`}>{pct(c.observed, 0)}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+          <p className="mt-3 text-xs leading-relaxed text-terminal-muted">
+            A well-calibrated model tracks the diagonal — its &ldquo;said&rdquo; and &ldquo;happened&rdquo; columns move together. Green means the two are within 10 points on this sample; a persistent gap in one direction means the model is over- or under-confident.
+          </p>
+        </Panel>
+      )}
 
       {(tr.bestCall || tr.worstMiss) && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -83,47 +144,58 @@ export default async function TrackRecordPage() {
         </Panel>
       )}
 
-      <Panel title="Every result, graded" subtitle="Model probabilities vs what happened · bold = model's pick" bodyClassName="p-0">
-        <Table>
-          <thead>
-            <tr>
-              <Th>Match</Th>
-              <Th align="right">Home</Th>
-              <Th align="right">Draw</Th>
-              <Th align="right">Away</Th>
-              <Th align="right">Result</Th>
-              <Th align="center">Called</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {tr.rows.map((r) => {
-              const cell = (o: 'H' | 'D' | 'A', v: number) => (
-                <Td align="right" className={`tnum ${r.pick === o ? 'font-bold text-terminal-bright' : 'text-terminal-muted'} ${r.pick === o && r.hit ? 'text-accent' : ''}`}>
-                  {pct(v, 0)}
-                </Td>
-              );
-              return (
+      {ko.length > 0 && (
+        <Panel title="Knockout calls, graded" subtitle="Which side the model backed to advance vs who went through · bold = model's pick" bodyClassName="p-0">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Tie</Th>
+                <Th align="right">Home adv.</Th>
+                <Th align="right">Away adv.</Th>
+                <Th align="right">Result</Th>
+                <Th align="center">Called</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {ko.map((r) => (
                 <tr key={r.match.id} className="hover:bg-terminal-elevated">
-                  <Td>
-                    <Link href={`/matches/${r.match.id}`} className="flex items-center gap-1.5 hover:text-accent">
-                      <TeamCrest code={r.home.code} color={r.home.primaryColor} size={18} />
-                      <span className="text-sm font-semibold text-terminal-bright">{r.home.code}</span>
-                      <span className="text-xs text-terminal-muted">v</span>
-                      <span className="text-sm font-semibold text-terminal-bright">{r.away.code}</span>
-                      <TeamCrest code={r.away.code} color={r.away.primaryColor} size={18} />
-                    </Link>
-                  </Td>
-                  {cell('H', r.probs.H)}
-                  {cell('D', r.probs.D)}
-                  {cell('A', r.probs.A)}
+                  {matchCell(r)}
+                  {r.cells.map((c, i) => probCell(c, r.hit, i))}
                   <Td align="right" className="tnum font-semibold text-terminal-bright">{r.score}</Td>
                   <Td align="center">{r.hit ? <span className="text-accent">✓</span> : <span className="text-accent-red">✗</span>}</Td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </Table>
-      </Panel>
+              ))}
+            </tbody>
+          </Table>
+        </Panel>
+      )}
+
+      {gp.length > 0 && (
+        <Panel title="Group-stage calls, graded" subtitle="Model H/D/A probabilities vs what happened · bold = model's pick" bodyClassName="p-0">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Match</Th>
+                <Th align="right">Home</Th>
+                <Th align="right">Draw</Th>
+                <Th align="right">Away</Th>
+                <Th align="right">Result</Th>
+                <Th align="center">Called</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {gp.map((r) => (
+                <tr key={r.match.id} className="hover:bg-terminal-elevated">
+                  {matchCell(r)}
+                  {r.cells.map((c, i) => probCell(c, r.hit, i))}
+                  <Td align="right" className="tnum font-semibold text-terminal-bright">{r.score}</Td>
+                  <Td align="center">{r.hit ? <span className="text-accent">✓</span> : <span className="text-accent-red">✗</span>}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Panel>
+      )}
 
       {!mc.configured && (
         <p className="text-xs leading-relaxed text-terminal-muted">

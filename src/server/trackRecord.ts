@@ -1,6 +1,7 @@
 import 'server-only';
 import { getMatches, getTeam } from '@/data/store';
 import { predictMatch } from '@/analytics/poisson';
+import { advanceProbabilities } from '@/lib/format';
 import { getSnapshots, predLogConfigured } from './predictionLog';
 import type { Team, Match } from '@/domain/types';
 
@@ -11,31 +12,44 @@ const brierOf = (p: { H: number; D: number; A: number }, actual: Out) =>
 /**
  * Track record — does the model actually call results?
  *
- * For every finished match we take the model's pre-match probabilities
- * (predictMatch runs off the STATIC attack/defense ratings, which results never
- * mutate — only ELO does — so this is a fair pre-match read, not hindsight) and
- * score them against what happened: hit rate, multiclass Brier, log loss, all
- * versus a coin-flip baseline.
+ * PHASE-AWARE. A group game is a 3-way market (home / draw / away), so we grade
+ * the model's pre-match H/D/A probabilities against the result. A knockout tie
+ * has no draw — someone advances — so we grade the model's 2-way ADVANCE
+ * probability (draw folded into each side's chance via `advanceProbabilities`,
+ * WC-058) against who actually went through (penalty shootout included). Metrics
+ * (hit rate, Brier, log loss, skill vs a per-match coin-flip baseline) aggregate
+ * across both, and we bucket predictions by confidence for a calibration curve.
  *
- * This is the model-vs-actual half. The "did it beat the bookies?" half needs
- * the market's pre-match closing line stored per fixture — a durable-storage
- * job (Phase 2), since the live odds feed only carries upcoming games.
+ * predictMatch runs off the STATIC attack/defense ratings (results never mutate
+ * them — only ELO does), so this is a fair pre-match read, not hindsight.
  */
 
-type Outcome = 'H' | 'D' | 'A';
-
+export interface TrackCell {
+  code: string; // team code, or "Draw"
+  prob: number;
+  pick: boolean;
+  actual: boolean;
+}
 export interface TrackRow {
   match: Match;
   home: Team;
   away: Team;
   score: string;
-  probs: { H: number; D: number; A: number };
-  pick: Outcome;
-  actual: Outcome;
+  mode: 'result' | 'advance';
+  cells: TrackCell[]; // 3 for a group game (H/D/A), 2 for a knockout (advance)
+  pickLabel: string;
+  actualLabel: string;
   hit: boolean;
   brier: number;
   confidence: number; // model prob on its own pick
 }
+
+const CALIB_BUCKETS = [
+  { lo: 0.5, hi: 0.6 },
+  { lo: 0.6, hi: 0.7 },
+  { lo: 0.7, hi: 0.8 },
+  { lo: 0.8, hi: 1.01 },
+];
 
 export function trackRecord() {
   const finished = getMatches()
@@ -43,38 +57,81 @@ export function trackRecord() {
     .sort((a, b) => (a.kickoff < b.kickoff ? 1 : -1)); // most recent first
 
   const rows: TrackRow[] = [];
-  let brierSum = 0;
-  let baselineSum = 0;
-  let logloss = 0;
+  let brierSum = 0, baselineSum = 0, logloss = 0;
+  const byPhase = { group: { n: 0, correct: 0 }, knockout: { n: 0, correct: 0 } };
+  const calib = CALIB_BUCKETS.map((b) => ({ ...b, n: 0, hits: 0, sumConf: 0 }));
 
   for (const m of finished) {
     const home = getTeam(m.homeTeamId);
     const away = getTeam(m.awayTeamId);
     if (!home || !away) continue;
     const pred = predictMatch(home, away);
-    const probs = { H: pred.homeWin, D: pred.draw, A: pred.awayWin };
-    const actual: Outcome = m.homeScore > m.awayScore ? 'H' : m.homeScore < m.awayScore ? 'A' : 'D';
-    const pick: Outcome = probs.H >= probs.D && probs.H >= probs.A ? 'H' : probs.D >= probs.A ? 'D' : 'A';
-    const hit = pick === actual;
+    const isKO = m.stage !== 'GROUP';
+    let row: TrackRow, brier: number, baseline: number, conf: number, hit: boolean;
 
-    const outcomes: Outcome[] = ['H', 'D', 'A'];
-    const brier = outcomes.reduce((s, o) => s + (probs[o] - (o === actual ? 1 : 0)) ** 2, 0);
-    const baseline = outcomes.reduce((s, o) => s + (1 / 3 - (o === actual ? 1 : 0)) ** 2, 0);
-    brierSum += brier;
-    baselineSum += baseline;
-    logloss += -Math.log(Math.max(probs[actual], 1e-6));
+    if (isKO) {
+      // 2-way: which side advances (draw folded in). Actual = decided by the
+      // scoreline, or the penalty shootout when level.
+      const adv = advanceProbabilities({ homeWin: pred.homeWin, draw: pred.draw, awayWin: pred.awayWin });
+      const advancer: 'home' | 'away' =
+        m.homeScore > m.awayScore ? 'home'
+        : m.awayScore > m.homeScore ? 'away'
+        : m.penalties ? (m.penalties.home >= m.penalties.away ? 'home' : 'away')
+        : adv.home >= adv.away ? 'home' : 'away';
+      const pick: 'home' | 'away' = adv.home >= adv.away ? 'home' : 'away';
+      hit = pick === advancer;
+      conf = adv[pick];
+      brier = (adv.home - (advancer === 'home' ? 1 : 0)) ** 2 + (adv.away - (advancer === 'away' ? 1 : 0)) ** 2;
+      baseline = 0.5; // two-way coin flip: 2 × 0.25
+      logloss += -Math.log(Math.max(adv[advancer], 1e-6));
+      row = {
+        match: m, home, away,
+        score: `${m.homeScore}-${m.awayScore}${m.penalties ? ` (${m.penalties.home}-${m.penalties.away} p)` : ''}`,
+        mode: 'advance',
+        cells: [
+          { code: home.code, prob: adv.home, pick: pick === 'home', actual: advancer === 'home' },
+          { code: away.code, prob: adv.away, pick: pick === 'away', actual: advancer === 'away' },
+        ],
+        pickLabel: (pick === 'home' ? home : away).name, actualLabel: (advancer === 'home' ? home : away).name,
+        hit, brier, confidence: conf,
+      };
+    } else {
+      const probs = { H: pred.homeWin, D: pred.draw, A: pred.awayWin };
+      const actual: Out = m.homeScore > m.awayScore ? 'H' : m.homeScore < m.awayScore ? 'A' : 'D';
+      const pick: Out = probs.H >= probs.D && probs.H >= probs.A ? 'H' : probs.D >= probs.A ? 'D' : 'A';
+      hit = pick === actual;
+      conf = probs[pick];
+      brier = (['H', 'D', 'A'] as Out[]).reduce((s, o) => s + (probs[o] - (o === actual ? 1 : 0)) ** 2, 0);
+      baseline = (['H', 'D', 'A'] as Out[]).reduce((s, o) => s + (1 / 3 - (o === actual ? 1 : 0)) ** 2, 0);
+      logloss += -Math.log(Math.max(probs[actual], 1e-6));
+      const label = (o: Out) => (o === 'H' ? home.name : o === 'A' ? away.name : 'Draw');
+      row = {
+        match: m, home, away, score: `${m.homeScore}-${m.awayScore}`, mode: 'result',
+        cells: [
+          { code: home.code, prob: probs.H, pick: pick === 'H', actual: actual === 'H' },
+          { code: 'Draw', prob: probs.D, pick: pick === 'D', actual: actual === 'D' },
+          { code: away.code, prob: probs.A, pick: pick === 'A', actual: actual === 'A' },
+        ],
+        pickLabel: label(pick), actualLabel: label(actual),
+        hit, brier, confidence: conf,
+      };
+    }
 
-    rows.push({ match: m, home, away, score: `${m.homeScore}-${m.awayScore}`, probs, pick, actual, hit, brier, confidence: probs[pick] });
+    brierSum += brier; baselineSum += baseline;
+    const ph = isKO ? byPhase.knockout : byPhase.group;
+    ph.n++; if (hit) ph.correct++;
+    const bucket = calib.find((c) => conf >= c.lo && conf < c.hi);
+    if (bucket) { bucket.n++; if (hit) bucket.hits++; bucket.sumConf += conf; }
+    rows.push(row);
   }
 
   const n = rows.length;
   const correct = rows.filter((r) => r.hit).length;
   const brier = n ? brierSum / n : 0;
   const baselineBrier = n ? baselineSum / n : 0;
-
-  // Highlights: most confident correct call, and the biggest miss.
-  const bestCall = [...rows].filter((r) => r.hit).sort((a, b) => b.probs[b.actual] - a.probs[a.actual])[0] ?? null;
+  const bestCall = [...rows].filter((r) => r.hit).sort((a, b) => b.confidence - a.confidence)[0] ?? null;
   const worstMiss = [...rows].filter((r) => !r.hit).sort((a, b) => b.brier - a.brier)[0] ?? null;
+  const rate = (x: { n: number; correct: number }) => (x.n ? x.correct / x.n : 0);
 
   return {
     n,
@@ -82,11 +139,21 @@ export function trackRecord() {
     hitRate: n ? correct / n : 0,
     brier,
     baselineBrier,
-    skill: baselineBrier > 0 ? (baselineBrier - brier) / baselineBrier : 0, // Brier skill score vs coin flip
+    skill: baselineBrier > 0 ? (baselineBrier - brier) / baselineBrier : 0, // Brier skill score vs a coin flip
     logloss: n ? logloss / n : 0,
+    byPhase: {
+      group: { ...byPhase.group, hitRate: rate(byPhase.group) },
+      knockout: { ...byPhase.knockout, hitRate: rate(byPhase.knockout) },
+    },
+    // Reliability: within each confidence band, did the model hit as often as it claimed?
+    calibration: calib
+      .filter((c) => c.n > 0)
+      .map((c) => ({ range: `${Math.round(c.lo * 100)}–${Math.round(Math.min(c.hi, 1) * 100)}%`, n: c.n, predicted: c.sumConf / c.n, observed: c.hits / c.n })),
     bestCall,
     worstMiss,
     rows,
+    knockoutRows: rows.filter((r) => r.mode === 'advance'),
+    groupRows: rows.filter((r) => r.mode === 'result'),
   };
 }
 
