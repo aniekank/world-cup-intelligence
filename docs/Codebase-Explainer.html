@@ -1,0 +1,327 @@
+<title>World Cup Intelligence — Codebase Explainer</title>
+<style>
+  :root{
+    --bg:#0a0e13; --panel:#111820; --raised:#16202a; --line:#22303c; --hair:#1a2530;
+    --text:#dfe8ef; --muted:#8798a6; --faint:#5a6b78;
+    --teal:#1fe5c4; --teal-dim:#0f5148; --teal-soft:rgba(31,229,196,.09);
+    --amber:#ff9a3c; --amber-soft:rgba(255,154,60,.1);
+    --violet:#9a86ff;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --spine:min(760px,92vw); --wide:min(1160px,94vw);
+  }
+  *{box-sizing:border-box}
+  .doc{background:var(--bg); color:var(--text); font-family:var(--sans); font-size:16.5px; line-height:1.62; -webkit-font-smoothing:antialiased; padding-bottom:7rem; position:relative; overflow-x:hidden}
+  .doc::before{content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55;
+    background:radial-gradient(1100px 560px at 84% -10%, rgba(31,229,196,.08), transparent 60%), repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px)}
+  .doc>*{position:relative; z-index:1}
+  a{color:var(--teal); text-decoration:none; border-bottom:1px solid var(--teal-dim)}
+  a:hover{border-bottom-color:var(--teal)}
+  :focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:2px}
+
+  .top{position:sticky; top:0; z-index:20; background:rgba(10,14,19,.82); backdrop-filter:blur(8px); border-bottom:1px solid var(--hair)}
+  .top .row{max-width:var(--wide); margin:0 auto; padding:.65rem clamp(1rem,4vw,2rem); display:flex; align-items:center; justify-content:space-between; gap:1rem}
+  .top .brand{font-family:var(--mono); font-size:.72rem; letter-spacing:.13em; text-transform:uppercase; color:var(--muted)}
+  .top .brand b{color:var(--teal); font-weight:600}
+  .top .stamp{font-family:var(--mono); font-size:.68rem; color:var(--faint); letter-spacing:.08em}
+  #bar{height:2px; background:var(--teal); width:0%; transition:width .1s linear}
+
+  .wrap{max-width:var(--spine); margin:0 auto; padding:0 clamp(1rem,4vw,2rem)}
+  .wide{max-width:var(--wide); margin:0 auto; padding:0 clamp(1rem,4vw,2rem)}
+
+  .hero{padding:clamp(3.2rem,8vw,6rem) 0 clamp(1.5rem,4vw,2.5rem)}
+  .kick{font-family:var(--mono); font-size:.74rem; letter-spacing:.2em; text-transform:uppercase; color:var(--teal); margin:0 0 1.3rem; display:flex; align-items:center; gap:.7rem}
+  .kick::before{content:""; width:26px; height:1px; background:var(--teal)}
+  h1{font-size:clamp(2.1rem,5.6vw,3.5rem); line-height:1.05; letter-spacing:-.025em; font-weight:800; margin:0; text-wrap:balance}
+  .lede{font-size:clamp(1.04rem,2.2vw,1.25rem); color:var(--muted); max-width:64ch; margin:1.5rem 0 0; line-height:1.55}
+  .lede code{color:var(--text)}
+  .stack{margin-top:1.6rem; display:flex; flex-wrap:wrap; gap:.45rem}
+  .stack span{font-family:var(--mono); font-size:.7rem; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:.3rem .6rem; background:var(--panel)}
+
+  .metrics{max-width:var(--wide); margin:2.4rem auto 0; padding:0 clamp(1rem,4vw,2rem); display:grid; grid-template-columns:repeat(5,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  .metric{background:var(--panel); padding:1.2rem 1rem}
+  .metric .n{font-family:var(--mono); font-size:clamp(1.2rem,2.6vw,1.6rem); font-weight:600; color:var(--teal); letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+  .metric .l{font-family:var(--mono); font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-top:.45rem; line-height:1.3}
+  @media(max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}}
+
+  .toc{max-width:var(--wide); margin:2.2rem auto 0; padding:0 clamp(1rem,4vw,2rem); display:flex; flex-wrap:wrap; gap:.5rem}
+  .toc a{font-family:var(--mono); font-size:.72rem; letter-spacing:.03em; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:.4rem .8rem; background:var(--panel)}
+  .toc a:hover{color:var(--text); border-color:var(--teal-dim)}
+  .toc a b{color:var(--teal); font-weight:600; margin-right:.4rem}
+
+  section{padding:clamp(2.8rem,6vw,4.5rem) 0 0}
+  .sec-head{display:grid; grid-template-columns:auto 1fr; gap:1rem; align-items:baseline; margin-bottom:1.6rem}
+  .idx{font-family:var(--mono); font-size:.8rem; color:var(--teal); letter-spacing:.1em; padding-top:.5rem}
+  h2{font-size:clamp(1.5rem,3.6vw,2.2rem); line-height:1.12; letter-spacing:-.02em; font-weight:800; margin:0; text-wrap:balance}
+  .sec-head p{grid-column:2; margin:.65rem 0 0; color:var(--muted); font-size:1rem; max-width:66ch}
+  h3.sub{font-size:1.1rem; font-weight:700; margin:2rem 0 .5rem; letter-spacing:-.01em; color:var(--text)}
+  .prose p{margin:0 0 1rem} .prose p:last-child{margin-bottom:0}
+  strong{color:#fff; font-weight:650}
+  em.t{font-style:normal; color:var(--teal); font-weight:600}
+  code{font-family:var(--mono); font-size:.86em; background:var(--raised); border:1px solid var(--line); padding:.06em .36em; border-radius:5px; color:#b9f5e9}
+
+  /* data-flow diagram */
+  .flow{max-width:var(--wide); margin:0 auto; padding:0 clamp(1rem,4vw,2rem); overflow-x:auto}
+  .flow .rail{display:flex; align-items:stretch; gap:.4rem; min-width:900px; padding:.4rem 0}
+  .node{flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.85rem .9rem; min-width:120px}
+  .node.hot{border-color:var(--teal-dim); background:var(--teal-soft)}
+  .node .t{font-family:var(--mono); font-size:.6rem; letter-spacing:.09em; text-transform:uppercase; color:var(--teal); margin-bottom:.35rem}
+  .node .h{font-weight:700; font-size:.92rem; color:#fff}
+  .node p{margin:.3rem 0 0; font-size:.75rem; color:var(--muted); line-height:1.4}
+  .arrow{align-self:center; color:var(--faint); font-family:var(--mono); flex:0 0 auto}
+  .flow-cap{max-width:var(--wide); margin:1rem auto 0; padding:0 clamp(1rem,4vw,2rem); font-size:.85rem; color:var(--muted)}
+
+  /* directory table */
+  .tablewrap{max-width:var(--wide); margin:0 auto; padding:0 clamp(1rem,4vw,2rem); overflow-x:auto}
+  table.dir{width:100%; border-collapse:collapse; min-width:640px; font-size:.9rem; background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  table.dir th{font-family:var(--mono); font-size:.62rem; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); text-align:left; padding:.7rem .85rem; border-bottom:2px solid var(--line); background:var(--raised)}
+  table.dir td{padding:.75rem .85rem; border-bottom:1px solid var(--hair); vertical-align:top}
+  table.dir tr:last-child td{border-bottom:0}
+  table.dir tr:hover td{background:var(--teal-soft)}
+  table.dir .p{font-family:var(--mono); font-size:.82rem; color:#b9f5e9; white-space:nowrap}
+
+  /* layer cards */
+  .layer{border:1px solid var(--line); border-left:3px solid var(--teal-dim); border-radius:10px; background:var(--panel); margin:1rem 0; padding:1.2rem 1.3rem}
+  .layer .lh{display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.5rem}
+  .layer h4{margin:0; font-size:1.05rem; font-weight:700}
+  .layer .path{font-family:var(--mono); font-size:.72rem; color:var(--faint)}
+  .layer p{margin:0 0 .5rem; font-size:.93rem; color:var(--muted)}
+  .layer p:last-child{margin-bottom:0}
+  .layer .files{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.6rem}
+  .layer .files code{font-size:.72rem}
+
+  /* callouts */
+  .callout{border:1px solid var(--teal-dim); background:var(--teal-soft); border-radius:10px; padding:1rem 1.2rem; margin:1.3rem 0}
+  .callout.amber{border-color:rgba(255,154,60,.35); background:var(--amber-soft)}
+  .callout .lab{font-family:var(--mono); font-size:.64rem; letter-spacing:.1em; text-transform:uppercase; color:var(--teal); margin-bottom:.45rem}
+  .callout.amber .lab{color:var(--amber)}
+  .callout p{margin:0; font-size:.94rem; color:var(--text)}
+
+  /* decision grid */
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-top:1.3rem}
+  .gcard{background:var(--panel); padding:1.2rem 1.25rem}
+  .gcard .t{display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1rem; margin-bottom:.5rem}
+  .gcard .num{font-family:var(--mono); font-size:.72rem; color:var(--teal)}
+  .gcard p{margin:0; font-size:.88rem; color:var(--muted); line-height:1.55}
+  .gcard p b{color:var(--text)}
+
+  blockquote.pull{margin:2rem 0; padding:1.2rem 1.4rem; border-left:3px solid var(--teal); background:var(--panel); border-radius:0 10px 10px 0; font-size:clamp(1.1rem,2.4vw,1.35rem); line-height:1.4; font-weight:650; color:#fff; letter-spacing:-.01em}
+  blockquote.pull em{font-style:normal; color:var(--teal)}
+
+  footer{max-width:var(--wide); margin:clamp(3rem,7vw,5rem) auto 0; padding:1.8rem clamp(1rem,4vw,2rem) 0; border-top:1px solid var(--hair); font-family:var(--mono); font-size:.7rem; color:var(--faint); letter-spacing:.04em; line-height:1.7}
+  footer b{color:var(--muted); font-weight:500}
+
+  .reveal{opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease}
+  .reveal.in{opacity:1; transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1; transform:none; transition:none}#bar{transition:none}}
+</style>
+
+<div class="doc">
+  <div class="top">
+    <div class="row">
+      <span class="brand"><b>WORLD CUP INTELLIGENCE</b> · codebase explainer</span>
+      <span class="stamp">ARCHITECTURE · 2026-07-05</span>
+    </div>
+    <div id="bar"></div>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <p class="kick">How the system is built</p>
+      <h1>A live football-analytics engine with no database and a simulation for a heartbeat.</h1>
+      <p class="lede">World Cup Intelligence tracks every match, player, and bracket of the 2026 World Cup live; runs an 8,000-simulation Monte Carlo forecast; answers natural-language questions; and degrades gracefully to a deterministic simulation when the live feed isn't there. This is how the ~24k lines fit together — and the handful of decisions that shape all of it.</p>
+      <div class="stack">
+        <span>Next.js 14 · App Router</span><span>React 18</span><span>TypeScript 5.5 (strict)</span><span>Tailwind 3.4</span><span>Zod</span><span>Vitest</span><span>Anthropic Haiku</span><span>Upstash Redis (REST)</span><span>Render</span>
+      </div>
+    </div>
+    <div class="metrics reveal">
+      <div class="metric"><div class="n">~170</div><div class="l">TS/TSX files</div></div>
+      <div class="metric"><div class="n">~24k</div><div class="l">Lines of code</div></div>
+      <div class="metric"><div class="n">112</div><div class="l">Hermetic tests</div></div>
+      <div class="metric"><div class="n">28</div><div class="l">Routes</div></div>
+      <div class="metric"><div class="n">0</div><div class="l">Databases</div></div>
+    </div>
+    <nav class="toc" aria-label="Contents">
+      <a href="#flow"><b>01</b>The spine</a>
+      <a href="#map"><b>02</b>Directory map</a>
+      <a href="#layers"><b>03</b>The layers</a>
+      <a href="#live"><b>04</b>The live pipeline</a>
+      <a href="#ai"><b>05</b>The AI layer</a>
+      <a href="#decisions"><b>06</b>Key decisions</a>
+      <a href="#test"><b>07</b>Testing &amp; deploy</a>
+    </nav>
+  </header>
+
+  <!-- 01 SPINE -->
+  <section id="flow">
+    <div class="wrap sec-head reveal">
+      <div class="idx">01</div>
+      <div><h2>The spine: one snapshot, computed once, rendered everywhere.</h2></div>
+      <p>Every request reads from a single in-memory <code>DatasetSnapshot</code>. Data flows left to right; the analytics engine and query layer are pure functions of that snapshot, memoized per snapshot identity.</p>
+    </div>
+    <div class="flow reveal">
+      <div class="rail">
+        <div class="node"><div class="t">boot</div><div class="h">instrumentation.ts</div><p>Activates the tournament in the background at server start</p></div>
+        <span class="arrow">→</span>
+        <div class="node"><div class="t">source</div><div class="h">provider</div><p>apifootball · statsbomb · seed (selected by DATA_SOURCE)</p></div>
+        <span class="arrow">→</span>
+        <div class="node"><div class="t">enrich</div><div class="h">frozen overlay</div><p>Fills provider-gap fields + team metadata</p></div>
+        <span class="arrow">→</span>
+        <div class="node hot"><div class="t">state</div><div class="h">store.ts</div><p>DatasetSnapshot on globalThis + snapshot-keyed indexes</p></div>
+        <span class="arrow">→</span>
+        <div class="node hot"><div class="t">compute</div><div class="h">engine</div><p>Poisson · Monte Carlo · ELO · standings — memoized</p></div>
+        <span class="arrow">→</span>
+        <div class="node"><div class="t">assemble</div><div class="h">server/queries</div><p>View models per page</p></div>
+        <span class="arrow">→</span>
+        <div class="node"><div class="t">render</div><div class="h">App Router</div><p>Server components + live-refresh islands</p></div>
+      </div>
+    </div>
+    <p class="flow-cap reveal">A background loop re-polls the fixtures feed, merges live status/score/minute into the snapshot, and swaps in a new snapshot object so the engine and the store's indexes rebuild against fresh data. If the feed is unavailable, the same pipeline serves a <em class="t">last-known-good cache</em>, then a <em class="t">deterministic simulation</em> — the app is never blank.</p>
+  </section>
+
+  <!-- 02 MAP -->
+  <section id="map">
+    <div class="wrap sec-head reveal">
+      <div class="idx">02</div>
+      <div><h2>Directory map.</h2></div>
+      <p>The <code>src/</code> tree splits cleanly by responsibility. Everything upstream of the store is about <em>getting</em> data; everything downstream is a pure function of it.</p>
+    </div>
+    <div class="tablewrap reveal">
+      <table class="dir">
+        <thead><tr><th>Path</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td class="p">src/domain/types.ts</td><td>The single source of truth — every entity type (Team, Player, Match, Group, Competition, <code>DatasetSnapshot</code>, <code>MatchStatus</code>).</td></tr>
+          <tr><td class="p">src/data/</td><td>Getting data: the source abstraction, the in-memory store, the multi-tournament registry, and the deterministic simulation generator.</td></tr>
+          <tr><td class="p">src/data/providers/</td><td>One module per feed: <code>apiFootball</code> (live 2026), <code>sportmonks</code> (frozen overlay source), <code>statsbomb</code> (historical), and <code>frozenOverlay</code> (applies captured gap-data onto live).</td></tr>
+          <tr><td class="p">src/analytics/</td><td>The engine — bivariate-Poisson match model, 8,000-run Monte Carlo, ELO, standings, power rankings, golden boot, momentum, bracket.</td></tr>
+          <tr><td class="p">src/ai/</td><td>The deterministic NLQ parser, the LLM translator layer, narrative generation, and the shared entity resolver.</td></tr>
+          <tr><td class="p">src/server/</td><td>View-model assembly per page: queries, track record + calibration, the Model Lab, regional/defense/tactics analysis, and the Upstash caches.</td></tr>
+          <tr><td class="p">src/app/</td><td>App Router pages + API routes + <code>instrumentation.ts</code> (the boot + live-refresh hook).</td></tr>
+          <tr><td class="p">src/components/</td><td>The Bloomberg-terminal UI — layout chrome, the live ticker, match cards, and the interactive Model Lab widgets.</td></tr>
+          <tr><td class="p">src/lib/</td><td>Pure helpers: formatters, the running match clock, and first-principles lab math (PCA, k-means, Shapley).</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 03 LAYERS -->
+  <section id="layers">
+    <div class="wrap sec-head reveal">
+      <div class="idx">03</div>
+      <div><h2>The layers, top to bottom.</h2></div>
+      <p>Six layers, each depending only on the one above it. The store is the seam: above it is IO and uncertainty; below it is deterministic computation.</p>
+    </div>
+    <div class="wrap">
+      <div class="layer reveal">
+        <div class="lh"><h4>Domain model</h4><span class="path">src/domain/types.ts</span></div>
+        <p>One file defines every shape in the system. Crucially, <code>MatchStatus</code> is a real lifecycle — <code>SCHEDULED · LIVE · HALFTIME · FINISHED</code> — and matches carry live phase, penalties, and per-team stats, so the rest of the code never has to guess what "in play" means.</p>
+      </div>
+      <div class="layer reveal">
+        <div class="lh"><h4>Data source abstraction</h4><span class="path">src/data/providers · loadTournament · tournaments</span></div>
+        <p>A provider interface lets one <code>DATA_SOURCE</code> env select the feed: <code>seed</code> (offline simulation), <code>statsbomb</code> (real historical), or <code>apifootball</code> (live 2026). A registry holds every tournament — the live edition plus 27 historical World Cups (1930–2015) and deep StatsBomb editions — behind the same interface.</p>
+        <p>The live path is layered: fetch the API-Football snapshot, apply a <strong>frozen overlay</strong> (data captured from SportMonks before its trial lapsed, filling fields API-Football lacks), then enrich team metadata.</p>
+        <div class="files"><code>apiFootball.ts</code><code>frozenOverlay.ts</code><code>tournaments.ts</code><code>generate.ts</code><code>prng.ts</code></div>
+      </div>
+      <div class="layer reveal">
+        <div class="lh"><h4>The store</h4><span class="path">src/data/store.ts</span></div>
+        <p>The active <code>DatasetSnapshot</code> lives on <code>globalThis</code> so it survives Next's dev/runtime module-instance split. Lookup indexes (by team, by match) are <strong>keyed to the snapshot's identity</strong> and rebuilt when a new snapshot swaps in — the fix for a whole class of "live data loaded but rendered empty" bugs where module-scoped caches went stale.</p>
+      </div>
+      <div class="layer reveal">
+        <div class="lh"><h4>The analytics engine</h4><span class="path">src/analytics/</span></div>
+        <p>A pure function of the snapshot, memoized per snapshot identity so it computes once. It produces standings, ELO, a <strong>bivariate-Poisson</strong> win/draw/loss prediction per match, an <strong>8,000-run Monte Carlo</strong> forecast (reach-probabilities, title odds, expected finish), power rankings, the golden-boot race, and momentum (comebacks, clutch goals, upsets).</p>
+        <div class="files"><code>poisson.ts</code><code>simulate.ts</code><code>elo.ts</code><code>standings.ts</code><code>power.ts</code><code>momentum.ts</code><code>bracket.ts</code></div>
+      </div>
+      <div class="layer reveal">
+        <div class="lh"><h4>The server / query layer</h4><span class="path">src/server/</span></div>
+        <p>Assembles view models per page from the store + engine — home dashboard, match/team views, the phase-aware <strong>track record + calibration</strong>, regional "Clash of Civilizations", defense and tactics, the Model Lab payloads, and the Upstash-backed prediction log and live-snapshot cache.</p>
+        <div class="files"><code>queries.ts</code><code>trackRecord.ts</code><code>lab.ts</code><code>civilizations.ts</code><code>liveSnapshotCache.ts</code><code>predictionLog.ts</code></div>
+      </div>
+      <div class="layer reveal">
+        <div class="lh"><h4>The frontend</h4><span class="path">src/app · src/components</span></div>
+        <p>App Router server components (mostly <code>force-dynamic</code>) render the view models. A thin client island (<code>LiveRefresh</code>) polls <code>/api/live-status</code> and calls <code>router.refresh()</code> when the snapshot changes, so every page updates in place with no manual reload. A global toggle cordons <strong>modeled data from observed facts</strong> (the <code>.model-only</code> class), and the whole UI is a dense, dark, information-first terminal.</p>
+        <div class="files"><code>instrumentation.ts</code><code>LiveRefresh.tsx</code><code>SiteBanner.tsx</code><code>LiveTicker.tsx</code><code>MatchCard.tsx</code></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 LIVE -->
+  <section id="live">
+    <div class="wrap sec-head reveal">
+      <div class="idx">04</div>
+      <div><h2>The live pipeline — the hardest part.</h2></div>
+      <p>Everything upstream of the store deals with a real, mid-tournament, incomplete third-party feed. This is where most of the engineering lives.</p>
+    </div>
+    <div class="wrap prose">
+      <p><strong>Boot.</strong> <code>instrumentation.register()</code> fires once at server start and loads the live snapshot in the <em>background</em>, so the server accepts traffic immediately and serves the simulation until real data swaps in (with a loading indicator, never the placeholder shown as real).</p>
+      <p><strong>Refresh loop.</strong> An adaptive timer re-polls just the fixtures feed — faster while a match is in play (~30s), slower when idle (~60s), and only when a match is actually in its play window, so it sips the API quota. It merges status, score, minute, and live phase into the current snapshot and swaps in a fresh snapshot object so the engine rebuilds only on a status flip.</p>
+      <p><strong>The guards.</strong> A started match can't un-start, so a single spurious "not started" tick is ignored; a match stuck live past its window self-heals to finished; extra time and penalty shootouts are first-class. These are the accumulated lessons of watching real matches misbehave.</p>
+      <div class="callout amber reveal"><div class="lab">the resilience ladder</div><p>Three rungs, by design: <strong>live</strong> → a <strong>last-known-good snapshot</strong> stashed in Upstash Redis (survives Render's deploy-time disk wipe) → the <strong>deterministic simulation</strong>. A visitor banner names the current rung, and on a spent API quota the adapter fails fast into a 15-minute back-off instead of hammering a dead budget.</p></div>
+      <div class="callout reveal"><div class="lab">observability</div><p><code>/api/live-status?debug=1</code> is a quota-free readout of exactly what the server believes about every in-play match — status, minute, kickoff age, visibility, and the cache/back-off flags — so a "the live match vanished" report is diagnosable without touching the feed.</p></div>
+    </div>
+  </section>
+
+  <!-- 05 AI -->
+  <section id="ai">
+    <div class="wrap sec-head reveal">
+      <div class="idx">05</div>
+      <div><h2>The AI layer: a translator, not an answerer.</h2></div>
+      <p>The natural-language layer is deterministic first, with a language model used only to normalize questions it can't parse — so answers are always grounded in real numbers.</p>
+    </div>
+    <div class="wrap prose">
+      <p>A question to <code>/api/ask</code> runs through <code>smartAnswer</code>: first the <strong>deterministic parser</strong> (<code>src/ai/nlq.ts</code>) resolves intent, scope (nationality, region, club), stage, and metric against the engine. Only if it returns <code>unknown</code> does <code>llmParse.ts</code> call <strong>Claude Haiku</strong> — not to answer, but to rewrite the free-form question into a canonical query string that re-runs through the same deterministic engine. The model never invents a statistic; with no API key, the deterministic path is the graceful fallback.</p>
+      <p>Search and NLQ share one <strong>entity resolver</strong> (<code>src/ai/query/resolver.ts</code>) — full name, surname, "F. Last", accents, typos, team codes and aliases — verified by a generative coverage corpus, so a name resolves identically everywhere. Alongside it, <code>narratives.ts</code> generates the daily briefing, match summaries, and insight cards, all recency- and phase-gated so nothing stale or fabricated surfaces.</p>
+      <blockquote class="pull">The engine answers; the model only <em>rephrases the question</em>. That one boundary is why an AI feature can sit on top of accounting-grade numbers without hallucinating them.</blockquote>
+    </div>
+  </section>
+
+  <!-- 06 DECISIONS -->
+  <section id="decisions">
+    <div class="wrap sec-head reveal">
+      <div class="idx">06</div>
+      <div><h2>The decisions that shape everything.</h2></div>
+      <p>Most of the codebase's character comes from a small number of deliberate choices.</p>
+    </div>
+    <div class="wide">
+      <div class="grid reveal">
+        <div class="gcard"><div class="t"><span class="num">A</span> No database</div><p>The whole tournament boots from a <b>deterministic simulation</b> (seeded PRNG) — <code>npm run dev</code> runs the full 48-team event with zero infrastructure or keys. The sim doubles as the resilience fallback and the test fixture.</p></div>
+        <div class="gcard"><div class="t"><span class="num">B</span> Snapshot-keyed state</div><p>State lives on <code>globalThis</code> and every memoized index is <b>keyed to the snapshot's identity</b>, so a snapshot swap can never leave a stale index pointing at old data — the root fix for the nastiest live-load bugs.</p></div>
+        <div class="gcard"><div class="t"><span class="num">C</span> Provider abstraction + overlay</div><p>One interface behind <code>DATA_SOURCE</code>; a mid-tournament <b>SportMonks → API-Football migration</b> was absorbed with a frozen overlay that backfills the fields the new provider lacks. Swapping feeds doesn't ripple through the app.</p></div>
+        <div class="gcard"><div class="t"><span class="num">D</span> Observed ≠ modeled</div><p>Predictions are cordoned from facts by a global toggle, and every status sentence is <b>phase-aware</b> (a knockout has no draw; a group table is history once the bracket starts) — so the app never shows a guess as a fact.</p></div>
+        <div class="gcard"><div class="t"><span class="num">E</span> LLM as translator</div><p>The model normalizes unknown questions into canonical queries; the <b>deterministic engine produces every number</b>. Grounded by construction, and a no-op without a key.</p></div>
+        <div class="gcard"><div class="t"><span class="num">F</span> Resilience by ladder</div><p>Live → Upstash last-known-good cache → simulation, with rate-limit back-off, a self-healing boot loop, and a visitor banner that never lets fallback data masquerade as live.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 TEST -->
+  <section id="test">
+    <div class="wrap sec-head reveal">
+      <div class="idx">07</div>
+      <div><h2>Testing &amp; deployment.</h2></div>
+      <p>The regression net grew one hermetic test per bug; the deploy is deliberately boring.</p>
+    </div>
+    <div class="wrap prose">
+      <p><strong>Tests.</strong> 112 Vitest tests across the analytics, AI, and data layers. They're <strong>hermetic</strong> — a test injects a synthetic match into a fresh snapshot, asserts, and restores it in a <code>finally</code> — so they run offline with no live API. Pure kernels (the Poisson grid, the state-machine guards, the calibration grading) are tested directly; <code>server-only</code>/<code>client-only</code> are stubbed so server modules load under Vitest.</p>
+      <p><strong>Pipeline.</strong> Strict TypeScript with zero errors (<code>npm run typecheck</code>), a production build of 28 routes, and data-prep scripts (<code>data:statsbomb</code>, <code>data:datahub</code>, <code>data:clubs</code>) that precompute the historical editions offline. Deployed on Render; state is process-memory plus Upstash Redis (over REST — no client dependency) for the two things that must survive a redeploy: the prediction log and the last-known-good live snapshot.</p>
+      <div class="callout reveal"><div class="lab">the record travels with the code</div><p>Four living documents sit beside the source: <code>BUGS.md</code> (root cause + fix + commit per defect), <code>ROADMAP.md</code> (shipped vs proposed), <code>RETROSPECTIVE.md</code> (the post-mortem), and <code>TEST-PLAN.md</code> — plus the formal PDF suite in <code>docs/</code>. This explainer is the map; those are the territory.</p></div>
+    </div>
+    <blockquote class="pull">One snapshot, computed once. Everything above it fights entropy in a live feed; everything below it is a <em>pure function</em> you can test offline. That line is the whole architecture.</blockquote>
+  </section>
+
+  <footer class="wide">
+    <b>World Cup Intelligence · codebase explainer.</b> Reflects the repository as of 2026-07-05 (~170 TS/TSX files, ~24k lines, 112 tests, 28 routes). Companion to the formal design suite in <code>docs/</code> (System Architecture, Technical Design, Engineering RFC, PRD). Structure and counts are accurate at time of writing and will drift as the code evolves.
+  </footer>
+</div>
+
+<script>
+  (function(){
+    var bar=document.getElementById('bar');
+    var onScroll=function(){var h=document.documentElement,max=h.scrollHeight-h.clientHeight;bar.style.width=(max>0?(h.scrollTop/max*100):0)+'%';};
+    document.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+    var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    if(!reduce&&'IntersectionObserver'in window){
+      var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.1,rootMargin:'0px 0px -8% 0px'});
+      document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
+    } else {document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in')});}
+  })();
+</script>
