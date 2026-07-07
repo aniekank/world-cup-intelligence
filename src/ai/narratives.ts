@@ -1002,6 +1002,7 @@ export interface Storyline {
   photo?: string; // real head-shot for player storylines (live data)
   metrics: { label: string; value: string }[];
   accent: 'accent' | 'magenta' | 'amber' | 'violet' | 'cyan' | 'lime';
+  fate?: { status: 'out' | 'runnerup' | 'champion'; label: string; short: string };
 }
 
 function watchability(p: PlayerView): number {
@@ -1039,6 +1040,51 @@ function archetypeStory(p: PlayerView, key: ArchKey): { archetype: string; tag: 
   }
 }
 
+const KO_STAGE_LABEL: Record<string, { long: string; short: string }> = {
+  R32: { long: 'round of 32', short: 'R32' },
+  R16: { long: 'round of 16', short: 'R16' },
+  QF: { long: 'quarter-finals', short: 'QF' },
+  SF: { long: 'semi-finals', short: 'SF' },
+  FINAL: { long: 'final', short: 'Final' },
+};
+
+/**
+ * A team's fate once the knockouts begin — out (with the round they exited),
+ * runners-up, or champions. `undefined` while the group stage is still live or
+ * the team is still alive. This lets a "watch" storyline for a player whose team
+ * has been knocked out be labelled honestly instead of reading as a live story
+ * (their goals/form are cumulative, so they still surface). Penalty-aware.
+ */
+export function teamFate(teamId: string): Storyline['fate'] {
+  const matches = getMatches();
+  if (!matches.some((m) => m.stage !== 'GROUP')) return undefined; // still the group stage
+  const inKO = matches.some((m) => m.stage !== 'GROUP' && (m.homeTeamId === teamId || m.awayTeamId === teamId));
+  if (!inKO) return { status: 'out', label: 'eliminated in the group stage', short: 'Out · Groups' };
+  let exitStage: string | null = null;
+  let wonFinal = false;
+  for (const m of matches) {
+    if (m.stage === 'GROUP' || m.status !== 'FINISHED') continue;
+    if (m.homeTeamId !== teamId && m.awayTeamId !== teamId) continue;
+    const home = m.homeTeamId === teamId;
+    const gf = home ? m.homeScore : m.awayScore, ga = home ? m.awayScore : m.homeScore;
+    const won = gf > ga || (gf === ga && !!m.penalties && (home ? m.penalties.home > m.penalties.away : m.penalties.away > m.penalties.home));
+    if (m.stage === 'FINAL' && won) wonFinal = true;
+    if (!won && m.stage !== 'THIRD_PLACE') exitStage = m.stage; // the round they went out in (not the consolation game)
+  }
+  if (wonFinal) return { status: 'champion', label: 'World Cup champions', short: '🏆 Champions' };
+  if (exitStage === 'FINAL') return { status: 'runnerup', label: 'runners-up', short: 'Runners-up' };
+  if (exitStage) { const l = KO_STAGE_LABEL[exitStage]; return { status: 'out', label: `eliminated in the ${l?.long ?? 'knockouts'}`, short: `Out · ${l?.short ?? 'KO'}` }; }
+  return undefined; // reached the knockouts and still alive
+}
+
+/** A short, honest clause appended to a storyline blurb reflecting the team's fate. */
+function fateClause(fate: Storyline['fate']): string {
+  if (!fate) return '';
+  if (fate.status === 'champion') return ' They went on to win it all.';
+  if (fate.status === 'runnerup') return ' They ultimately fell in the final.';
+  return ` But that run is over — ${fate.label}.`;
+}
+
 export function playersToWatch(limit = 6): Storyline[] {
   const eng = engine();
   const bootRank = new Map(eng.goldenBoot.map((g, i) => [g.playerId, i]));
@@ -1059,10 +1105,11 @@ export function playersToWatch(limit = 6): Storyline[] {
   const usedPlayers = new Set<string>();
   const add = (p: PlayerView, key: ArchKey) => {
     const hook = archetypeStory(p, key);
+    const fate = teamFate(p.teamId);
     out.push({
       id: `pw-${p.id}`, archetype: hook.archetype, tag: hook.tag, title: p.name,
       subtitle: `${posFull(p.position).replace(/^./, (c) => c.toUpperCase())} · ${p.team.name}`,
-      blurb: hook.blurb, entityType: 'player', entityId: p.id, photo: p.photo,
+      blurb: hook.blurb + fateClause(fate), fate, entityType: 'player', entityId: p.id, photo: p.photo,
       metrics: [
         { label: 'Goals', value: String(p.stats.goals) },
         { label: 'Assists', value: String(p.stats.assists) },
@@ -1107,7 +1154,8 @@ export function squadsToWatch(limit = 5): Storyline[] {
   const firstUnused = (ids: string[]) => ids.find((id) => !used.has(id));
   const push = (teamId: string, archetype: string, tag: string, accent: Storyline['accent'], blurb: string, metrics: { label: string; value: string }[]) => {
     const t = getTeam(teamId)!;
-    out.push({ id: `sw-${teamId}`, archetype, tag, title: `${t.flag} ${t.name}`, subtitle: `${t.confederation}${t.groupId ? ` · Group ${t.groupId}` : ''}`, blurb, entityType: 'team', entityId: teamId, metrics, accent });
+    const fate = teamFate(teamId);
+    out.push({ id: `sw-${teamId}`, archetype, tag, title: `${t.flag} ${t.name}`, subtitle: `${t.confederation}${t.groupId ? ` · Group ${t.groupId}` : ''}`, blurb: blurb + fateClause(fate), fate, entityType: 'team', entityId: teamId, metrics, accent });
     used.add(teamId);
   };
 

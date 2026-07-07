@@ -19,6 +19,18 @@ const ACCENT: Record<Storyline['accent'], { text: string; chip: string; ring: st
   lime: { text: 'text-accent-lime', chip: 'border-accent-lime/40 bg-accent-lime/10 text-accent-lime', ring: 'hover:border-accent-lime/50' },
 };
 
+function FateBadge({ fate }: { fate: NonNullable<Storyline['fate']> }) {
+  const cls =
+    fate.status === 'champion' ? 'border-accent-amber/50 bg-accent-amber/10 text-accent-amber'
+    : fate.status === 'runnerup' ? 'border-terminal-border bg-terminal-elevated text-terminal-muted'
+    : 'border-accent-red/40 bg-accent-red/10 text-accent-red';
+  return (
+    <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`} title={fate.label}>
+      {fate.short}
+    </span>
+  );
+}
+
 export default function StorylinesPage() {
   const { players, squads } = watchStorylines();
 
@@ -71,8 +83,11 @@ function PlayerStory({ s }: { s: Storyline }) {
       <div className="flex items-center gap-3">
         <PlayerPortrait id={s.entityId} name={s.title} photo={s.photo} size={56} rounded="xl" className="shrink-0 drop-shadow" />
         <div className="min-w-0">
-          <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${a.chip}`}>
-            {s.tag}
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${a.chip}`}>
+              {s.tag}
+            </span>
+            {s.fate && <FateBadge fate={s.fate} />}
           </span>
           <p className="mt-1 truncate text-base font-bold text-terminal-bright">{s.title}</p>
           <p className="truncate text-xs text-terminal-muted">{s.subtitle}</p>
@@ -102,8 +117,11 @@ function SquadStory({ s }: { s: Storyline }) {
       <div className="flex items-center gap-3">
         {team && <TeamCrest code={team.code} color={team.primaryColor} size={52} className="shrink-0 drop-shadow" />}
         <div className="min-w-0">
-          <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${a.chip}`}>
-            {s.tag}
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${a.chip}`}>
+              {s.tag}
+            </span>
+            {s.fate && <FateBadge fate={s.fate} />}
           </span>
           <p className="mt-1 truncate text-base font-bold text-terminal-bright">{s.title}</p>
           <p className="truncate text-xs text-terminal-muted">{s.subtitle}</p>

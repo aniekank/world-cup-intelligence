@@ -548,6 +548,32 @@ describe('AI layer', () => {
     }
   });
 
+  it('storylines: teamFate labels knockout exit round, runner-up and champion (WC-080)', async () => {
+    const { teamFate } = await import('@/ai/narratives');
+    const orig = dataset();
+    const groupOnly = orig.matches.filter((m) => m.stage === 'GROUP');
+    const [A, B] = getTeams();
+    // R16: B beat A 2-0 → A out in the round of 16, B still alive.
+    const r16 = { ...orig.matches[0]!, id: 'synth-r16', stage: 'R16', status: 'FINISHED', homeTeamId: B!.id, awayTeamId: A!.id, homeScore: 2, awayScore: 0, penalties: null, events: [] } as unknown as typeof orig.matches[0];
+    setDataset({ ...orig, matches: [...groupOnly, r16] }, 'test', getActiveTournamentId());
+    try {
+      expect(teamFate(A!.id)?.status).toBe('out');
+      expect(teamFate(A!.id)?.short).toContain('R16');
+      expect(teamFate(B!.id)).toBeUndefined(); // won their tie, still alive
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
+    }
+    // FINAL: A beat B → A champions, B runners-up.
+    const fin = { ...orig.matches[0]!, id: 'synth-fin', stage: 'FINAL', status: 'FINISHED', homeTeamId: A!.id, awayTeamId: B!.id, homeScore: 1, awayScore: 0, penalties: null, events: [] } as unknown as typeof orig.matches[0];
+    setDataset({ ...orig, matches: [...groupOnly, fin] }, 'test', getActiveTournamentId());
+    try {
+      expect(teamFate(A!.id)?.status).toBe('champion');
+      expect(teamFate(B!.id)?.status).toBe('runnerup');
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
+    }
+  });
+
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
     expect(answerQuery('which african team goes the farthest').intent).toBe('farthest');
     const g = answerQuery('which team goes the farthest');
