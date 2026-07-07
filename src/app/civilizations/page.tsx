@@ -147,13 +147,23 @@ export default function CivilizationsPage() {
             </div>
 
             <div className="flex items-center gap-3 px-4 py-2.5 text-[11px]">
-              {r.qualified > 0 && (
-                <span className="flex items-center gap-1 text-accent">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                  {settled ? `${r.qualified} of ${r.teamCount} through to R32` : `${r.qualified} through`}
-                </span>
+              {settled ? (
+                <>
+                  {r.stillAlive > 0 ? (
+                    <span className="flex items-center gap-1 text-accent"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{r.stillAlive} still in</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-accent-red"><span className="h-1.5 w-1.5 rounded-full bg-accent-red" />all out</span>
+                  )}
+                  {r.qualified > 0 && <span className="text-terminal-muted">{r.qualified} reached the R32</span>}
+                </>
+              ) : (
+                <>
+                  {r.qualified > 0 && (
+                    <span className="flex items-center gap-1 text-accent"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{r.qualified} through</span>
+                  )}
+                  {r.eliminated > 0 && <span className="flex items-center gap-1 text-accent-red"><span className="h-1.5 w-1.5 rounded-full bg-accent-red" />{r.eliminated} out</span>}
+                </>
               )}
-              {r.eliminated > 0 && <span className="flex items-center gap-1 text-accent-red"><span className="h-1.5 w-1.5 rounded-full bg-accent-red" />{r.eliminated} out</span>}
               <span className="model-only ml-auto text-terminal-muted">knockout reach {pct0(r.knockoutProb / r.teamCount)}</span>
             </div>
 
@@ -178,8 +188,10 @@ export default function CivilizationsPage() {
                   className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-terminal-elevated">
                   <span>{t.flag}</span>
                   <span className="min-w-0 flex-1 truncate text-terminal-text">{t.name}</span>
-                  {t.status === 'Q' && <span className="text-[10px] font-semibold text-accent">Q</span>}
-                  {t.status === 'E' && <span className="text-[10px] font-semibold text-accent-red">OUT</span>}
+                  {t.state === 'champion' && <span className="text-[11px]" title="Champions">🏆</span>}
+                  {t.state === 'alive' && <span className="text-[10px] font-semibold text-accent">IN</span>}
+                  {t.state === 'Q' && <span className="text-[10px] font-semibold text-accent">Q</span>}
+                  {(t.state === 'out' || t.state === 'E') && <span className="text-[10px] font-semibold text-accent-red">OUT</span>}
                   <span className="tnum w-12 text-right text-xs text-terminal-muted">{pct(t.winTitle)}</span>
                 </Link>
               ))}

@@ -21,11 +21,11 @@ export const CONF_META: Record<Confederation, Meta> = {
 };
 const CONF_ORDER: Confederation[] = ['UEFA', 'CONMEBOL', 'CAF', 'AFC', 'CONCACAF', 'OFC'];
 
-export interface RegionTeam { id: string; name: string; code: string; flag: string; winTitle: number; points: number; played: number; status: 'Q' | 'E' | 'T' | null }
+export interface RegionTeam { id: string; name: string; code: string; flag: string; winTitle: number; points: number; played: number; state: 'champion' | 'alive' | 'out' | 'Q' | 'E' | null }
 export interface RegionScorer { id: string; name: string; code: string; flag: string; goals: number }
 export interface RegionStat {
   conf: Confederation; name: string; emoji: string; color: string;
-  teamCount: number; qualified: number; eliminated: number;
+  teamCount: number; qualified: number; eliminated: number; stillAlive: number;
   played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number;
   points: number; ppg: number; winRate: number;
   titleProb: number; knockoutProb: number; avgElo: number;
@@ -98,42 +98,80 @@ export function civilizationsView() {
   }
   const settled = qualifiedIds.size > 0;
 
+  // Current knockout status: the loser of any finished KO tie (penalties included)
+  // is out, and the final's winner is champion. Used so a team's badge reflects
+  // where it is NOW, not its frozen group-stage qualification. (phase-lag fix)
+  const eliminatedInKO = new Set<string>();
+  let championId: string | null = null;
+  for (const m of getMatches()) {
+    if (m.stage === 'GROUP' || m.status !== 'FINISHED') continue;
+    const homeWon = m.homeScore > m.awayScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.home > m.penalties.away);
+    eliminatedInKO.add(homeWon ? m.awayTeamId : m.homeTeamId);
+    if (m.stage === 'FINAL') championId = homeWon ? m.homeTeamId : m.awayTeamId;
+  }
+  const teamState = (id: string): RegionTeam['state'] => {
+    if (championId === id) return 'champion';
+    if (settled) {
+      if (!qualifiedIds.has(id)) return 'out';                  // didn't reach the knockouts
+      return eliminatedInKO.has(id) ? 'out' : 'alive';          // in the bracket: alive unless it lost a tie
+    }
+    const s = eng.standingsByTeam.get(id);                      // group phase still live → provisional
+    return s?.status === 'Q' ? 'Q' : s?.status === 'E' ? 'E' : null;
+  };
+
+  // Full-tournament record per region from ALL finished matches (group + knockout),
+  // so the region W-D-L and "Goals around the world" reflect the whole run and stay
+  // consistent with the goal-timing, head-to-head and clean-sheet panels (which
+  // already count every match). Group standings only cover the 3 group games, so
+  // relying on them undercounted every knockout goal. A level knockout tie is a
+  // win for the shootout winner, not a draw.
+  const rec = new Map<Confederation, { played: number; won: number; drawn: number; lost: number; gf: number; ga: number }>();
+  for (const conf of CONF_ORDER) rec.set(conf, { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 });
+  for (const m of getMatches()) {
+    if (m.status !== 'FINISHED') continue;
+    const ch = confOf.get(m.homeTeamId), ca = confOf.get(m.awayTeamId);
+    const homeWon = m.homeScore > m.awayScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.home > m.penalties.away);
+    const awayWon = m.awayScore > m.homeScore || (m.homeScore === m.awayScore && !!m.penalties && m.penalties.away > m.penalties.home);
+    if (ch) { const r = rec.get(ch)!; r.played++; r.gf += m.homeScore; r.ga += m.awayScore; if (homeWon) r.won++; else if (awayWon) r.lost++; else r.drawn++; }
+    if (ca) { const r = rec.get(ca)!; r.played++; r.gf += m.awayScore; r.ga += m.homeScore; if (awayWon) r.won++; else if (homeWon) r.lost++; else r.drawn++; }
+  }
+
   // ── Per-region aggregate ──
   const regions: RegionStat[] = [];
   for (const conf of CONF_ORDER) {
     const members = byConf.get(conf);
     if (!members || members.length === 0) continue;
     const meta = CONF_META[conf];
-    let played = 0, won = 0, drawn = 0, lost = 0, gf = 0, ga = 0, points = 0, titleProb = 0, knockoutProb = 0, eloSum = 0;
-    let qualified = 0, eliminated = 0;
+    const r = rec.get(conf)!; // full-tournament record (group + knockout)
+    let points = 0, groupPlayed = 0, titleProb = 0, knockoutProb = 0, eloSum = 0;
+    let qualified = 0, eliminated = 0, stillAlive = 0;
     const teamRows: RegionTeam[] = [];
     for (const t of members) {
       const s = eng.standingsByTeam.get(t.id);
       const f = eng.forecasts.get(t.id);
       eloSum += t.elo;
-      if (s) {
-        played += s.played; won += s.won; drawn += s.drawn; lost += s.lost;
-        gf += s.goalsFor; ga += s.goalsAgainst; points += s.points;
-      }
-      // Real qualification once the knockout draw exists; provisional group status before it.
+      if (s) { points += s.points; groupPlayed += s.played; } // points + PPG are group-stage concepts
+      // Phase-aware: once the knockouts begin, `qualified` = reached the R32 and
+      // `stillAlive` = not yet knocked out; before that, use provisional group status.
       if (settled) {
-        if (qualifiedIds.has(t.id)) qualified++; else eliminated++;
+        if (qualifiedIds.has(t.id)) { qualified++; if (!eliminatedInKO.has(t.id)) stillAlive++; }
       } else if (s?.status === 'Q') qualified++;
       else if (s?.status === 'E') eliminated++;
       titleProb += f?.winTitle ?? 0;
-      knockoutProb += f?.reachR16 ?? 0;
-      teamRows.push({ id: t.id, name: t.name, code: t.code, flag: t.flag, winTitle: f?.winTitle ?? 0, points: s?.points ?? 0, played: s?.played ?? 0, status: s?.status ?? null });
+      knockoutProb += f?.reachR32 ?? 0; // "knockout reach" = reach the R32 (first KO round)
+      teamRows.push({ id: t.id, name: t.name, code: t.code, flag: t.flag, winTitle: f?.winTitle ?? 0, points: s?.points ?? 0, played: s?.played ?? 0, state: teamState(t.id) });
     }
+    if (settled) eliminated = members.length - stillAlive; // current "out" count (group + knockout), not just group non-qualifiers
     teamRows.sort((a, b) => b.winTitle - a.winTitle || b.points - a.points);
     const agg = pAgg.get(conf)!;
     regions.push({
       conf, name: meta.name, emoji: meta.emoji, color: meta.color,
-      teamCount: members.length, qualified, eliminated,
-      played, won, drawn, lost, goalsFor: gf, goalsAgainst: ga, points,
-      ppg: played ? points / played : 0, winRate: played ? won / played : 0,
+      teamCount: members.length, qualified, eliminated, stillAlive,
+      played: r.played, won: r.won, drawn: r.drawn, lost: r.lost, goalsFor: r.gf, goalsAgainst: r.ga, points,
+      ppg: groupPlayed ? points / groupPlayed : 0, winRate: r.played ? r.won / r.played : 0,
       titleProb, knockoutProb, avgElo: Math.round(eloSum / members.length),
-      goalsPerMatch: played ? gf / played : 0, concededPerMatch: played ? ga / played : 0,
-      xgFor: agg.xg, finishing: gf - agg.xg, cleanSheets: csByConf.get(conf) ?? 0,
+      goalsPerMatch: r.played ? r.gf / r.played : 0, concededPerMatch: r.played ? r.ga / r.played : 0,
+      xgFor: agg.xg, finishing: r.gf - agg.xg, cleanSheets: csByConf.get(conf) ?? 0,
       yellow: agg.yellow, red: agg.red, topScorer: agg.topScorer,
       teams: teamRows,
     });

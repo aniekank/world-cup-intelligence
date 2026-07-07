@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateDataset } from '@/data/generate';
-import { dataset, getPlayerViews, getTeams, setDataset, getActiveTournamentId } from '@/data/store';
+import { dataset, getPlayerViews, getTeams, getMatches, setDataset, getActiveTournamentId } from '@/data/store';
 import { engine } from '@/analytics';
 import { predictMatch, scoreMatrix } from '@/analytics/poisson';
 import { eloExpectation, eloOutcomeProbabilities } from '@/analytics/elo';
@@ -470,6 +470,28 @@ describe('AI layer', () => {
     expect(isSpuriousRevert('SCHEDULED', 'SCHEDULED', true)).toBe(false); // not yet started
     // A never-started match past its window (never went live) is genuinely stale, not a glitch
     expect(isSpuriousRevert('LIVE', 'SCHEDULED', false)).toBe(false);
+  });
+
+  it('civilizations region records count ALL finished matches, not just the group stage (phase-lag soundness)', async () => {
+    const { civilizationsView } = await import('@/server/civilizations');
+    // Independently sum every finished match's goals per confederation from the store.
+    const confOf = new Map(getTeams().map((t) => [t.id, t.confederation]));
+    const goalsFor = new Map<string, number>();
+    const played = new Map<string, number>();
+    for (const m of getMatches()) {
+      if (m.status !== 'FINISHED') continue;
+      const ch = confOf.get(m.homeTeamId), ca = confOf.get(m.awayTeamId);
+      if (ch) { goalsFor.set(ch, (goalsFor.get(ch) ?? 0) + m.homeScore); played.set(ch, (played.get(ch) ?? 0) + 1); }
+      if (ca) { goalsFor.set(ca, (goalsFor.get(ca) ?? 0) + m.awayScore); played.set(ca, (played.get(ca) ?? 0) + 1); }
+    }
+    const view = civilizationsView();
+    expect(view.regions.length).toBeGreaterThan(0);
+    for (const r of view.regions) {
+      // The region's goals + games played must equal the all-matches total, not the
+      // group-stage-only figure that standings would have given.
+      expect(r.goalsFor).toBe(goalsFor.get(r.conf) ?? 0);
+      expect(r.played).toBe(played.get(r.conf) ?? 0);
+    }
   });
 
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
