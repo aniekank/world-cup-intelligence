@@ -527,6 +527,27 @@ describe('AI layer', () => {
     }
   });
 
+  it('analytics uses real TEAM xG and exact team goals (no fabricated player xG)', async () => {
+    const { analyticsView } = await import('@/server/analytics');
+    // Independently aggregate finished-match goals + team xG from the store.
+    const goals = new Map<string, number>();
+    let totalXg = 0;
+    for (const m of getMatches()) {
+      if (m.status !== 'FINISHED') continue;
+      const ts = m.teamStats ?? {};
+      goals.set(m.homeTeamId, (goals.get(m.homeTeamId) ?? 0) + m.homeScore);
+      goals.set(m.awayTeamId, (goals.get(m.awayTeamId) ?? 0) + m.awayScore);
+      totalXg += (ts[m.homeTeamId]?.xG ?? 0) + (ts[m.awayTeamId]?.xG ?? 0);
+    }
+    const v = analyticsView();
+    expect(Math.abs(v.stats.teamXG - totalXg)).toBeLessThan(1e-6); // total xG is the real team-xG sum
+    const codeToId = new Map(getTeams().map((t) => [t.code, t.id]));
+    for (const pt of v.teamFinishing) {
+      const id = codeToId.get(pt.label);
+      if (id) expect(pt.y).toBe(goals.get(id) ?? 0); // finishing y = the team's actual goals, exact
+    }
+  });
+
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
     expect(answerQuery('which african team goes the farthest').intent).toBe('farthest');
     const g = answerQuery('which team goes the farthest');
