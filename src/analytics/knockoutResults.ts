@@ -145,4 +145,22 @@ export function reconcileForecastsWithResults(
     }
     if (champion === t.id) f.winTitle = 1;
   }
+
+  // The block above zeroed eliminated / non-qualified teams' title odds WITHOUT
+  // redistributing that probability mass, so the survivors' `winTitle` no longer
+  // sums to 1 — confederation and field totals fell short of 100%. Renormalize the
+  // survivors so P(win the title) sums to exactly 1, the correct conditional given
+  // who is actually still in it. A decided champion is already 1/0 → no-op.
+  // (The reach ladder reachR16…reachFinal carries the same partial-reconciliation
+  //  artifact; the full fix is the real-bracket re-simulation — deferred, ROADMAP §3.)
+  // Only once the bracket is fully known (group stage complete) — before that,
+  // non-qualifiers haven't been zeroed, so the field still sums to ~1 and there's
+  // nothing to redistribute. (Renormalizing a still-settling field would be wrong.)
+  const titleTotal = teamsArr.reduce((s, t) => s + (forecasts.get(t.id)?.winTitle ?? 0), 0);
+  if (bracketKnown && titleTotal > 0) {
+    for (const t of teamsArr) {
+      const f = forecasts.get(t.id);
+      if (f && f.winTitle > 0) f.winTitle = f.winTitle / titleTotal;
+    }
+  }
 }

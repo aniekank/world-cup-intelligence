@@ -548,6 +548,21 @@ describe('AI layer', () => {
     }
   });
 
+  it('reconciled title odds sum to 100% — eliminated teams redistribute, not vanish (WC-082)', async () => {
+    const { reconcileForecastsWithResults } = await import('@/analytics/knockoutResults');
+    const [A, B, C, D] = getTeams();
+    const mkF = (id: string, win: number) => ({ teamId: id, reachR32: 0.5, reachR16: 0.4, reachQF: 0.3, reachSF: 0.2, reachFinal: 0.15, winTitle: win, groupWin: 0, expectedFinish: 1, titleProbabilityDelta: 0, powerRating: 0, powerRank: 0 });
+    const forecasts = new Map([[A!.id, mkF(A!.id, 0.25)], [B!.id, mkF(B!.id, 0.25)], [C!.id, mkF(C!.id, 0.25)], [D!.id, mkF(D!.id, 0.25)]]);
+    const mkM = (id: string, h: string, a: string, hs: number, as: number) => ({ ...dataset().matches[0]!, id, stage: 'R32', status: 'FINISHED', homeTeamId: h, awayTeamId: a, homeScore: hs, awayScore: as, penalties: null });
+    const matches = [mkM('t-ab', A!.id, B!.id, 1, 0), mkM('t-cd', C!.id, D!.id, 2, 1)]; // A & C advance; B & D out
+    reconcileForecastsWithResults(forecasts as never, matches as never, [A!, B!, C!, D!]);
+    const total = [A!, B!, C!, D!].reduce((s, t) => s + (forecasts.get(t.id)?.winTitle ?? 0), 0);
+    expect(Math.abs(total - 1)).toBeLessThan(1e-9);        // sums to 100%
+    expect(forecasts.get(B!.id)!.winTitle).toBe(0);        // eliminated → 0
+    expect(forecasts.get(D!.id)!.winTitle).toBe(0);
+    expect(forecasts.get(A!.id)!.winTitle).toBeCloseTo(0.5, 6); // survivor's share grew (0.25 → 0.5)
+  });
+
   it('storylines: teamFate labels knockout exit round, runner-up and champion (WC-080)', async () => {
     const { teamFate } = await import('@/ai/narratives');
     const orig = dataset();
