@@ -494,6 +494,39 @@ describe('AI layer', () => {
     }
   });
 
+  it('deep-rounds conditional title odds obey the identity: P(title | win) ≥ P(title) and ≤ 1', async () => {
+    const { deepRoundsView } = await import('@/server/deepRounds');
+    const v = deepRoundsView();
+    expect(Array.isArray(v.ties)).toBe(true);
+    for (const t of v.ties) {
+      for (const side of [t.home, t.away]) {
+        expect(side.advance).toBeGreaterThanOrEqual(0);
+        expect(side.advance).toBeLessThanOrEqual(1);
+        expect(side.titleIfWin).toBeLessThanOrEqual(1 + 1e-9);
+        expect(side.titleIfWin + 1e-9).toBeGreaterThanOrEqual(side.title); // winning a tie can't lower your title odds
+      }
+      expect(Math.abs(t.home.advance + t.away.advance - 1)).toBeLessThan(1e-6); // advance is a 2-way split
+    }
+  });
+
+  it('deep-rounds: a scheduled FINAL makes each side champions-if-they-win (100%)', async () => {
+    const { deepRoundsView } = await import('@/server/deepRounds');
+    const orig = dataset();
+    const [A, B] = getTeams();
+    const synth = { ...orig.matches[0]!, id: 'synth-final', stage: 'FINAL', status: 'SCHEDULED', homeTeamId: A!.id, awayTeamId: B!.id, penalties: null, events: [] } as unknown as typeof orig.matches[0];
+    setDataset({ ...orig, matches: [...orig.matches, synth] }, 'test', getActiveTournamentId());
+    try {
+      const v = deepRoundsView();
+      expect(v.stage).toBe('FINAL'); // final is the deepest active round
+      const tie = v.ties.find((t) => t.id === 'synth-final');
+      expect(tie).toBeTruthy();
+      expect(tie!.home.titleIfWin).toBe(1); // winning the final = the trophy
+      expect(tie!.away.titleIfWin).toBe(1);
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
+    }
+  });
+
   it('answers "which X team goes the farthest" and un-inverts expectedFinish (WC-070)', () => {
     expect(answerQuery('which african team goes the farthest').intent).toBe('farthest');
     const g = answerQuery('which team goes the farthest');

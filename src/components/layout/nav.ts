@@ -27,6 +27,7 @@ import {
   LifeBuoy,
   FlaskConical,
   Swords,
+  GitFork,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -50,6 +51,7 @@ export const NAV: NavItem[] = [
   { label: 'Groups', href: '/groups', icon: Layers, section: 'analyze' },
   { label: 'Standings', href: '/standings', icon: Table2, section: 'analyze' },
   { label: 'Bracket', href: '/bracket', icon: Trophy, section: 'analyze' },
+  { label: 'The Business End', href: '/scenarios', icon: GitFork, section: 'analyze' },
   { label: 'Predictions', href: '/predictions', icon: Sparkles, section: 'analyze' },
   { label: 'Track Record', href: '/track-record', icon: Target, section: 'analyze' },
   { label: 'Betting Edge', href: '/betting', icon: Coins, section: 'analyze' },
