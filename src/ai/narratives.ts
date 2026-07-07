@@ -187,7 +187,7 @@ export function generateInsights(): Insight[] {
       // Market value is only present on the seeded edition; omit the clause on
       // live/historical rather than printing "€0m". (WC-026)
       // xG is absent on the live feed (0) — don't claim "outscoring an xG of 0.0". (WC-066)
-      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name}${x.p.marketValueEur > 0 ? ` on a €${x.p.marketValueEur}m valuation` : ''}${x.p.stats.xG > 0 ? ` — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality` : ''}.`,
+      body: `${pick(breakoutOpeners(x.p.name, x.p.age), i)} has ${x.p.stats.goals}G ${x.p.stats.assists}A for ${x.p.team.name}${x.p.marketValueEur > 0 ? ` on a €${x.p.marketValueEur}m valuation` : ''}${x.p.stats.xG > 0 ? ` — outscoring an xG of ${fmt(x.p.stats.xG)} and sitting in the ${ordinalSafe(x.p.percentiles.xG)} percentile for shot quality` : ''}.${teamFateClause(x.p.teamId)}`,
       entityType: 'player',
       entityId: x.p.id,
       metrics: [
@@ -200,7 +200,8 @@ export function generateInsights(): Insight[] {
   });
 
   // 4. Form / momentum movers
-  const movers = [...eng.powerRankings].sort((a, b) => b.momentum - a.momentum).slice(0, 2);
+  // A "form mover" who's been knocked out isn't moving anywhere — exclude them.
+  const movers = [...eng.powerRankings].filter((r) => !teamFate(r.teamId)).sort((a, b) => b.momentum - a.momentum).slice(0, 2);
   movers.forEach((r, i) => {
     const t = getTeam(r.teamId);
     if (!t) return; // unresolved team — skip
@@ -231,7 +232,7 @@ export function generateInsights(): Insight[] {
         kind: 'milestone',
         severity: 'medium',
         title: pick(bootTitles(v.name), v.name.length),
-        body: `${v.name} tops the scoring charts with ${gb.currentGoals} goals and is projected to finish on ${gb.projectedGoals}, with a ${pct(gb.winProbability)} chance of claiming the Golden Boot.`,
+        body: `${v.name} tops the scoring charts with ${gb.currentGoals} goals and is projected to finish on ${gb.projectedGoals}, with a ${pct(gb.winProbability)} chance of claiming the Golden Boot.${teamFateClause(v.teamId)}`,
         entityType: 'player',
         entityId: v.id,
         metrics: [
@@ -265,7 +266,7 @@ export function generateInsights(): Insight[] {
         title: `${t.name}: the tournament's meanest defense`,
         body: `${t.name} have conceded just ${wall.s.goalsAgainst} in ${wall.s.played} ${wall.s.played === 1 ? 'game' : 'games'}${
           wall.cs > 0 ? ` with ${wall.cs} clean sheet${wall.cs > 1 ? 's' : ''}` : ''
-        } — ${wall.gpg.toFixed(2)} goals against per game, the stingiest at the tournament.`,
+        } — ${wall.gpg.toFixed(2)} goals against per game, the stingiest at the tournament.${teamFateClause(t.id)}`,
         entityType: 'team',
         entityId: t.id,
         metrics: [
@@ -1085,6 +1086,11 @@ function fateClause(fate: Storyline['fate']): string {
   return ` But that run is over — ${fate.label}.`;
 }
 
+/** Fate clause for a team id (''/alive) — reused across insights, discoveries, etc. */
+export function teamFateClause(teamId: string): string {
+  return fateClause(teamFate(teamId));
+}
+
 export function playersToWatch(limit = 6): Storyline[] {
   const eng = engine();
   const bootRank = new Map(eng.goldenBoot.map((g, i) => [g.playerId, i]));
@@ -1160,12 +1166,16 @@ export function squadsToWatch(limit = 5): Storyline[] {
   };
 
   // Pre-sort candidate lists; each archetype claims the best team not already used.
+  // "To watch" should exclude knocked-out sides — favourites already are (their
+  // reconciled title odds ≈ 0), but the rating/momentum pools would otherwise
+  // surface an eliminated team as "Firepower"/"The Fortress". Champions are kept.
+  const notOut = (id: string): boolean => { const f = teamFate(id); return !f || f.status === 'champion'; };
   const byTitle = [...teams].sort((a, b) => (fc.get(b.id)!.winTitle) - (fc.get(a.id)!.winTitle)).map((t) => t.id);
-  const byOffense = [...eng.powerRankings].sort((a, b) => b.offenseRating - a.offenseRating).map((r) => r.teamId);
-  const byDefense = [...eng.powerRankings].sort((a, b) => b.defenseRating - a.defenseRating).map((r) => r.teamId);
+  const byOffense = [...eng.powerRankings].sort((a, b) => b.offenseRating - a.offenseRating).map((r) => r.teamId).filter(notOut);
+  const byDefense = [...eng.powerRankings].sort((a, b) => b.defenseRating - a.defenseRating).map((r) => r.teamId).filter(notOut);
   const top3 = new Set(byTitle.slice(0, 3));
-  const byMomentum = [...eng.powerRankings].filter((r) => !top3.has(r.teamId)).sort((a, b) => b.momentum - a.momentum).map((r) => r.teamId);
-  const byDelta = [...teams].filter((t) => fc.get(t.id)!.titleProbabilityDelta > 0.003).sort((a, b) => fc.get(b.id)!.titleProbabilityDelta - fc.get(a.id)!.titleProbabilityDelta).map((t) => t.id);
+  const byMomentum = [...eng.powerRankings].filter((r) => !top3.has(r.teamId) && notOut(r.teamId)).sort((a, b) => b.momentum - a.momentum).map((r) => r.teamId);
+  const byDelta = [...teams].filter((t) => fc.get(t.id)!.titleProbabilityDelta > 0.003 && notOut(t.id)).sort((a, b) => fc.get(b.id)!.titleProbabilityDelta - fc.get(a.id)!.titleProbabilityDelta).map((t) => t.id);
 
   const fav = firstUnused(byTitle);
   if (fav) { const f = fc.get(fav)!; const pr = prMap.get(fav); push(fav, 'favourite', 'The Favourites', 'accent', `${getTeam(fav)!.name} sit top of the model's board at ${pct(f.winTitle)} to lift the trophy, reaching the semi-finals in ${pct(f.reachSF)} of simulations. The team everyone else is measured against.`, [{ label: 'Win title', value: pct(f.winTitle) }, { label: 'Reach SF', value: pct(f.reachSF) }, { label: 'Power', value: String(pr?.powerRating ?? '—') }]); }

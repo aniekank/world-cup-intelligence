@@ -2,6 +2,7 @@ import 'server-only';
 import { getTeams, getActiveTournamentId, getPlayerViews, getSquad } from '@/data/store';
 import { engine } from '@/analytics';
 import { getClubKeyMap, clubMatchKeys, type ClubAffiliation } from '@/data/clubAffiliations';
+import { teamFateClause } from '@/ai/narratives';
 import { debutantsForYear } from '@/data/debutants';
 import { getTournament } from '@/data/tournaments';
 
@@ -70,7 +71,7 @@ export async function discoveries() {
       nation: team.name, nationFlag: team.flag, nationId: team.id,
       club: club.club, clubLogo: club.clubLogo, league: club.league, leagueColor: club.leagueColor,
       titleOdds: win,
-      blurb: `${tier === 3 ? 'A standout at' : 'Proven at'} ${club.club} in the ${club.league}, ${last} is ${team.name}'s class act — yet the model gives ${team.name} just ${(win * 100).toFixed(1)}% to win it all. One of ${team.confederation}'s genuine under-the-radar difference-makers.`,
+      blurb: `${tier === 3 ? 'A standout at' : 'Proven at'} ${club.club} in the ${club.league}, ${last} is ${team.name}'s class act — yet the model gives ${team.name} just ${(win * 100).toFixed(1)}% to win it all. One of ${team.confederation}'s genuine under-the-radar difference-makers.${teamFateClause(team.id)}`,
       score: tier * (1 - Math.min(win * 6, 0.9)) + (p.stats.goals + p.stats.assists) * 0.05,
       conf: team.confederation,
     });
