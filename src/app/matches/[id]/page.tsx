@@ -207,7 +207,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {statRows.length > 0 && (
+        {statRows.length > 0 ? (
           <Panel title="Match Stats" subtitle={`${home.code} vs ${away.code}`}>
             <div className="space-y-3">
               {statRows.map((r) => (
@@ -215,7 +215,19 @@ export default function MatchPage({ params }: { params: { id: string } }) {
               ))}
             </div>
           </Panel>
-        )}
+        ) : (match.status === 'LIVE' || match.status === 'HALFTIME') ? (
+          // In-play, team stats aren't populated yet: the live loop carries only
+          // score/clock, and possession/shots/xG are pulled once the match is FINAL
+          // (keeps the API quota sane). Say so, rather than leaving an empty slot.
+          <Panel title="Match Stats" subtitle="Finalize at full-time">
+            <p className="py-6 text-center text-sm leading-relaxed text-terminal-muted">
+              Possession, shots and xG for this match settle at full-time. The live feed
+              updates the score and clock in real time, but team stats are pulled once the
+              game is complete — and even then they can differ slightly from your broadcaster,
+              which uses a different stats provider.
+            </p>
+          </Panel>
+        ) : null}
 
         <Panel title="Timeline" subtitle="Key events">
           {keyEvents.length === 0 ? (
