@@ -563,6 +563,38 @@ describe('AI layer', () => {
     expect(forecasts.get(A!.id)!.winTitle).toBeCloseTo(0.5, 6); // survivor's share grew (0.25 → 0.5)
   });
 
+  it('lineup changes: a player who started both games is not a phantom sub across the provider boundary (WC-083)', async () => {
+    const { lineupView } = await import('@/server/lineups');
+    const nrm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z]/g, '');
+    const sur = (n: string) => nrm(n.trim().split(/\s+/).slice(-1)[0] ?? n);
+    const fi = (n: string) => nrm(n.trim().split(/\s+/)[0] ?? '')[0] ?? '';
+    const T = getTeams()[0]!;
+    const oppId = getTeams()[1]!.id;
+    const squad = getPlayerViews().filter((p) => p.teamId === T.id);
+    // pick a squad member whose surname+initial is unique so name-resolution is exact
+    const star = squad.find((p) => squad.filter((q) => sur(q.name) === sur(p.name) && fi(q.name) === fi(p.name)).length === 1)!;
+    const others = squad.filter((q) => q.id !== star.id).slice(0, 10).map((q) => ({ id: q.id, name: q.name, pos: q.position }));
+    // Same XI in both matches — but the PREVIOUS game represents the star with a
+    // dangling (frozen/SportMonks-style) id, the LATEST with the live id.
+    const prevXi = [{ id: `sm-${star.id}`, name: star.name, pos: star.position }, ...others];
+    const currXi = [{ id: star.id, name: star.name, pos: star.position }, ...others];
+    const base = dataset().matches[0]!;
+    const prevM = { ...base, id: 'lv-prev', status: 'FINISHED', kickoff: '2026-06-20T18:00:00Z', homeTeamId: T.id, awayTeamId: oppId, lineups: { [T.id]: prevXi } };
+    const currM = { ...base, id: 'lv-curr', status: 'FINISHED', kickoff: '2026-06-25T18:00:00Z', homeTeamId: T.id, awayTeamId: oppId, lineups: { [T.id]: currXi } };
+    const orig = dataset();
+    try {
+      setDataset({ ...orig, matches: [...orig.matches, prevM, currM] } as never, 'test', getActiveTournamentId());
+      const view = lineupView(T.id)!;
+      expect(view.changes).not.toBeNull();
+      // The star started both games → NOT flagged out (and, identical XIs → no churn).
+      expect(view.changes!.out.map((p) => sur(p.name))).not.toContain(sur(star.name));
+      expect(view.changes!.out).toHaveLength(0);
+      expect(view.changes!.in).toHaveLength(0);
+    } finally {
+      setDataset(orig, 'test', getActiveTournamentId());
+    }
+  });
+
   it('storylines: teamFate labels knockout exit round, runner-up and champion (WC-080)', async () => {
     const { teamFate } = await import('@/ai/narratives');
     const orig = dataset();

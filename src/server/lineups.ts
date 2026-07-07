@@ -55,18 +55,26 @@ export function lineupView(teamId: string): LineupView | null {
   const opp = getTeam(oppId);
   const formation = latest.formations ? (latest.homeTeamId === teamId ? latest.formations.home : latest.formations.away) : null;
 
+  // Resolve every lineup player to a live store id ONCE, up front. Raw lineup ids
+  // are NOT consistent across matches: pre-freeze XIs come from the frozen overlay
+  // (SportMonks ids re-keyed by shirt, with a raw-SM fallback when a shirt can't be
+  // matched) while post-freeze XIs carry native API-Football ids. Diffing raw ids
+  // across that provider boundary flags a player who started BOTH games as a phantom
+  // "▲ in / ▼ out" — e.g. Messi shown as subbed out despite starting and finishing.
+  // Resolving to the live id first (by name when the id dangles) collapses the two
+  // provider ids to one identity, so the diff reflects real rotation only. (WC-083)
+  const currXi = xi.map((p) => resolveLineupId(teamId, p));
+
   let changes: LineupView['changes'] = null;
   const prev = finished[1];
   if (prev?.lineups?.[teamId]?.length) {
-    const prevXi = prev.lineups[teamId]!;
+    const prevXi = prev.lineups[teamId]!.map((p) => resolveLineupId(teamId, p));
     const prevIds = new Set(prevXi.map((p) => p.id));
-    const currIds = new Set(xi.map((p) => p.id));
+    const currIds = new Set(currXi.map((p) => p.id));
     const prevOppId = prev.homeTeamId === teamId ? prev.awayTeamId : prev.homeTeamId;
-    // Compare by the raw (consistent across matches) ids, then resolve the
-    // surviving in/out players to live store ids for linking.
     changes = {
-      in: xi.filter((p) => !prevIds.has(p.id)).map((p) => resolveLineupId(teamId, p)),
-      out: prevXi.filter((p) => !currIds.has(p.id)).map((p) => resolveLineupId(teamId, p)),
+      in: currXi.filter((p) => !prevIds.has(p.id)),
+      out: prevXi.filter((p) => !currIds.has(p.id)),
       vsOpponent: getTeam(prevOppId)?.code ?? '',
     };
   }
@@ -75,7 +83,7 @@ export function lineupView(teamId: string): LineupView | null {
     date: latest.kickoff,
     opponent: opp ? { code: opp.code, name: opp.name } : null,
     formation,
-    xi: xi.map((p) => resolveLineupId(teamId, p)),
+    xi: currXi,
     changes,
   };
 }
