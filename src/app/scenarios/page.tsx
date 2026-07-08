@@ -88,7 +88,10 @@ function TieCard({ t, biggest }: { t: DeepTie; biggest: boolean }) {
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-terminal-muted">The model&rsquo;s read</p>
           <p className="text-sm text-terminal-text">
             Expected goals <span className="tnum font-semibold text-terminal-bright">{t.egHome.toFixed(2)}–{t.egAway.toFixed(2)}</span>
-            {t.likely && <> · most likely <span className="tnum font-semibold text-terminal-bright">{t.likely.home}–{t.likely.away}</span> <span className="text-terminal-muted">({pct(t.likely.prob, 0)})</span></>}
+            {/* The scoreline is the mode of the REGULATION score matrix — a knockout tie
+                can't end level, so say "after 90′" or readers hear "predicts a draw".
+                Advance %s already fold the draw mass into ET/pens (advanceProbabilities). */}
+            {t.likely && <> · most likely after 90&prime; <span className="tnum font-semibold text-terminal-bright">{t.likely.home}–{t.likely.away}</span> <span className="text-terminal-muted">({pct(t.likely.prob, 0)})</span></>}
           </p>
         </div>
         <div className="bg-terminal-panel/40 px-4 py-3">
