@@ -25,7 +25,7 @@ function ko(
     bracketSlot: null,
   } as Match;
 }
-const team = (id: string): Team => ({ id }) as Team;
+const team = (id: string, preOdds = 0.05): Team => ({ id, preTournamentTitleOdds: preOdds }) as Team;
 const map = (...fs: TeamForecast[]) => new Map(fs.map((f) => [f.teamId, f]));
 
 describe('reconcileForecastsWithResults', () => {
@@ -102,6 +102,35 @@ describe('reconcileForecastsWithResults', () => {
     const a = f.get('a')!;
     expect(a.reachR16).toBe(1); // appears in the R16 → has reached it
     expect(a.reachQF).toBe(0.3); // QF still open → simulated value preserved
+  });
+
+  it('recomputes titleProbabilityDelta from the reconciled winTitle — an eliminated team can never keep a positive delta (WC-085)', () => {
+    // The production bug: Brazil went out in the R16 with a raw-sim delta of +1.8%.
+    // Reconciliation zeroed winTitle but left the delta, so the insights engine
+    // celebrated an eliminated side as an "overperformer" at 0.0% title odds.
+    const f = map(
+      fc('bra', { winTitle: 0.123, titleProbabilityDelta: 0.018 }),
+      fc('nor', { winTitle: 0.02, titleProbabilityDelta: -0.01 }),
+    );
+    const matches = [ko('R32', 'bra', 'nor', { status: 'FINISHED', hs: 1, as: 2 })];
+    reconcileForecastsWithResults(f, matches, [team('bra', 0.105), team('nor', 0.014)]);
+    const bra = f.get('bra')!, nor = f.get('nor')!;
+    expect(bra.winTitle).toBe(0);
+    expect(bra.titleProbabilityDelta).toBe(-0.105); // 0 − pre-tournament odds: strictly non-positive
+    // The survivor's delta must describe the winTitle actually displayed (post-renormalization).
+    expect(nor.titleProbabilityDelta).toBe(Math.round((nor.winTitle - 0.014) * 1000) / 1000);
+  });
+
+  it('gives the champion a delta consistent with winTitle = 1 (WC-085)', () => {
+    const f = map(fc('a', { titleProbabilityDelta: 0.02 }), fc('b'));
+    const matches = [
+      ko('R32', 'a', 'p', { status: 'FINISHED', hs: 1, as: 0 }),
+      ko('R32', 'b', 'q', { status: 'FINISHED', hs: 1, as: 0 }),
+      ko('FINAL', 'a', 'b', { status: 'FINISHED', hs: 2, as: 0 }),
+    ];
+    reconcileForecastsWithResults(f, matches, [team('a', 0.2), team('b'), team('p'), team('q')]);
+    expect(f.get('a')!.titleProbabilityDelta).toBe(0.8); // 1 − 0.2
+    expect(f.get('b')!.titleProbabilityDelta).toBe(-0.05); // runner-up: 0 − 0.05
   });
 
   it('marks the champion (won the final) and the runner-up correctly', () => {

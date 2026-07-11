@@ -170,4 +170,15 @@ export function reconcileForecastsWithResults(
       if (f && f.winTitle > 0) f.winTitle = f.winTitle / titleTotal;
     }
   }
+
+  // Every winTitle adjustment above (zeroing the eliminated, crowning the champion,
+  // renormalizing the survivors) invalidates the simulator's titleProbabilityDelta,
+  // which was computed from the RAW sim value. Recompute it from the reconciled
+  // winTitle so the delta always describes the number actually displayed — otherwise
+  // an eliminated side can keep a positive delta and get celebrated as an
+  // "overperformer" at 0.0% title odds (Brazil, post-R16 exit). (WC-085)
+  for (const t of teamsArr) {
+    const f = forecasts.get(t.id);
+    if (f) f.titleProbabilityDelta = Math.round((f.winTitle - t.preTournamentTitleOdds) * 1000) / 1000;
+  }
 }
