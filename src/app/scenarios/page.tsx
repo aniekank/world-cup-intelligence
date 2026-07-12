@@ -47,7 +47,12 @@ function TieCard({ t, biggest }: { t: DeepTie; biggest: boolean }) {
           {biggest && <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">Tie of the round</span>}
         </div>
         <div className="text-[11px] text-terminal-muted">
-          <LocalTime iso={t.kickoff} /> · {t.venue}{t.city ? `, ${t.city}` : ''}
+          {t.scheduleTbc ? (
+            // Pairing decided by results; the provider hasn't published the fixture yet. (WC-086)
+            <span className="rounded bg-terminal-elevated px-1.5 py-0.5">Matchup confirmed · kickoff &amp; venue TBC</span>
+          ) : (
+            <><LocalTime iso={t.kickoff} /> · {t.venue}{t.city ? `, ${t.city}` : ''}</>
+          )}
         </div>
       </div>
 

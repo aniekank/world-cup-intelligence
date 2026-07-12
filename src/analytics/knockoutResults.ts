@@ -43,6 +43,47 @@ const REACH_FIELD: (keyof TeamForecast)[] = [
   'reachFinal',
 ];
 
+/**
+ * Knockout ties that are fully DETERMINED by finished results but have no
+ * published fixture yet. The provider (API-Football) creates next-round fixtures
+ * on its own clock — sometimes a day+ after the qualifying matches finish — so
+ * without this the app can know both semi-finalists yet show no upcoming tie.
+ *
+ * A tie is only synthesized when the pairing is unambiguous: every match of the
+ * feeder round is finished with a resolvable winner, and exactly TWO of those
+ * winners are absent from the next round's published fixtures (i.e. exactly one
+ * tie is missing). Four missing winners (no next-round fixture published at all)
+ * can't be paired without bracket-slot data, so nothing is invented. (WC-086)
+ */
+export interface PendingTie {
+  stage: MatchStage; // the round the missing fixture belongs to
+  teamIds: [string, string];
+}
+
+const KO_PATH_ORDER: MatchStage[] = ['R32', 'R16', 'QF', 'SF', 'FINAL'];
+
+export function pendingKnockoutTies(matches: Match[]): PendingTie[] {
+  const out: PendingTie[] = [];
+  for (let i = 0; i < KO_PATH_ORDER.length - 1; i++) {
+    const round = KO_PATH_ORDER[i]!;
+    const next = KO_PATH_ORDER[i + 1]!;
+    const roundMatches = matches.filter((m) => m.stage === round && !!m.homeTeamId && !!m.awayTeamId);
+    if (roundMatches.length === 0) continue; // round not drawn → nothing determined
+    if (roundMatches.some((m) => m.status !== 'FINISHED')) continue; // round still being played
+    const winners = roundMatches.map(knockoutWinner);
+    if (winners.some((w) => !w)) continue; // an unresolvable tie → don't guess
+    const inNext = new Set<string>();
+    for (const m of matches) {
+      if (m.stage !== next) continue;
+      if (m.homeTeamId) inNext.add(m.homeTeamId);
+      if (m.awayTeamId) inNext.add(m.awayTeamId);
+    }
+    const missing = (winners as string[]).filter((w) => !inNext.has(w));
+    if (missing.length === 2) out.push({ stage: next, teamIds: [missing[0]!, missing[1]!] });
+  }
+  return out;
+}
+
 /** Winner of a finished knockout tie (penalties break a level score). null if undetermined. */
 function knockoutWinner(m: Match): string | null {
   if (m.homeScore > m.awayScore) return m.homeTeamId;

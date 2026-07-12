@@ -2,6 +2,7 @@ import 'server-only';
 import { getMatches, getTeam, getPlayerViews } from '@/data/store';
 import { engine } from '@/analytics';
 import { predictMatch } from '@/analytics/poisson';
+import { pendingKnockoutTies } from '@/analytics/knockoutResults';
 import { advanceProbabilities, stageName } from '@/lib/format';
 import type { Match, Team, TeamForecast, PlayerView } from '@/domain/types';
 
@@ -39,6 +40,7 @@ export interface DeepTie {
   likely: { home: number; away: number; prob: number } | null;
   atStake: number;                       // combined title probability on the line
   favorite: 'home' | 'away' | 'even';
+  scheduleTbc?: boolean;                 // pairing determined by results; provider hasn't published the fixture yet (WC-086)
 }
 
 const isUpcoming = (m: Match): boolean => m.status === 'SCHEDULED' || m.status === 'LIVE' || m.status === 'HALFTIME';
@@ -78,27 +80,50 @@ export function deepRoundsView() {
   const matches = getMatches();
   const players = getPlayerViews();
 
-  const stage = KO_DEEP.find((st) => matches.some((m) => m.stage === st && isUpcoming(m) && getTeam(m.homeTeamId) && getTeam(m.awayTeamId)));
+  // Ties fully determined by finished results but not yet published as fixtures
+  // by the provider (API-Football can lag a day+ naming the next round). The
+  // preview only needs the two teams — nothing else is invented; the schedule is
+  // surfaced as TBC rather than guessed. (WC-086)
+  const pending = pendingKnockoutTies(matches).filter((p) => getTeam(p.teamIds[0]) && getTeam(p.teamIds[1]));
+
+  const stage = KO_DEEP.find(
+    (st) =>
+      matches.some((m) => m.stage === st && isUpcoming(m) && getTeam(m.homeTeamId) && getTeam(m.awayTeamId)) ||
+      pending.some((p) => p.stage === st),
+  );
   if (!stage) return { stage: null as Match['stage'] | null, stageLabel: null as string | null, ties: [] as DeepTie[], biggestId: null as string | null };
+
+  const mkTie = (
+    id: string, kickoff: string, venue: string, city: string,
+    home: Team, away: Team, scheduleTbc?: boolean,
+  ): DeepTie => {
+    const pred = predictMatch(home, away);
+    const adv = advanceProbabilities(pred);
+    const top = pred.scoreline[0] ?? null;
+    const hs = buildSide(home, eng.forecasts.get(home.id), adv.home, stage, matches, players);
+    const as = buildSide(away, eng.forecasts.get(away.id), adv.away, stage, matches, players);
+    return {
+      id, stage, kickoff, venue, city,
+      home: hs, away: as,
+      egHome: pred.expectedGoals.home, egAway: pred.expectedGoals.away,
+      likely: top ? { home: top.home, away: top.away, prob: top.prob } : null,
+      atStake: hs.title + as.title,
+      favorite: adv.home >= 0.56 ? 'home' : adv.away >= 0.56 ? 'away' : 'even',
+      ...(scheduleTbc ? { scheduleTbc: true } : {}),
+    };
+  };
 
   const ties: DeepTie[] = [];
   for (const m of matches) {
     if (m.stage !== stage || !isUpcoming(m)) continue;
     const home = getTeam(m.homeTeamId), away = getTeam(m.awayTeamId);
     if (!home || !away) continue;
-    const pred = predictMatch(home, away);
-    const adv = advanceProbabilities(pred);
-    const top = pred.scoreline[0] ?? null;
-    const hs = buildSide(home, eng.forecasts.get(home.id), adv.home, stage, matches, players);
-    const as = buildSide(away, eng.forecasts.get(away.id), adv.away, stage, matches, players);
-    ties.push({
-      id: m.id, stage, kickoff: m.kickoff, venue: m.venue, city: m.city,
-      home: hs, away: as,
-      egHome: pred.expectedGoals.home, egAway: pred.expectedGoals.away,
-      likely: top ? { home: top.home, away: top.away, prob: top.prob } : null,
-      atStake: hs.title + as.title,
-      favorite: adv.home >= 0.56 ? 'home' : adv.away >= 0.56 ? 'away' : 'even',
-    });
+    ties.push(mkTie(m.id, m.kickoff, m.venue, m.city, home, away));
+  }
+  for (const p of pending) {
+    if (p.stage !== stage) continue;
+    const home = getTeam(p.teamIds[0])!, away = getTeam(p.teamIds[1])!;
+    ties.push(mkTie(`pending-${stage}-${p.teamIds[0]}-${p.teamIds[1]}`, '', '', '', home, away, true));
   }
   ties.sort((a, b) => b.atStake - a.atStake || a.kickoff.localeCompare(b.kickoff));
   return { stage, stageLabel: stageName[stage] ?? 'Knockouts', ties, biggestId: ties[0]?.id ?? null };

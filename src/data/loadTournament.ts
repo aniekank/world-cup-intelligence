@@ -3,6 +3,7 @@ import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
 import { getCachedTournament, setDataset, getActiveTournamentId, getMatches, getTeams } from './store';
 import type { FixtureUpdate, RawFixtureEvent } from './providers/apiFootball';
+import { pendingKnockoutTies } from '@/analytics/knockoutResults';
 import type { DatasetSnapshot, Match, MatchEvent, EventType, Team } from '@/domain/types';
 
 /** Map an API-Football event (type + detail) to our EventType. */
@@ -206,6 +207,10 @@ export function isSpuriousRevert(
 // budget (a full snapshot fans out to ~60 requests). (WC-073)
 const inApiBackoff = () => Date.now() < ((globalThis as { __wcApiBackoffUntil?: number }).__wcApiBackoffUntil ?? 0);
 
+// Cadence for the bracket-gap probe and the new-fixture rebuild throttle. (WC-086)
+const BRACKET_PROBE_MS = 30 * 60_000;
+const knownMatchIds = (snap: { matches: Match[] }): Set<string> => new Set(snap.matches.map((m) => m.id));
+
 /**
  * Re-poll the fixtures feed and merge current status/score/minute into the
  * active live snapshot, so in-play games flip to LIVE and scores update without
@@ -254,9 +259,31 @@ export async function refreshLiveScores(): Promise<boolean> {
     if (m.status === 'FINISHED' && m.events.length === 0 && !eventsFetched.has(m.id)) return true; // backfill timeline once
     return false;
   });
-  if (!needsRefresh) return false; // nothing in play and no timeline to backfill → no API call
+  // Bracket-gap probe (WC-086): when the results have determined a next-round tie
+  // that the provider hasn't published as a fixture (API-Football lagged a day+
+  // creating the second semi-final), nothing is "in play" for days — so the poll
+  // above would never fire and the fixture could only arrive via the next finished
+  // match or a redeploy. While such a gap exists, poll the (single-call) fixtures
+  // feed at a low cadence so the new fixture is picked up within the half-hour.
+  const gp = globalThis as { __wcBracketProbeAt?: number };
+  const bracketGap = pendingKnockoutTies(cur.matches).length > 0;
+  const probeDue = bracketGap && now - (gp.__wcBracketProbeAt ?? 0) >= BRACKET_PROBE_MS;
+  if (!needsRefresh && !probeDue) return false; // nothing in play, no backfill, no bracket gap → no API call
 
-  const byId = new Map((await fetchFixturesFn()).map((u) => [u.id, u]));
+  const updates = await fetchFixturesFn();
+  if (probeDue) gp.__wcBracketProbeAt = now;
+  // Fixtures we've never seen (a newly published next round) can't be merged by
+  // the patch loop below — they need the full snapshot rebuild. Throttled so a
+  // fixture the rebuild can't ingest (e.g. an unmapped team) can't spin it. (WC-086)
+  if (updates.some((u) => !knownMatchIds(cur).has(u.id))) {
+    const gr = globalThis as { __wcNewFixtureRebuildAt?: number };
+    if (now - (gr.__wcNewFixtureRebuildAt ?? 0) >= BRACKET_PROBE_MS) {
+      gr.__wcNewFixtureRebuildAt = now;
+      console.log('[data] Feed contains fixture(s) not in the snapshot — rebuilding live snapshot.');
+      void rebuildLiveSnapshot();
+    }
+  }
+  const byId = new Map(updates.map((u) => [u.id, u]));
 
   // Pull the timeline (goals, cards, subs, VAR) for matches that are in play or
   // just finished — a handful of extra calls at most.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reconcileForecastsWithResults } from './knockoutResults';
+import { reconcileForecastsWithResults, pendingKnockoutTies } from './knockoutResults';
 import type { Match, Team, TeamForecast, MatchStage, MatchStatus } from '@/domain/types';
 
 // Minimal builders — the reconciler only reads a handful of fields.
@@ -144,5 +144,62 @@ describe('reconcileForecastsWithResults', () => {
     const a = f.get('a')!, b = f.get('b')!;
     expect([a.reachFinal, a.winTitle]).toEqual([1, 1]); // champion
     expect([b.reachFinal, b.winTitle]).toEqual([1, 0]); // reached the final, lost it
+  });
+});
+
+describe('pendingKnockoutTies (WC-086)', () => {
+  // The production incident: all four QFs finished, the provider had published
+  // one SF (fra-esp) but not the other — the app knew both remaining semi-finalists
+  // (eng, arg) yet showed no upcoming tie anywhere.
+  const finishedQF = (h: string, a: string, hs: number, as: number) =>
+    ko('QF', h, a, { status: 'FINISHED', hs, as });
+
+  it('synthesizes the one missing semi-final when its pairing is determined', () => {
+    const matches = [
+      finishedQF('fra', 'mar', 2, 0),
+      finishedQF('esp', 'bel', 2, 1),
+      finishedQF('nor', 'eng', 1, 2),
+      finishedQF('arg', 'sui', 3, 1),
+      ko('SF', 'fra', 'esp', { status: 'SCHEDULED' }),
+    ];
+    expect(pendingKnockoutTies(matches)).toEqual([{ stage: 'SF', teamIds: ['eng', 'arg'] }]);
+  });
+
+  it('synthesizes nothing when no next-round fixture exists (4 winners, pairing ambiguous)', () => {
+    const matches = [
+      finishedQF('fra', 'mar', 2, 0),
+      finishedQF('esp', 'bel', 2, 1),
+      finishedQF('nor', 'eng', 1, 2),
+      finishedQF('arg', 'sui', 3, 1),
+    ];
+    expect(pendingKnockoutTies(matches)).toEqual([]);
+  });
+
+  it('synthesizes nothing while the feeder round is still being played', () => {
+    const matches = [
+      finishedQF('fra', 'mar', 2, 0),
+      finishedQF('esp', 'bel', 2, 1),
+      finishedQF('nor', 'eng', 1, 2),
+      ko('QF', 'arg', 'sui', { status: 'LIVE', hs: 1, as: 0 }),
+      ko('SF', 'fra', 'esp', { status: 'SCHEDULED' }),
+    ];
+    expect(pendingKnockoutTies(matches)).toEqual([]);
+  });
+
+  it('synthesizes the final once both semis are decided (penalties resolve a level tie)', () => {
+    const matches = [
+      ko('SF', 'fra', 'esp', { status: 'FINISHED', hs: 1, as: 1, pens: { home: 3, away: 4 } }),
+      ko('SF', 'eng', 'arg', { status: 'FINISHED', hs: 0, as: 1 }),
+    ];
+    expect(pendingKnockoutTies(matches)).toEqual([{ stage: 'FINAL', teamIds: ['esp', 'arg'] }]);
+  });
+
+  it('does not re-synthesize a tie the provider has since published', () => {
+    const matches = [
+      ko('SF', 'fra', 'esp', { status: 'FINISHED', hs: 2, as: 0 }),
+      ko('SF', 'eng', 'arg', { status: 'FINISHED', hs: 0, as: 1 }),
+      ko('FINAL', 'fra', 'arg', { status: 'SCHEDULED' }),
+    ];
+    expect(pendingKnockoutTies(matches)).toEqual([]);
   });
 });

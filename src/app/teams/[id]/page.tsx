@@ -4,7 +4,9 @@ import { notFound } from 'next/navigation';
 import { teamView, squadViews } from '@/server/queries';
 import { tacticalProfile } from '@/server/tactics';
 import { lineupView } from '@/server/lineups';
-import { getTeam } from '@/data/store';
+import { getTeam, getMatches } from '@/data/store';
+import { pendingKnockoutTies } from '@/analytics/knockoutResults';
+import { stageName } from '@/lib/format';
 import { Panel, Stat, Badge, FormString, Table, Th, Td, MetricBar } from '@/components/ui';
 import { MiniMatchRow } from '@/components/MatchCard';
 import { TeamCrest } from '@/components/brand/TeamCrest';
@@ -26,6 +28,11 @@ export default function TeamPage({ params }: { params: { id: string } }) {
   const s = t.standing;
   const coach = t.coach;
   const lineup = lineupView(params.id);
+
+  // A next tie determined by finished results that the provider hasn't published
+  // as a fixture yet — show it as upcoming rather than showing nothing. (WC-086)
+  const pendingTie = pendingKnockoutTies(getMatches()).find((p) => p.teamIds.includes(params.id));
+  const pendingOpp = pendingTie ? getTeam(pendingTie.teamIds[0] === params.id ? pendingTie.teamIds[1] : pendingTie.teamIds[0]) : undefined;
 
   const positions = ['GK', 'DF', 'MF', 'FW'] as const;
 
@@ -132,6 +139,19 @@ export default function TeamPage({ params }: { params: { id: string } }) {
         </Panel>
 
         <Panel title="Fixtures" subtitle="Results & upcoming" bodyClassName="space-y-0.5">
+          {pendingTie && pendingOpp && (
+            <div className="mb-1 flex items-center justify-between gap-2 rounded-md border border-dashed border-terminal-border bg-terminal-panel/40 px-3 py-2 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <span>{pendingOpp.flag}</span>
+                <Link href={`/teams/${pendingOpp.id}`} className="truncate font-semibold text-terminal-bright hover:text-accent">
+                  {pendingOpp.name}
+                </Link>
+              </span>
+              <span className="shrink-0 text-[11px] text-terminal-muted">
+                {stageName[pendingTie.stage] ?? 'Next round'} · confirmed, kickoff TBC
+              </span>
+            </div>
+          )}
           {t.recentMatches.map((m) => {
             // Skip a row rather than crash if an opponent is momentarily
             // unresolved during a live snapshot swap. (WC-025)
