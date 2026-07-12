@@ -63,6 +63,8 @@ const ALIASES: Record<string, string> = {
   iranislamicrepublicof: 'iran',
 };
 const canon = (name: string) => { const n = norm(name); return ALIASES[n] ?? n; };
+/** Canonical nation key — shared with roundHistory so both modules join editions identically. */
+export const canonNation = canon;
 
 const winnerId = (m: Match): string | null => {
   if (m.homeScore > m.awayScore) return m.homeTeamId;

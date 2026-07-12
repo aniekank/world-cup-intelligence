@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { deepRoundsView, type DeepTie, type DeepSide } from '@/server/deepRounds';
+import { roundHistoryView, type RoundHistoryData } from '@/server/roundHistory';
 import { PageHeader, Panel } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { LocalTime } from '@/components/LocalTime';
@@ -8,8 +9,15 @@ import { pct } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'The Business End' };
 
-export default function ScenariosPage() {
-  const { stageLabel, ties, biggestId } = deepRoundsView();
+export default async function ScenariosPage() {
+  const { stage, stageLabel, ties, biggestId } = deepRoundsView();
+
+  // The same round, the previous four Cups — historical context under the previews. (ENH-6)
+  const sides = ties.flatMap((t) => [t.home, t.away]).map((s) => ({ name: s.name, flag: s.flag }));
+  const history = stage && ties.length > 0 ? await roundHistoryView(stage, sides) : null;
+  const modelGoalsPerGame = ties.length > 0
+    ? Math.round((ties.reduce((s, t) => s + t.egHome + t.egAway, 0) / ties.length) * 100) / 100
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -28,6 +36,77 @@ export default function ScenariosPage() {
       ) : (
         ties.map((t) => <TieCard key={t.id} t={t} biggest={t.id === biggestId && ties.length > 1} />)
       )}
+
+      {history && <RoundHistoryPanel h={history} stageLabel={stageLabel ?? 'This round'} modelGoalsPerGame={modelGoalsPerGame} />}
+    </div>
+  );
+}
+
+function RoundHistoryPanel({ h, stageLabel, modelGoalsPerGame }: { h: RoundHistoryData; stageLabel: string; modelGoalsPerGame: number }) {
+  const returning = h.presence.filter((p) => p.years.length > 0);
+  const debutants = h.presence.filter((p) => p.years.length === 0);
+  const span = h.editions.length > 0 ? `${h.editions[h.editions.length - 1]!.year}–${h.editions[0]!.year}` : '';
+  return (
+    <Panel
+      title={`${stageLabel}s of the last four Cups`}
+      subtitle={`How this round has actually gone · ${span}`}
+      bodyClassName="space-y-4"
+    >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {h.editions.map((ed) => (
+          <div key={ed.year} className="rounded-lg border border-terminal-border bg-terminal-panel/40 p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-terminal-muted">{ed.year} · {ed.label}</p>
+            <div className="space-y-1.5">
+              {ed.matches.map((m, i) => (
+                <div key={i} className="text-xs leading-relaxed">
+                  <span className={m.winnerName === m.homeName ? 'font-semibold text-terminal-bright' : 'text-terminal-text'}>{m.homeFlag} {m.homeName}</span>
+                  <span className="tnum mx-1 text-terminal-muted">{m.homeScore}–{m.awayScore}</span>
+                  <span className={m.winnerName === m.awayName ? 'font-semibold text-terminal-bright' : 'text-terminal-text'}>{m.awayName} {m.awayFlag}</span>
+                  {m.penalties && <span className="tnum ml-1 text-[10px] text-terminal-muted">({m.penalties.home}–{m.penalties.away}p)</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <HistStat label="Games" value={String(h.games)} />
+        <HistStat label="Goals / game" value={h.goalsPerGame.toFixed(2)} />
+        <HistStat label="Shootouts" value={String(h.shootouts)} />
+        <HistStat label="Biggest win" value={h.biggest ? `${h.biggest.desc} (${h.biggest.year})` : '—'} small />
+      </div>
+
+      <div className="space-y-1.5 text-xs leading-relaxed text-terminal-muted">
+        <p className="model-only">
+          <span className="font-semibold uppercase tracking-widest text-accent">The model vs history · </span>
+          The model prices this year&rsquo;s ties at <span className="tnum font-semibold text-terminal-bright">{modelGoalsPerGame.toFixed(2)}</span> goals a game;
+          the last four Cups&rsquo; {stageLabel.toLowerCase()}s actually produced <span className="tnum font-semibold text-terminal-bright">{h.goalsPerGame.toFixed(2)}</span>.
+        </p>
+        {returning.length > 0 && (
+          <p>
+            <span className="font-semibold uppercase tracking-widest text-terminal-muted">Been here before · </span>
+            {returning.map((p, i) => (
+              <span key={p.name}>{i > 0 && ' · '}{p.flag} {p.name} ({p.years.join(', ')})</span>
+            ))}
+          </p>
+        )}
+        {debutants.length > 0 && (
+          <p>
+            <span className="font-semibold uppercase tracking-widest text-terminal-muted">New to this round (in this span) · </span>
+            {debutants.map((p, i) => <span key={p.name}>{i > 0 && ' · '}{p.flag} {p.name}</span>)}
+          </p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function HistStat({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div className="rounded-lg border border-terminal-border bg-terminal-panel/40 px-3 py-2 text-center">
+      <div className={`tnum font-bold text-terminal-bright ${small ? 'text-xs leading-5' : 'text-lg'}`}>{value}</div>
+      <div className="mt-0.5 text-[10px] uppercase tracking-wide text-terminal-muted">{label}</div>
     </div>
   );
 }
