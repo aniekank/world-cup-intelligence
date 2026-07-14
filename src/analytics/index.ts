@@ -18,7 +18,7 @@ import { reconcileForecastsWithResults } from './knockoutResults';
 import { buildPowerRankings } from './power';
 import { buildBracket } from './bracket';
 import { projectGoldenBoot } from './goldenboot';
-import { predictMatch } from './poisson';
+import { predictMatch, hostAdvantageFor } from './poisson';
 import type {
   StandingRow,
   TeamForecast,
@@ -84,12 +84,14 @@ export function engine(): EngineSnapshot {
 
   // 6. Match predictions for non-finished matches
   const predictions = new Map<string, MatchPrediction>();
+  const hostCountries = getCompetition().hostCountries;
   for (const m of matches) {
     if (m.status === 'FINISHED') continue;
     const home = teamMap.get(m.homeTeamId);
     const away = teamMap.get(m.awayTeamId);
     if (!home || !away) continue;
-    predictions.set(m.id, { ...predictMatch(home, away), matchId: m.id });
+    // Neutral-venue tournament: only a genuine host side gets the home bump. (WC-087)
+    predictions.set(m.id, { ...predictMatch(home, away, hostAdvantageFor(home, away, hostCountries)), matchId: m.id });
   }
 
   G.__wcEngine = {

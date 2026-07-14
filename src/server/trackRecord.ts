@@ -1,6 +1,6 @@
 import 'server-only';
-import { getMatches, getTeam } from '@/data/store';
-import { predictMatch } from '@/analytics/poisson';
+import { getMatches, getTeam, getCompetition } from '@/data/store';
+import { predictMatch, hostAdvantageFor } from '@/analytics/poisson';
 import { advanceProbabilities } from '@/lib/format';
 import { getSnapshots, predLogConfigured } from './predictionLog';
 import type { Team, Match } from '@/domain/types';
@@ -65,7 +65,8 @@ export function trackRecord() {
     const home = getTeam(m.homeTeamId);
     const away = getTeam(m.awayTeamId);
     if (!home || !away) continue;
-    const pred = predictMatch(home, away);
+    // Same neutral-venue treatment the live predictions use — hosts only. (WC-087)
+    const pred = predictMatch(home, away, hostAdvantageFor(home, away, getCompetition().hostCountries));
     const isKO = m.stage !== 'GROUP';
     let row: TrackRow, brier: number, baseline: number, conf: number, hit: boolean;
 

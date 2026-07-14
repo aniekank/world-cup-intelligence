@@ -1,7 +1,7 @@
 import 'server-only';
-import { getMatches, getTeam, getPlayerViews } from '@/data/store';
+import { getMatches, getTeam, getPlayerViews, getCompetition } from '@/data/store';
 import { engine } from '@/analytics';
-import { predictMatch } from '@/analytics/poisson';
+import { predictMatch, hostAdvantageFor } from '@/analytics/poisson';
 import { pendingKnockoutTies } from '@/analytics/knockoutResults';
 import { advanceProbabilities, stageName } from '@/lib/format';
 import type { Match, Team, TeamForecast, PlayerView } from '@/domain/types';
@@ -97,7 +97,7 @@ export function deepRoundsView() {
     id: string, kickoff: string, venue: string, city: string,
     home: Team, away: Team, scheduleTbc?: boolean,
   ): DeepTie => {
-    const pred = predictMatch(home, away);
+    const pred = predictMatch(home, away, hostAdvantageFor(home, away, getCompetition().hostCountries));
     const adv = advanceProbabilities(pred);
     const top = pred.scoreline[0] ?? null;
     const hs = buildSide(home, eng.forecasts.get(home.id), adv.home, stage, matches, players);

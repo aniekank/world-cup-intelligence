@@ -27,12 +27,38 @@ export function poissonPmf(k: number, lambda: number): number {
 /**
  * Goal expectation for a side. Ratings are 0..100; we map the attack/defense
  * differential onto a multiplicative adjustment around the league average.
+ *
+ * World Cups are neutral-venue tournaments: nobody gets a home bump unless they
+ * are genuinely a host nation on their own soil. Before WC-087 the fixture's
+ * NOMINAL home side always got 1.12x and the away side 0.94x, so the model's
+ * answer depended on provider listing order — England read 55/45 over Argentina
+ * purely for being listed first; a neutral pitch says 47/53. The Monte Carlo
+ * title engine was already venue-neutral; this brings the match model in line.
  */
-export function expectedGoals(attack: Team, defense: Team, isHome: boolean): number {
+export type VenueAdvantage = 'home' | 'away' | 'neutral';
+
+export function expectedGoals(attack: Team, defense: Team, venue: VenueAdvantage): number {
   const atk = attack.attackRating / 75; // ~0.9..1.2
   const def = defense.defenseRating / 75;
-  const homeMul = isHome ? 1.12 : 0.94;
-  return Math.max(0.18, LEAGUE_AVG_GOALS * atk * (2 - def) * homeMul);
+  const mul = venue === 'home' ? 1.12 : venue === 'away' ? 0.94 : 1.0;
+  return Math.max(0.18, LEAGUE_AVG_GOALS * atk * (2 - def) * mul);
+}
+
+/**
+ * Which side (if either) genuinely carries host advantage. Matches by country
+ * name or code against the competition's hostCountries (e.g. ["USA", "Canada",
+ * "Mexico"]). Co-hosts facing each other cancel to neutral. Documented
+ * approximation: a host is treated as at-home for its matches without checking
+ * the venue's country (host fixtures are overwhelmingly in-country). (WC-087)
+ */
+export function hostAdvantageFor(home: Team, away: Team, hostCountries: string[] | undefined): 'home' | 'away' | 'none' {
+  const hosts = new Set((hostCountries ?? []).map((s) => s.toLowerCase()));
+  if (hosts.size === 0) return 'none';
+  const isHost = (t: Team) => hosts.has(t.name.toLowerCase()) || hosts.has(t.code.toLowerCase());
+  const h = isHost(home), a = isHost(away);
+  if (h && !a) return 'home';
+  if (a && !h) return 'away';
+  return 'none';
 }
 
 /** Bivariate-Poisson joint distribution as a (MAX+1)×(MAX+1) matrix. */
@@ -62,9 +88,11 @@ export function scoreMatrix(lambdaHome: number, lambdaAway: number, cov = 0.12):
   return matrix.map((row) => row.map((p) => p / total));
 }
 
-export function predictMatch(home: Team, away: Team): MatchPrediction {
-  const lh = expectedGoals(home, away, true);
-  const la = expectedGoals(away, home, false);
+export function predictMatch(home: Team, away: Team, hostAdvantage: 'home' | 'away' | 'none' = 'none'): MatchPrediction {
+  // Neutral venue by default — the fixture's listing order carries no information.
+  // A genuine host side gets the home multiplier; its opponent the travel penalty. (WC-087)
+  const lh = expectedGoals(home, away, hostAdvantage === 'home' ? 'home' : hostAdvantage === 'away' ? 'away' : 'neutral');
+  const la = expectedGoals(away, home, hostAdvantage === 'away' ? 'home' : hostAdvantage === 'home' ? 'away' : 'neutral');
   const m = scoreMatrix(lh, la);
 
   let homeWin = 0;
@@ -106,15 +134,15 @@ export function predictMatch(home: Team, away: Team): MatchPrediction {
   };
 }
 
-/** Sample a single match scoreline (used by the Monte Carlo simulator). */
+/** Sample a single match scoreline. Neutral venue unless a genuine host is named. (WC-087) */
 export function sampleScore(
   rngNext: () => number,
   home: Team,
   away: Team,
-  neutral = false,
+  hostAdvantage: 'home' | 'away' | 'none' = 'none',
 ): { home: number; away: number } {
-  const lh = expectedGoals(home, away, !neutral);
-  const la = expectedGoals(away, home, false);
+  const lh = expectedGoals(home, away, hostAdvantage === 'home' ? 'home' : hostAdvantage === 'away' ? 'away' : 'neutral');
+  const la = expectedGoals(away, home, hostAdvantage === 'away' ? 'home' : hostAdvantage === 'home' ? 'away' : 'neutral');
   return { home: samplePoisson(rngNext, lh), away: samplePoisson(rngNext, la) };
 }
 

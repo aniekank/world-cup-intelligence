@@ -120,7 +120,8 @@ export function labData() {
     if (m.status !== 'FINISHED') continue;
     const h = refT.get(m.homeTeamId), a = refT.get(m.awayTeamId);
     if (!h || !a) continue;
-    const lh = expectedGoals(h, a, true), la = expectedGoals(a, h, false);
+    // Neutral venue, matching the shipped model — the residuals grade what we serve. (WC-087)
+    const lh = expectedGoals(h, a, 'neutral'), la = expectedGoals(a, h, 'neutral');
     residuals.push({ pred: Math.round(lh * 100) / 100, actual: m.homeScore, label: `${h.code} v ${a.code}`, side: 'home' });
     residuals.push({ pred: Math.round(la * 100) / 100, actual: m.awayScore, label: `${h.code} v ${a.code}`, side: 'away' });
   }
