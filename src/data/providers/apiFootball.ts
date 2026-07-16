@@ -251,14 +251,17 @@ export async function fetchApiFootballFixtures(apiKey: string): Promise<FixtureU
   });
 }
 
-function mapStage(round: string): Match['stage'] {
+export function mapStage(round: string): Match['stage'] {
   const r = round.toLowerCase();
+  // API-Football names the consolation game "3rd Place Final" — the third-place
+  // check MUST run before the final check, or the play-off classifies as a second
+  // FINAL and the forecast reconciler crowns its winner world champion. (WC-088)
+  if (r.includes('3rd') || r.includes('third')) return 'THIRD_PLACE';
   if (r.includes('final') && !r.includes('semi') && !r.includes('quarter')) return 'FINAL';
   if (r.includes('semi')) return 'SF';
   if (r.includes('quarter')) return 'QF';
   if (r.includes('16')) return 'R16';
   if (r.includes('32')) return 'R32';
-  if (r.includes('3rd') || r.includes('third')) return 'THIRD_PLACE';
   return 'GROUP';
 }
 
