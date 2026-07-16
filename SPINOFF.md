@@ -131,19 +131,21 @@ qualifiers instead of going dark — the two-chassis design turns dead weeks int
 - [ ] Cost down: no API spend, cache-served; Render plan reviewed.
 - [ ] README epilogue: the arc, the receipts, 88+ logged bugs, link to the spin-off.
 
-## 7. Build plan (post-final)
+## 7. Build plan (REVISED 2026-07-16 — the NFL product jumped the queue)
 
-- **Week of Jul 20:** WCI freeze + Machine vs Market post/essay. New repo scaffolded;
-  this document is prompt #1. Postgres schema for the club domain.
-- **Weeks 2–3:** organ transplant (files + tests), EPL bootstrap (fixtures, table,
-  match model, title/top-4/relegation odds, track record). MVP GUARD: fixtures, table,
-  match pages, season odds, receipts page. Nothing else.
-- **Week 4 (~Aug 14):** LAUNCH BEAT 1 — EPL opening weekend. "The engine that called
-  the World Cup now covers the Premier League."
-- **Weeks 5–8:** La Liga / Serie A / Bundesliga / Ligue 1 (config + quota, not code,
-  if the domain is right). League-strength calibration layer built and blogged.
-- **Mid-September:** LAUNCH BEAT 2 — UCL league phase, matchday one. Cross-league
-  ratings meet reality in public; draw-time content.
+His call: the NFL fantasy+betting product (own repo — see NFL-Product-Kickoff.md on
+the Desktop shelf) builds FIRST, starting the week after the final, because its
+window is perishable (draft season mid-Aug, Week 1 Sept 10) and club football's is
+not. Consciously displaced: the EPL-opening-weekend beat.
+
+- **Week of Jul 20:** WCI freeze + Machine vs Market post/essay. Then the NFL build
+  owns the calendar through ~Aug 20 (draft-kit launch) and Sept 10 (Week 1).
+- **Sept–Oct:** club-app extraction begins per §3–4 of this doc. Launch beat becomes
+  the UCL league phase (mid-Sept) if the NFL launch is stable, otherwise a mid-season
+  entry — a season-long product loses little by starting late. The league-strength
+  calibration layer and multi-league rollout follow as originally planned.
+- The two-chassis franchise calendar (§5) is unchanged — it just starts its club
+  chapter a month later.
 
 **Plate check:** Fraud Guard is the committed learning build and the job hunt is live.
 The extraction is a 2–4 week solo build BECAUSE the hard parts exist — hold the MVP
