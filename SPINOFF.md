@@ -115,6 +115,7 @@ gets scored in public every matchday.
 | **Summer 2028** | **Euro 2028 (UK/IRL) + Copa América** | **"Euro Intelligence 2028" — the full WCI rerun, two years of engine maturity, audience pre-built** |
 | 2029 | FIFA Club World Cup | The club/international bridge, both chassis at once |
 | 2030 | World Cup centenary | The franchise's third act |
+| **Jan 2027 (decide ~Thanksgiving)** | **NFL playoffs — "NFL Playoffs Intelligence"** | The tournament chassis' US test flight: a 14-team single-elimination bracket IS the parked machinery (seeds, win prob, reach-the-Super-Bowl ladder). 6 weeks, peak US attention, club football's winter lull. Modeling caveat: NO Poisson — ELO + margin model around key numbers (3s/7s); data via free nflverse + API-Sports' American football API. Full-season NFL product deliberately rejected for 2026: 40% engine transfer (vs club's 70%), saturated modeling space (differentiator = the calibration-receipts trust product, not the math), and a Week 1 launch collides with the UCL beat. If January works, NFL becomes the bettor product's first vertical, not a standalone. |
 
 Club season-mode fills the FIFA windows (Sept/Oct/Nov/Mar/Jun) with Nations League +
 qualifiers instead of going dark — the two-chassis design turns dead weeks into content.
