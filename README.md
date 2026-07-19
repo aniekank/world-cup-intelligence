@@ -6,6 +6,9 @@ It tracks every match, player, team, group and bracket; computes advanced metric
 
 **Live demo:** **[world-cup-intelligence.onrender.com](https://world-cup-intelligence.onrender.com)** &nbsp;·&nbsp; **Built by:** Tobi Smith-Kayode
 
+> ## 🇪🇸 **FIFA World Cup 2026 · Champions: Spain** — 1–0 over Argentina in the final, July 19, 2026.
+> The tournament this app was built for is complete: all 104 matches tracked live, forecast pre-kickoff, and graded in public. Spain entered the model's field at 10.5% before a ball was kicked and won a final priced 51/49. Argentina, the model's favourite, finish runners-up — the full reckoning (calibration, Brier, model vs market) lives on the Track Record page and headlines the coming retrospective edition of this app.
+
 > _Hosted on a free instance, so the first visit after a quiet spell takes ~30 seconds to wake and load the live feed._
 
 > **Runs instantly with zero infrastructure.** `npm install && npm run dev` boots the full 48-team tournament from a deterministic simulation engine — no database, no keys required. Add an API-Football key for the live 2026 feed (see Deploy).
