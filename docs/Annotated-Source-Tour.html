@@ -1,0 +1,293 @@
+<title>World Cup Intelligence — The Code</title>
+<style>
+  :root{
+    --paper:#ffffff; --panel:#f6f8fa; --raised:#eef2f6; --ink:#0f141a; --body:#232c36;
+    --muted:#566070; --faint:#8a94a0; --line:#e3e8ee; --hair:#eef1f5;
+    --teal:#0d9488; --teal-ink:#0a6b62; --teal-soft:#e4f5f2; --teal-line:#a9ddd5;
+    --amber:#b4691a;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --spine:min(780px,92vw); --wide:min(1080px,94vw);
+    /* code block palette */
+    --code-bg:#0d1117; --code-fg:#d7dee8; --code-c:#8b949e; --code-s:#8ddb9b; --code-k:#5ad1bd; --code-n:#e3b341;
+  }
+  *{box-sizing:border-box}
+  .doc{background:var(--paper); color:var(--body); font-family:var(--sans); font-size:17px; line-height:1.68; -webkit-font-smoothing:antialiased; padding-bottom:7rem}
+  a{color:var(--teal-ink); text-decoration:none; border-bottom:1px solid var(--teal-line)}
+  a:hover{border-bottom-color:var(--teal)}
+  :focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:2px}
+
+  .top{position:sticky; top:0; z-index:20; background:rgba(255,255,255,.86); backdrop-filter:blur(8px); border-bottom:1px solid var(--line)}
+  .top .row{max-width:var(--wide); margin:0 auto; padding:.65rem clamp(1rem,4vw,2rem); display:flex; align-items:center; justify-content:space-between; gap:1rem}
+  .top .brand{font-family:var(--mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+  .top .brand b{color:var(--teal-ink); font-weight:700}
+  .top .stamp{font-family:var(--mono); font-size:.68rem; color:var(--faint); letter-spacing:.08em}
+  #bar{height:2px; background:var(--teal); width:0%; transition:width .1s linear}
+
+  .wrap{max-width:var(--spine); margin:0 auto; padding:0 clamp(1rem,4vw,2rem)}
+  .hero{padding:clamp(3.2rem,8vw,5.5rem) 0 clamp(1.5rem,4vw,2.2rem)}
+  .kick{font-family:var(--mono); font-size:.74rem; letter-spacing:.2em; text-transform:uppercase; color:var(--teal-ink); margin:0 0 1.3rem}
+  h1{font-size:clamp(2.1rem,5.6vw,3.4rem); line-height:1.06; letter-spacing:-.025em; font-weight:800; margin:0; color:var(--ink); text-wrap:balance}
+  .lede{font-size:clamp(1.05rem,2.2vw,1.25rem); color:var(--muted); max-width:64ch; margin:1.4rem 0 0; line-height:1.55}
+  .note{margin:1.6rem 0 0; padding:.9rem 1.1rem; background:var(--panel); border:1px solid var(--line); border-radius:10px; font-size:.9rem; color:var(--muted)}
+  .note b{color:var(--ink)}
+
+  .toc{max-width:var(--wide); margin:2rem auto 0; padding:0 clamp(1rem,4vw,2rem); display:flex; flex-wrap:wrap; gap:.5rem}
+  .toc a{font-family:var(--mono); font-size:.72rem; letter-spacing:.02em; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:.4rem .8rem; background:var(--panel)}
+  .toc a:hover{color:var(--ink); border-color:var(--teal-line)}
+  .toc a b{color:var(--teal-ink); font-weight:700; margin-right:.4rem}
+
+  section{padding:clamp(2.8rem,6vw,4.2rem) 0 0}
+  .chap-head{margin-bottom:1.2rem}
+  .filetag{font-family:var(--mono); font-size:.7rem; letter-spacing:.04em; color:var(--teal-ink); background:var(--teal-soft); border:1px solid var(--teal-line); border-radius:6px; padding:.25em .6em; display:inline-block; margin-bottom:.8rem}
+  h2{font-size:clamp(1.45rem,3.4vw,2.05rem); line-height:1.12; letter-spacing:-.02em; font-weight:800; margin:0; color:var(--ink); text-wrap:balance}
+  .lbl{font-family:var(--mono); font-size:.66rem; letter-spacing:.11em; text-transform:uppercase; color:var(--teal-ink); margin:1.4rem 0 .4rem; font-weight:600}
+  .prose p{margin:0 0 1rem; color:var(--body)} .prose p:last-child{margin-bottom:0}
+  strong{color:var(--ink); font-weight:650}
+  em.t{font-style:normal; color:var(--teal-ink); font-weight:600}
+  code{font-family:var(--mono); font-size:.85em; background:var(--raised); border:1px solid var(--line); padding:.05em .36em; border-radius:5px; color:#0b5f57}
+
+  pre{background:var(--code-bg); border:1px solid #1c2530; border-radius:10px; padding:1.05rem 1.2rem; overflow-x:auto; font-family:var(--mono); font-size:.82rem; line-height:1.68; color:var(--code-fg); margin:.3rem 0 0; -webkit-text-size-adjust:100%}
+  pre .c{color:var(--code-c); font-style:italic}
+  pre .s{color:var(--code-s)}
+  pre .k{color:var(--code-k)}
+  pre .n{color:var(--code-n)}
+  pre .fn{color:#c9a3ff}
+
+  .idea{border-left:3px solid var(--teal); background:var(--teal-soft); border-radius:0 8px 8px 0; padding:.85rem 1.1rem; margin:.3rem 0 0}
+  .idea p{margin:0; color:var(--ink); font-size:.95rem}
+
+  blockquote.pull{margin:2rem 0; padding:1.2rem 1.4rem; border-left:3px solid var(--teal); background:var(--panel); border-radius:0 10px 10px 0; font-size:clamp(1.1rem,2.4vw,1.35rem); line-height:1.4; font-weight:650; color:var(--ink); letter-spacing:-.01em}
+  blockquote.pull em{font-style:normal; color:var(--teal-ink)}
+
+  footer{max-width:var(--wide); margin:clamp(3rem,7vw,5rem) auto 0; padding:1.8rem clamp(1rem,4vw,2rem) 0; border-top:1px solid var(--line); font-family:var(--mono); font-size:.7rem; color:var(--faint); letter-spacing:.03em; line-height:1.7}
+  footer b{color:var(--muted); font-weight:500}
+
+  .reveal{opacity:0; transform:translateY(12px); transition:opacity .5s ease, transform .5s ease}
+  .reveal.in{opacity:1; transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1; transform:none; transition:none}#bar{transition:none}}
+</style>
+
+<div class="doc">
+  <div class="top">
+    <div class="row">
+      <span class="brand"><b>WORLD CUP INTELLIGENCE</b> · the code</span>
+      <span class="stamp">ANNOTATED SOURCE TOUR</span>
+    </div>
+    <div id="bar"></div>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <p class="kick">The actual code · the idea · what it does</p>
+      <h1>The ~200 load-bearing lines that run a live tournament.</h1>
+      <p class="lede">It's ~24,000 lines, but the character of the system lives in a handful of functions. Here are the real ones — lightly trimmed for the page, otherwise straight from the repo — each with the reasoning behind it and what it actually computes.</p>
+      <div class="note"><b>How to read this:</b> prose is on white for legibility; the dark blocks are real source excerpts (grey = the original comments). Nothing here is pseudocode.</div>
+    </div>
+    <nav class="toc" aria-label="Contents">
+      <a href="#c1"><b>01</b>The store</a>
+      <a href="#c2"><b>02</b>The match model</a>
+      <a href="#c3"><b>03</b>Monte Carlo</a>
+      <a href="#c4"><b>04</b>Advance odds</a>
+      <a href="#c5"><b>05</b>The AI boundary</a>
+      <a href="#c6"><b>06</b>Show the math</a>
+      <a href="#c7"><b>07</b>Live resilience</a>
+    </nav>
+  </header>
+
+  <!-- 01 -->
+  <section id="c1">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/data/store.ts</span>
+      <h2>01 · State that survives Next.js splitting itself in two.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> Next runs the boot hook (<code>instrumentation.ts</code>) in a <em>different module instance</em> than the request handlers. A normal module-level cache set at boot is invisible to pages — and worse, an index built once from the startup simulation would keep serving stale rows after live data swapped in. The fix: keep the snapshot on <code>globalThis</code>, and key every lookup index to the snapshot's <em>identity</em>, so any instance rebuilds the instant the active snapshot changes.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="c">// instrumentation.ts runs in a SEPARATE module instance from request handlers,</span>
+<span class="c">// so keying the indexes to the snapshot IDENTITY (shared on globalThis) makes</span>
+<span class="c">// every instance self-heal the instant the active snapshot swaps. (WC-044)</span>
+<span class="k">function</span> <span class="fn">syncIndexes</span>() {
+  <span class="k">const</span> snap = <span class="fn">dataset</span>();
+  <span class="k">if</span> (_indexedSnap === snap &amp;&amp; _teamIndex &amp;&amp; _matchIndex) <span class="k">return</span>;
+  _teamIndex  = <span class="k">new</span> Map(snap.teams.map((t) =&gt; [t.id, t]));
+  _matchIndex = <span class="k">new</span> Map(snap.matches.map((m) =&gt; [m.id, m]));
+  _indexedSnap = snap;
+}
+
+<span class="k">export const</span> <span class="fn">getTeam</span>  = (id) =&gt; <span class="fn">teamIndex</span>().get(id);   <span class="c">// syncIndexes() runs first</span>
+<span class="k">export const</span> <span class="fn">getMatch</span> = (id) =&gt; <span class="fn">matchIndex</span>().get(id);</pre>
+      <div class="lbl">What it does</div>
+      <p>Every accessor in the app — <code>getTeam</code>, <code>getPlayer</code>, <code>getMatch</code> — calls <code>syncIndexes()</code> first. That one identity check (<code>_indexedSnap === snap</code>) is O(1) on the hot path and rebuilds the four <code>Map</code>s only when the snapshot pointer actually changes: live-load completion, a score refresh that swaps in a new snapshot, or a tournament switch. It's the fix for the nastiest class of bug in the project — "live data loaded but every page rendered empty" — where the rows were present but the lookups pointed at a stale index.</p>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="c2">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/analytics/poisson.ts</span>
+      <h2>02 · The match model: two λ's and a shared component.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> Every prediction comes from a <em class="t">bivariate-Poisson</em> goals model. Each side's expected goals (λ) is its attack against the opponent's defense, nudged by home advantage. The "bivariate" part is a shared component <code>l3</code> that couples the two scores — because World Cup games aren't two independent coin-flips; when one side is scoring, the game tends to open up.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="k">export function</span> <span class="fn">expectedGoals</span>(attack, defense, isHome) {
+  <span class="k">const</span> atk = attack.attackRating / <span class="n">75</span>;      <span class="c">// ratings are 0..100 → ~0.9..1.2</span>
+  <span class="k">const</span> def = defense.defenseRating / <span class="n">75</span>;
+  <span class="k">const</span> homeMul = isHome ? <span class="n">1.12</span> : <span class="n">0.94</span>;    <span class="c">// home-field bump</span>
+  <span class="k">return</span> Math.max(<span class="n">0.18</span>, LEAGUE_AVG_GOALS * atk * (<span class="n">2</span> - def) * homeMul);
+}
+
+<span class="c">// Bivariate Poisson: the shared component l3 ties the two scores together,</span>
+<span class="c">// so a 2-2 is likelier than "independent" Poisson would ever predict.</span>
+<span class="k">const</span> l3 = cov * Math.min(lambdaHome, lambdaAway);
+<span class="k">const</span> l1 = Math.max(<span class="n">0.05</span>, lambdaHome - l3);
+<span class="k">const</span> l2 = Math.max(<span class="n">0.05</span>, lambdaAway - l3);
+<span class="c">// P(x,y) = Σ_k  pmf(x−k, l1) · pmf(y−k, l2) · pmf(k, l3)</span></pre>
+      <div class="lbl">What it does</div>
+      <p>From those λ's it builds a 9×9 joint scoreline matrix, then reads everything off it by summation: <code>homeWin</code> (cells where x&gt;y), <code>draw</code>, <code>awayWin</code>, both-teams-to-score, over-2.5, clean-sheet odds, and the six most-likely exact scores. One matrix, every market — and the same <code>expectedGoals</code> is reused to sample scorelines inside the simulator, so the forecast and the single-match prediction share one model.</p>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section id="c3">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/analytics/simulate.ts</span>
+      <h2>03 · Playing the tournament out 8,000 times.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> Point predictions can't answer "what are Spain's odds to reach the final." So the simulator locks in finished results, extrapolates live matches, and plays out the <em>entire remaining tournament</em> thousands of times — completing groups by sampling Poisson scorelines, seeding the bracket, and resolving each knockout tie by ELO win-expectancy. Aggregating the runs gives every probability the app quotes.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="k">export const</span> RUNS = <span class="n">8000</span>;   <span class="c">// stable to a few tenths of a %; a full rebuild is ~0.5s</span>
+
+<span class="c">// Single elimination: play each pair by ELO win-expectancy, tally survivors.</span>
+<span class="k">while</span> (alive.length &gt; <span class="n">1</span>) {
+  <span class="k">const</span> next = [];
+  <span class="k">for</span> (<span class="k">let</span> i = <span class="n">0</span>; i &lt; alive.length; i += <span class="n">2</span>) {
+    <span class="k">const</span> a = alive[i], b = alive[i + <span class="n">1</span>];
+    <span class="k">const</span> winner = rng.<span class="fn">next</span>() &lt; <span class="fn">eloExpectation</span>(team(a).elo, team(b).elo, <span class="n">0</span>) ? a : b;
+    next.push(winner);
+  }
+  alive = next;
+  <span class="fn">markSize</span>(alive);   <span class="c">// +1 for every team still alive at this bracket size (r16/qf/sf/final/title)</span>
+}</pre>
+      <div class="lbl">What it does</div>
+      <p>Across 8,000 runs it accumulates, per team, how often they reach each round and lift the trophy, then divides by <code>RUNS</code> for a probability. A deterministic seeded PRNG (<code>new Rng(424242)</code>) makes it reproducible. Crucially the whole 0.5s rebuild fires only on a match <em class="t">status flip</em> (kickoff, full-time) — routine score ticks reuse the cached engine, so live pages stay fast.</p>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section id="c4">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/lib/format.ts</span>
+      <h2>04 · The five lines that fix knockout football.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> The model outputs win / draw / loss — correct for the group stage, wrong for the knockouts, where a draw isn't a result: it goes to extra time and penalties and <em>someone advances</em>. Rather than complicate the core model, one pure helper folds the draw probability into each side's chance to advance, split by their normal-time win ratio (the stronger side is likelier over ET + pens; 50/50 on a dead heat).</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="c">// A knockout can't end level: fold the draw into each side's chance to</span>
+<span class="c">// ADVANCE, split by their normal-time win ratio. Sums to 1. (WC-058)</span>
+<span class="k">export const</span> <span class="fn">advanceProbabilities</span> = (p) =&gt; {
+  <span class="k">const</span> decisive  = p.homeWin + p.awayWin;
+  <span class="k">const</span> homeShare = decisive &gt; <span class="n">0</span> ? p.homeWin / decisive : <span class="n">0.5</span>;
+  <span class="k">return</span> {
+    home: p.homeWin + p.draw * homeShare,
+    away: p.awayWin + p.draw * (<span class="n">1</span> - homeShare),
+  };
+};</pre>
+      <div class="lbl">What it does</div>
+      <p>It's display-only — the engine is never touched — but it ripples everywhere the tournament is knockout: the match cards show "% to advance" instead of a meaningless draw bar, and the Track Record grades knockout ties two-way (which side went through, penalties included) instead of scoring a shootout as a "draw." A tiny function that makes the whole app phase-aware.</p>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section id="c5">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/ai/llmParse.ts</span>
+      <h2>05 · The AI answers nothing. It only rephrases the question.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> Natural-language questions are handled by a deterministic parser first. A language model is bolted onto the <em>front</em> as a strict translator: it only fires when the parser returns <code>unknown</code>, and it rewrites the question into a canonical query the parser <em>does</em> understand. The model never sees a statistic, so it can't invent one — the engine computes every number.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="k">export async function</span> <span class="fn">smartAnswer</span>(rawQuery) {
+  <span class="k">const</span> deterministic = <span class="fn">answerQuery</span>(rawQuery);
+  <span class="k">if</span> (deterministic.intent !== <span class="s">'unknown'</span>) <span class="k">return</span> deterministic;   <span class="c">// already handled</span>
+
+  <span class="k">const</span> normalized = <span class="k">await</span> <span class="fn">llmNormalize</span>(rawQuery);   <span class="c">// Claude → a canonical query string</span>
+  <span class="k">if</span> (!normalized) <span class="k">return</span> deterministic;             <span class="c">// no key / timeout → deterministic fallback</span>
+
+  <span class="k">const</span> upgraded = <span class="fn">answerQuery</span>(normalized);          <span class="c">// the ENGINE computes the real number</span>
+  <span class="k">return</span> { ...upgraded, query: rawQuery };            <span class="c">// but show what the user actually typed</span>
+}</pre>
+      <div class="lbl">What it does</div>
+      <p>"Who saw red for the Yanks in the last 32" is meaningless to the parser. The model (cheap Haiku, <code>temperature: 0</code>, a JSON-schema-constrained intent) maps it to <code>most red cards United States round of 32</code>, which re-parses cleanly and runs against real event data. With no API key it's a no-op — the deterministic path is the graceful fallback, so the LLM is a strict upgrade, never a dependency.</p>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="c6">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/lib/labMath.ts</span>
+      <h2>06 · Exact Shapley values, from scratch, no libraries.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> The Model Lab exists to <em>show</em> the math, not import a black box, so every kernel — PCA by power-iteration, k-means++, the reliability-diagram binning, and this Shapley attribution — is written from first principles and runs identically on the server and in the browser. Shapley explains a single prediction: how much each factor (home edge, both attacks, both defenses) contributed.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="c">// Exact Shapley: average each factor's marginal contribution over EVERY</span>
+<span class="c">// subset of the others. Order-independent; sums to v(all) − v(none).</span>
+<span class="k">export function</span> <span class="fn">shapleyContributions</span>(factorKeys, v) {
+  <span class="k">const</span> m = factorKeys.length;
+  <span class="k">const</span> weight = (s) =&gt; (<span class="fn">fact</span>(s) * <span class="fn">fact</span>(m - s - <span class="n">1</span>)) / <span class="fn">fact</span>(m);   <span class="c">// |S|!·(m−|S|−1)!/m!</span>
+  <span class="k">for</span> (<span class="k">const</span> f <span class="k">of</span> factorKeys) {
+    <span class="k">let</span> phi = <span class="n">0</span>;
+    <span class="k">for</span> (<span class="k">let</span> mask = <span class="n">0</span>; mask &lt; (<span class="n">1</span> &lt;&lt; (m - <span class="n">1</span>)); mask++) {   <span class="c">// every subset S of the others</span>
+      phi += <span class="fn">weight</span>(S.size) * (<span class="fn">v</span>(withF) - <span class="fn">v</span>(S));           <span class="c">// marginal gain of adding f</span>
+    }
+    out[f] = phi;
+  }
+  <span class="k">return</span> out;
+}</pre>
+      <div class="lbl">What it does</div>
+      <p>It enumerates all 2ⁿ coalitions of the other factors, weights each marginal gain by the exact Shapley coefficient, and sums — giving contributions that are order-independent and add up precisely to the model's output minus its neutral baseline. The waterfall chart in the Lab is a direct render of this map. It's tractable here because there are only ~6 factors; the code even says so.</p>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section id="c7">
+    <div class="wrap chap-head reveal">
+      <span class="filetag">src/data/loadTournament.ts</span>
+      <h2>07 · Guarding against a feed that lies for one tick.</h2>
+    </div>
+    <div class="wrap prose reveal">
+      <div class="idea"><p><strong>The idea.</strong> The live pipeline trusts a real, mid-tournament third-party feed — which occasionally glitches. On one refresh tick a fixture that's plainly in play can come back as "not started," and trusting that single reading flips the match out of every live surface until the next good tick ("the live match vanished"). The invariant: a started match can't un-start.</p></div>
+      <div class="lbl">The code</div>
+      <pre><span class="c">// A started match can't un-start. Ignore a single spurious "not started"</span>
+<span class="c">// feed tick for a match already live / at half-time within its window. (WC-077)</span>
+<span class="k">export function</span> <span class="fn">isSpuriousRevert</span>(matchStatus, feedStatus, withinWindow) {
+  <span class="k">return</span> withinWindow
+    &amp;&amp; feedStatus === <span class="s">'SCHEDULED'</span>
+    &amp;&amp; (matchStatus === <span class="s">'LIVE'</span> || matchStatus === <span class="s">'HALFTIME'</span>);
+}</pre>
+      <div class="lbl">What it does</div>
+      <p>In the refresh merge, a feed reading that trips this guard is dropped for that tick — the in-play state is kept — while a genuine full-time still finishes the match and a real drop past the play window still self-heals to finished. It's one predicate, but it's the difference between a stable live view and a match that flickers in and out. It also has a dedicated hermetic test, because that's how every one of these guards earns its place.</p>
+      <blockquote class="pull">Above the store: IO, a lying feed, entropy. Below it: <em>pure functions you can test offline.</em> Every excerpt here lives on one side of that line — and that line is the whole architecture.</blockquote>
+    </div>
+  </section>
+
+  <footer class="wrap">
+    <b>World Cup Intelligence · annotated source tour.</b> Real excerpts from the repository as of 2026-07-05, lightly trimmed (types and some guards elided) for the page — the logic is unmodified. Companion to the Codebase Explainer and the formal design suite in <code>docs/</code>.
+  </footer>
+</div>
+
+<script>
+  (function(){
+    var bar=document.getElementById('bar');
+    var onScroll=function(){var h=document.documentElement,max=h.scrollHeight-h.clientHeight;bar.style.width=(max>0?(h.scrollTop/max*100):0)+'%';};
+    document.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+    var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    if(!reduce&&'IntersectionObserver'in window){
+      var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.08,rootMargin:'0px 0px -6% 0px'});
+      document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
+    } else {document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in')});}
+  })();
+</script>
