@@ -278,6 +278,15 @@ export async function refreshLiveScores(): Promise<boolean> {
   const cur = getCachedTournament('live-2026');
   if (!cur) return false;
 
+  // FROZEN EDITION HARD STOP (WC-089): a complete tournament never ticks. Without
+  // this, the first refresh after each boot found trivial feed deltas (minutes on
+  // finished games; two group matches whose timelines the provider never had),
+  // relabelled the pinned snapshot "API-Football (live)", re-stamped generatedAt,
+  // and — worst — re-ran reconcileScorers against incomplete events, clobbering
+  // the pinned aggregates (Bellingham's 7 goals recomputed to 5 and knocked off
+  // the Golden Boot top five). Complete → no API calls, no relabel, no reconcile.
+  if (tournamentComplete(cur.matches)) return false;
+
   const now = Date.now();
   // Track which finished matches we've already pulled a timeline for, so an
   // event-less match isn't re-fetched every tick. Lives on globalThis to survive
@@ -428,6 +437,8 @@ let rebuilding = false;
  */
 export async function rebuildLiveSnapshot(): Promise<void> {
   if (rebuilding || getActiveTournamentId() !== 'live-2026') return;
+  // Never rebuild over the frozen edition — the pin is the permanent record. (WC-089)
+  if (tournamentComplete(getMatches())) return;
   if (!process.env.API_FOOTBALL_KEY) return;
   if (inApiBackoff()) return; // rate-limited — a full re-fetch is ~60 requests; skip it (WC-073)
   rebuilding = true;
