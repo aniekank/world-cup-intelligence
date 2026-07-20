@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { trackRecord, marketComparison, type TrackRow, type TrackCell } from '@/server/trackRecord';
+import { getMatches } from '@/data/store';
+import { tournamentComplete } from '@/analytics/knockoutResults';
 import { PageHeader, Panel, Stat, Table, Th, Td, Badge } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { pct } from '@/lib/format';
@@ -41,6 +43,8 @@ function matchCell(r: TrackRow) {
 export default async function TrackRecordPage() {
   const tr = trackRecord();
   const mc = await marketComparison();
+  // Tournament decided → this page is the permanent record. (freeze, task #39)
+  const settled = tournamentComplete(getMatches());
 
   if (tr.n === 0) {
     return (
@@ -58,8 +62,12 @@ export default async function TrackRecordPage() {
     <div className="space-y-6">
       <PageHeader
         kicker="Track Record"
-        title="Did the model call it?"
-        description="Every finished match graded against the model's pre-match probabilities. Group games are graded three ways (home / draw / away); knockout ties have no draw, so they're graded on which side the model backed to advance — penalty shootouts included."
+        title={settled ? 'The final reckoning' : 'Did the model call it?'}
+        description={
+          settled
+            ? `The tournament is complete — all ${tr.n} matches graded against the model's pre-match probabilities, frozen as the permanent record. Group games graded three ways (home / draw / away); knockout ties on which side the model backed to advance, shootouts included. One honest footnote the numbers below don't hide: the model's title favourite was Argentina, start to finish; Spain — third on its pre-tournament board at 10.5% — won it all. Calibration, not clairvoyance, is the product.`
+            : "Every finished match graded against the model's pre-match probabilities. Group games are graded three ways (home / draw / away); knockout ties have no draw, so they're graded on which side the model backed to advance — penalty shootouts included."
+        }
       />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

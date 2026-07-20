@@ -7,7 +7,26 @@ It tracks every match, player, team, group and bracket; computes advanced metric
 **Live demo:** **[world-cup-intelligence.onrender.com](https://world-cup-intelligence.onrender.com)** &nbsp;·&nbsp; **Built by:** Tobi Smith-Kayode
 
 > ## 🇪🇸 **FIFA World Cup 2026 · Champions: Spain** — 1–0 over Argentina in the final, July 19, 2026.
-> The tournament this app was built for is complete: all 104 matches tracked live, forecast pre-kickoff, and graded in public. Spain entered the model's field at 10.5% before a ball was kicked and won a final priced 51/49. Argentina, the model's favourite, finish runners-up — the full reckoning (calibration, Brier, model vs market) lives on the Track Record page and headlines the coming retrospective edition of this app.
+> The tournament this app was built for is complete: all 104 matches tracked live, forecast pre-kickoff, and graded in public. Spain entered the model's field at 10.5% before a ball was kicked and won a final priced 51/49. Argentina, the model's favourite, finish runners-up — the full reckoning lives on the **[Track Record](https://world-cup-intelligence.onrender.com/track-record)** page.
+
+## Epilogue — the finished record
+
+This edition is now **frozen**: the final snapshot ships inside the build (`src/data/cache/wc2026-final.json`), the live feed is never called again, and the app serves forever as a permanent retrospective — champion hero on the home page, every forecast graded, at zero feed cost. The 2026 World Cup joins the 27 archived editions it always sat beside.
+
+**The model's final ledger, self-graded across all 104 matches:**
+
+| Measure | Result |
+|---|---|
+| Results called | **69 / 104** (66%) |
+| Group stage, a genuine 3-way market | 44 / 72 (61% — coin-flip baseline is 33%) |
+| Knockout advance calls (shootouts included) | **25 / 32 (78%)** |
+| Brier score | **0.528** vs 0.615 baseline (**+14% skill**) |
+| The quarter-finals, called publicly pre-kickoff | 4 for 4 |
+| The champion | Argentina favoured throughout; **Spain (10.5% pre-tournament, third on the board) won it all** — a 42%-on-final-morning outcome landing, which is what calibrated probabilities do |
+
+The engineering record is the other half of the story: **88 numbered bugs** logged, root-caused, and fixed in [BUGS.md](BUGS.md) — including four found and shipped to production in the final week, one of them (WC-088) three days before it would have crowned the wrong champion. Every fix carries a hermetic regression test; the tracker ended the tournament clean.
+
+**What happens next** lives in [SPINOFF.md](SPINOFF.md): the engine spins off into a club-football product (top-5 leagues + Champions League, one cross-league rating universe), and the tournament chassis parks for Euro 2028. This repo stays exactly as the final left it.
 
 > _Hosted on a free instance, so the first visit after a quiet spell takes ~30 seconds to wake and load the live feed._
 
