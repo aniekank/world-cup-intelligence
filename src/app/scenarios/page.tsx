@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { deepRoundsView, type DeepTie, type DeepSide } from '@/server/deepRounds';
 import { roundHistoryView, type RoundHistoryData } from '@/server/roundHistory';
+import { getMatches, getTeam } from '@/data/store';
+import { tournamentComplete, tournamentChampion } from '@/analytics/knockoutResults';
 import { PageHeader, Panel } from '@/components/ui';
 import { TeamCrest } from '@/components/brand/TeamCrest';
 import { LocalTime } from '@/components/LocalTime';
@@ -11,6 +13,15 @@ export const metadata: Metadata = { title: 'The Business End' };
 
 export default async function ScenariosPage() {
   const { stage, stageLabel, ties, biggestId } = deepRoundsView();
+
+  // Complete-tournament state for the empty case. (task #37)
+  const allMatches = getMatches();
+  const settled = tournamentComplete(allMatches)
+    ? (() => {
+        const champ = getTeam(tournamentChampion(allMatches) ?? '');
+        return { champName: champ?.name ?? '', champFlag: champ?.flag ?? '' };
+      })()
+    : null;
 
   // The same round, the previous four Cups — historical context under the previews. (ENH-6)
   const sides = ties.flatMap((t) => [t.home, t.away]).map((s) => ({ name: s.name, flag: s.flag }));
@@ -29,9 +40,25 @@ export default async function ScenariosPage() {
 
       {ties.length === 0 ? (
         <Panel>
-          <p className="py-10 text-center text-sm text-terminal-muted">
-            The tournament hasn&rsquo;t reached the business end yet — this fills in the moment the deep knockout ties (round of 16 onward) are drawn and scheduled.
-          </p>
+          {settled ? (
+            // Tournament complete — the business end is history, not empty. (task #37)
+            <div className="py-10 text-center">
+              <p className="text-3xl">🏆</p>
+              <p className="mt-3 text-sm font-semibold text-terminal-bright">
+                The business end is settled{settled.champName ? ` — ${settled.champFlag} ${settled.champName} won it all` : ''}.
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-terminal-muted">
+                Every deep knockout tie was previewed here before kickoff, with the conditional title math on the line.
+                The full reckoning of those numbers lives on the{' '}
+                <Link href="/track-record" className="text-accent hover:underline">Track Record</Link> page;
+                the road to the trophy is on the <Link href="/bracket" className="text-accent hover:underline">bracket</Link>.
+              </p>
+            </div>
+          ) : (
+            <p className="py-10 text-center text-sm text-terminal-muted">
+              The tournament hasn&rsquo;t reached the business end yet — this fills in the moment the deep knockout ties (round of 16 onward) are drawn and scheduled.
+            </p>
+          )}
         </Panel>
       ) : (
         ties.map((t) => <TieCard key={t.id} t={t} biggest={t.id === biggestId && ties.length > 1} />)

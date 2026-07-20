@@ -3,7 +3,7 @@ import { getTournament, type TournamentInfo } from './tournaments';
 import { generateDataset } from './generate';
 import { getCachedTournament, setDataset, getActiveTournamentId, getMatches, getTeams } from './store';
 import type { FixtureUpdate, RawFixtureEvent } from './providers/apiFootball';
-import { pendingKnockoutTies } from '@/analytics/knockoutResults';
+import { pendingKnockoutTies, tournamentComplete } from '@/analytics/knockoutResults';
 import type { DatasetSnapshot, Match, MatchEvent, EventType, Team } from '@/domain/types';
 
 /** Map an API-Football event (type + detail) to our EventType. */
@@ -61,6 +61,26 @@ function mapFixtureEvents(
   });
 }
 
+/**
+ * In-repo pin of the completed tournament, produced by
+ * src/data/freeze-final-snapshot.test.ts (FREEZE_EXPORT=1). Loaded the same way
+ * the datahub archive editions are — a webpack-bundled JSON import — so the
+ * frozen 2026 edition ships inside the build with no fs or feed dependency.
+ */
+async function loadFrozenFinalSnapshot(): Promise<DatasetSnapshot | null> {
+  try {
+    const mod = await import('./cache/wc2026-final.json');
+    const snap = ((mod as { default?: unknown }).default ?? mod) as unknown as DatasetSnapshot;
+    // Honour the pin only for a genuinely complete tournament — a stale partial
+    // export must never mask a live one.
+    if (!snap?.matches?.length || !tournamentComplete(snap.matches)) return null;
+    console.log(`[data] Serving the FROZEN final snapshot (${snap.matches.length} matches, generated ${snap.generatedAt}) — no live feed needed.`);
+    return snap;
+  } catch {
+    return null; // no pin bundled → normal live path
+  }
+}
+
 function sourceLabel(t: TournamentInfo): string {
   if (t.source === 'sportmonks') return 'SportMonks (live)';
   if (t.source === 'apifootball') return 'API-Football (live)';
@@ -89,6 +109,20 @@ export async function activateTournament(id: string): Promise<DatasetSnapshot> {
   if (!t) throw new Error(`Unknown tournament: ${id}`);
   const isLive = t.source === 'apifootball' || t.source === 'sportmonks';
   const g = globalThis as { __wcLiveFromCache?: boolean };
+
+  // FROZEN EDITION (task #38): once the tournament is complete, the final snapshot
+  // is pinned in-repo and the live provider is never called again — the 2026
+  // edition serves like the datahub archives, at zero feed cost. The pin is only
+  // honoured if the file really holds a COMPLETE tournament (champion crowned),
+  // so a stale partial export can never mask a live tournament.
+  if (id === 'live-2026') {
+    const frozen = await loadFrozenFinalSnapshot();
+    if (frozen) {
+      g.__wcLiveFromCache = false;
+      setDataset(frozen, 'World Cup 2026 · Final (frozen)', id);
+      return frozen;
+    }
+  }
 
   let snap: DatasetSnapshot | null = null;
   try {

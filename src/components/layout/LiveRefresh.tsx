@@ -20,6 +20,7 @@ interface Status {
   isLive: boolean;
   liveCount: number;
   loading?: boolean; // live snapshot still loading at boot (serving the placeholder sim)
+  complete?: boolean; // tournament decided — stop polling; the snapshot will never change again (task #38)
 }
 
 const LIVE_MS = 15_000; // poll cadence while a match is in play
@@ -47,6 +48,9 @@ export function LiveRefresh() {
       if (res.ok) {
         const s: Status = await res.json();
         setStatus(s);
+        // Tournament complete → this was the last poll this page ever needs.
+        // (A tab refocus still probes once — harmless, quota-free.) (task #38)
+        if (s.complete) return;
         const isLive2026 = s.tournamentId === 'live-2026';
         if (isLive2026) {
           nextDelay = s.isLive ? LIVE_MS : IDLE_MS;
@@ -111,6 +115,18 @@ export function LiveRefresh() {
       );
     }
     return null;
+  }
+
+  // Tournament decided — a calm permanent pill instead of freshness theatre. (task #38)
+  if (status.complete) {
+    return (
+      <span
+        title="World Cup 2026 is complete — this edition is a permanent retrospective."
+        className="hidden items-center gap-1.5 rounded-full border border-accent/30 px-2 py-1 text-[11px] text-terminal-muted sm:inline-flex"
+      >
+        <span aria-hidden>🏆</span> Complete
+      </span>
+    );
   }
 
   const ageMs = Math.max(0, now - new Date(status.generatedAt).getTime());

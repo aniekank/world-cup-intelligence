@@ -11,11 +11,26 @@ import { LiveTicker } from '@/components/home/LiveTicker';
 import { ParallaxBurst } from '@/components/effects/ParallaxBurst';
 import { pct } from '@/lib/format';
 import { RUNS } from '@/analytics/simulate';
+import { tournamentComplete, tournamentChampion } from '@/analytics/knockoutResults';
 
 export default function HomePage() {
   const data = homeData();
   const allMatches = getMatches();
   const played = allMatches.filter((m) => m.status === 'FINISHED');
+
+  // Tournament-complete retrospective state (freeze, task #37): once the FINAL is
+  // finished the page leads with the champion instead of a live dashboard.
+  const complete = tournamentComplete(allMatches);
+  const finalMatch = allMatches.find((m) => m.stage === 'FINAL' && m.status === 'FINISHED');
+  const thirdMatch = allMatches.find((m) => m.stage === 'THIRD_PLACE' && m.status === 'FINISHED');
+  const champId = tournamentChampion(allMatches);
+  const champion = champId ? getTeam(champId) : undefined;
+  const runnerUp = finalMatch ? getTeam(finalMatch.homeTeamId === champId ? finalMatch.awayTeamId : finalMatch.homeTeamId) : undefined;
+  const finalScore = finalMatch
+    ? finalMatch.homeTeamId === champId
+      ? `${finalMatch.homeScore}–${finalMatch.awayScore}`
+      : `${finalMatch.awayScore}–${finalMatch.homeScore}`
+    : '';
   const totalGoals = played.reduce((s, m) => s + m.homeScore + m.awayScore, 0);
   // Sum REAL team xG from finished matches (API-Football overlay; WC-049). The
   // live feed has no player-level xG, so summing that read 0 — this reverses the
@@ -47,21 +62,62 @@ export default function HomePage() {
         <LiveTicker />
       </Reveal>
 
-      {/* Knockout-stage status — make the current round unmistakable */}
-      {inKnockout && (
+      {/* Champion hero — the tournament is complete; lead with how it ended. (task #37) */}
+      {complete && champion ? (
         <Reveal>
-          <Link
-            href="/bracket"
-            className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-accent/30 bg-accent/[0.06] px-4 py-2.5 text-sm transition-colors hover:border-accent/60"
-          >
-            <Trophy className="h-4 w-4 text-accent" />
-            <span className="font-semibold uppercase tracking-wide text-accent">Knockout Stage</span>
-            <span className="text-terminal-muted">·</span>
-            <span className="font-semibold text-terminal-bright">{phaseLabel}</span>
-            <span className="text-terminal-muted">· {roundPlayed} of {roundMatches.length} ties played</span>
-            <span className="ml-auto text-accent">View bracket →</span>
-          </Link>
+          <section className="gradient-border relative overflow-hidden rounded-2xl border border-accent-amber/40 bg-terminal-panel/60 p-6 shadow-glow sm:p-8">
+            <ParallaxBurst className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 opacity-40 sm:-right-10" />
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-accent-amber">
+              FIFA World Cup 2026 · Tournament complete
+            </p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-terminal-bright sm:text-4xl">
+              🏆 {champion.flag} {champion.name} are world champions
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-terminal-text">
+              {champion.name} beat {runnerUp?.name ?? 'the runners-up'} {finalScore} in the final
+              {thirdMatch && (() => {
+                const w = thirdMatch.homeScore > thirdMatch.awayScore ? getTeam(thirdMatch.homeTeamId) : getTeam(thirdMatch.awayTeamId);
+                const l = thirdMatch.homeScore > thirdMatch.awayScore ? getTeam(thirdMatch.awayTeamId) : getTeam(thirdMatch.homeTeamId);
+                const hi = Math.max(thirdMatch.homeScore, thirdMatch.awayScore), lo = Math.min(thirdMatch.homeScore, thirdMatch.awayScore);
+                return w && l ? <> — {w.name} took third, {hi}–{lo} over {l.name}</> : null;
+              })()}
+              . All {allMatches.length} matches tracked live, forecast pre-kickoff, and graded in public.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              {finalMatch && (
+                <Link href={`/matches/${finalMatch.id}`} className="rounded-md border border-terminal-border bg-terminal-panel/60 px-3 py-1.5 font-semibold text-terminal-bright transition-colors hover:border-accent">
+                  The final →
+                </Link>
+              )}
+              <Link href="/bracket" className="rounded-md border border-terminal-border bg-terminal-panel/60 px-3 py-1.5 font-semibold text-terminal-bright transition-colors hover:border-accent">
+                The bracket →
+              </Link>
+              <Link href="/track-record" className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 font-semibold text-accent transition-colors hover:border-accent">
+                How the model did →
+              </Link>
+              <Link href="/lab" className="rounded-md border border-terminal-border bg-terminal-panel/60 px-3 py-1.5 font-semibold text-terminal-bright transition-colors hover:border-accent">
+                The Model Lab →
+              </Link>
+            </div>
+          </section>
         </Reveal>
+      ) : (
+        /* Knockout-stage status — make the current round unmistakable */
+        inKnockout && (
+          <Reveal>
+            <Link
+              href="/bracket"
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-accent/30 bg-accent/[0.06] px-4 py-2.5 text-sm transition-colors hover:border-accent/60"
+            >
+              <Trophy className="h-4 w-4 text-accent" />
+              <span className="font-semibold uppercase tracking-wide text-accent">Knockout Stage</span>
+              <span className="text-terminal-muted">·</span>
+              <span className="font-semibold text-terminal-bright">{phaseLabel}</span>
+              <span className="text-terminal-muted">· {roundPlayed} of {roundMatches.length} ties played</span>
+              <span className="ml-auto text-accent">View bracket →</span>
+            </Link>
+          </Reveal>
+        )
       )}
 
       {/* Briefing hero */}
@@ -90,8 +146,8 @@ export default function HomePage() {
         {/* Live + upcoming */}
         <div className="space-y-6 lg:col-span-2">
           <Panel
-            title="Live & Upcoming"
-            subtitle={inKnockout ? `${phaseLabel} · knockout stage` : 'Group stage fixtures'}
+            title={complete ? 'How it ended' : 'Live & Upcoming'}
+            subtitle={complete ? 'The deciding matches' : inKnockout ? `${phaseLabel} · knockout stage` : 'Group stage fixtures'}
             action={
               <Link href="/matches" className="flex items-center gap-1 text-xs text-accent hover:underline">
                 All matches <ArrowRight className="h-3 w-3" />
@@ -99,19 +155,25 @@ export default function HomePage() {
             }
             bodyClassName="grid gap-3 sm:grid-cols-2"
           >
-            {[...data.live, ...data.upcoming].slice(0, 6).map((m) => {
-              const home = data.live.find((x) => x.id === m.id)?.home ?? undefined;
-              return (
-                <MatchCard
-                  key={m.id}
-                  match={m}
-                  home={home ?? lookupTeam(m.homeTeamId)}
-                  away={data.live.find((x) => x.id === m.id)?.away ?? lookupTeam(m.awayTeamId)}
-                  prediction={'prediction' in m ? (m.prediction as never) : null}
-                />
-              );
-            })}
-            {data.live.length === 0 && data.upcoming.length === 0 && <EmptyState>No scheduled matches.</EmptyState>}
+            {complete
+              ? allMatches
+                  .filter((m) => m.stage !== 'GROUP' && m.status === 'FINISHED')
+                  .sort((a, b) => b.kickoff.localeCompare(a.kickoff))
+                  .slice(0, 6)
+                  .map((m) => <MatchCard key={m.id} match={m} home={lookupTeam(m.homeTeamId)} away={lookupTeam(m.awayTeamId)} prediction={null} />)
+              : [...data.live, ...data.upcoming].slice(0, 6).map((m) => {
+                  const home = data.live.find((x) => x.id === m.id)?.home ?? undefined;
+                  return (
+                    <MatchCard
+                      key={m.id}
+                      match={m}
+                      home={home ?? lookupTeam(m.homeTeamId)}
+                      away={data.live.find((x) => x.id === m.id)?.away ?? lookupTeam(m.awayTeamId)}
+                      prediction={'prediction' in m ? (m.prediction as never) : null}
+                    />
+                  );
+                })}
+            {!complete && data.live.length === 0 && data.upcoming.length === 0 && <EmptyState>No scheduled matches.</EmptyState>}
           </Panel>
 
           {/* Matches that matter — ranked by what's at stake (model-curated) */}
@@ -132,8 +194,8 @@ export default function HomePage() {
 
           {/* Title contenders (Monte Carlo prediction) */}
           <Panel
-            title="Title Contenders"
-            subtitle={`Monte Carlo championship probability · n=${RUNS.toLocaleString()}`}
+            title={complete ? 'The title race, settled' : 'Title Contenders'}
+            subtitle={complete ? 'Pre-tournament odds → where they finished' : `Monte Carlo championship probability · n=${RUNS.toLocaleString()}`}
             className="model-only"
             action={
               <Link href="/predictions" className="flex items-center gap-1 text-xs text-accent hover:underline">
@@ -142,7 +204,30 @@ export default function HomePage() {
             }
           >
             <div className="space-y-3">
-              {data.favorites.map((t) => (
+              {(complete
+                ? ([
+                    { t: champion, note: '\u{1F3C6} Champions', pre: champion?.preTournamentTitleOdds },
+                    { t: runnerUp, note: 'Runners-up', pre: runnerUp?.preTournamentTitleOdds },
+                    ...(thirdMatch
+                      ? (() => {
+                          const w = thirdMatch.homeScore > thirdMatch.awayScore ? getTeam(thirdMatch.homeTeamId) : getTeam(thirdMatch.awayTeamId);
+                          const l = thirdMatch.homeScore > thirdMatch.awayScore ? getTeam(thirdMatch.awayTeamId) : getTeam(thirdMatch.homeTeamId);
+                          return [{ t: w, note: 'Third', pre: w?.preTournamentTitleOdds }, { t: l, note: 'Fourth', pre: l?.preTournamentTitleOdds }];
+                        })()
+                      : []),
+                  ].filter((x) => x.t) as { t: NonNullable<ReturnType<typeof getTeam>>; note: string; pre?: number }[])
+                : []
+              ).map(({ t, note, pre }) => (
+                <div key={t.id} className="flex items-center gap-3">
+                  <Link href={`/teams/${t.id}`} className="flex w-40 shrink-0 items-center gap-2 hover:opacity-80">
+                    <span className="text-base">{t.flag}</span>
+                    <span className="truncate text-sm text-terminal-bright">{t.name}</span>
+                  </Link>
+                  <span className="text-xs text-terminal-muted">was {pct(pre ?? 0)} pre-tournament</span>
+                  <span className="ml-auto text-sm font-semibold text-terminal-bright">{note}</span>
+                </div>
+              ))}
+              {!complete && data.favorites.map((t) => (
                 <div key={t.id} className="flex items-center gap-3">
                   <Link href={`/teams/${t.id}`} className="flex w-40 shrink-0 items-center gap-2 hover:opacity-80">
                     <span className="text-base">{t.flag}</span>

@@ -1,4 +1,6 @@
 import { liveStatus } from '@/server/queries';
+import { getMatches, getTeam } from '@/data/store';
+import { tournamentComplete, tournamentChampion } from '@/analytics/knockoutResults';
 
 /**
  * Full-width status bar shown when the site isn't serving fresh live data, so a
@@ -18,6 +20,31 @@ import { liveStatus } from '@/server/queries';
 export function SiteBanner() {
   const notice = process.env.SITE_NOTICE?.trim();
   let text: string | null = notice || null;
+
+  // Tournament complete → a quiet permanent banner, checked BEFORE the outage
+  // heuristics so the frozen edition never claims "live scores resume". (task #37)
+  if (!text) {
+    try {
+      const matches = getMatches();
+      if (tournamentComplete(matches)) {
+        const champ = getTeam(tournamentChampion(matches) ?? '');
+        return (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 border-b border-accent/25 bg-accent/[0.07] px-4 py-2 text-center text-xs font-medium text-terminal-text"
+          >
+            <span aria-hidden>🏆</span>
+            <span>
+              World Cup 2026 · Complete{champ ? ` — Champions: ${champ.flag} ${champ.name}` : ''} · this edition is now a
+              permanent retrospective
+            </span>
+          </div>
+        );
+      }
+    } catch {
+      /* fall through to the live-status heuristics */
+    }
+  }
 
   if (!text) {
     try {

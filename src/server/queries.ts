@@ -6,6 +6,7 @@
  */
 
 import 'server-only';
+import { tournamentComplete } from '@/analytics/knockoutResults';
 import {
   getCompetition,
   getTeams,
@@ -57,6 +58,8 @@ export function liveStatus() {
     // the placeholder simulation until it swaps in).
     loading: !!g.__wcLiveLoading,
     awaitingLive,
+    // Tournament decided → the client stops polling entirely. (freeze, task #38)
+    complete: tournamentComplete(getMatches()),
   };
 }
 

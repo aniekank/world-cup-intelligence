@@ -84,6 +84,21 @@ export function pendingKnockoutTies(matches: Match[]): PendingTie[] {
   return out;
 }
 
+/** The champion's team id once the FINAL is finished; null while the tournament runs. */
+export function tournamentChampion(matches: Match[]): string | null {
+  const f = matches.find((m) => m.stage === 'FINAL' && m.status === 'FINISHED');
+  return f ? knockoutWinner(f) : null;
+}
+
+/**
+ * True once the tournament is fully decided: every fixture finished and a
+ * champion crowned. Drives the retrospective ("complete") presentation and the
+ * freeze of the live-refresh machinery. (Freeze work, tasks #37–38.)
+ */
+export function tournamentComplete(matches: Match[]): boolean {
+  return matches.length > 0 && matches.every((m) => m.status === 'FINISHED') && !!tournamentChampion(matches);
+}
+
 /** Winner of a finished knockout tie (penalties break a level score). null if undetermined. */
 function knockoutWinner(m: Match): string | null {
   if (m.homeScore > m.awayScore) return m.homeTeamId;
